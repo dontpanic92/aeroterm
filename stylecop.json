@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DotNetAnalyzers/StyleCopAnalyzers/master/StyleCop.Analyzers/StyleCop.Analyzers/Settings/stylecop.schema.json",
+  "settings": {
+    "documentationRules": {
+      "copyrightText": "<copyright file=\"{fileName}\">\nCopyright (c) {developers}. All rights reserved.\nLicensed under the {licenseName} license. See {licenseFile} file in the project root for full license information.\n</copyright>",
+      "variables": {
+        "licenseName": "GPLv2",
+        "licenseFile": "LICENSE",
+        "developers": "AeroTerm Developers"
+      },
+      "xmlHeader": false
+    }
+  }
+}

@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AeroTerm.Pty</RootNamespace>
+    <AssemblyName>AeroTerm.Pty</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>AnyCPU;x64;x86</Platforms>
+
+    <!-- NuGet package metadata -->
+    <PackageId>AeroTerm.Pty</PackageId>
+    <Authors>AeroTerm Developers</Authors>
+    <Description>Cross-platform pseudo-terminal (PTY) library with ANSI/VT escape sequence parser. Provides ConPTY (Windows) and forkpty (macOS/Linux) backends, a full VT state machine, terminal buffer, and input encoder.</Description>
+    <PackageTags>pty;conpty;terminal;vt-parser;ansi;escape-sequences;pseudo-terminal</PackageTags>
+    <PackageLicenseExpression>GPL-2.0-only</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tests" />
+  </ItemGroup>
+
+  <!-- Compile native PTY helper as a universal (fat) binary so a single dylib
+       works for both x86_64 and arm64 targets without needing RuntimeIdentifier. -->
+  <Target Name="BuildNativePty" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <MakeDir Directories="$(OutputPath)" />
+    <Exec Command="cc -shared -arch x86_64 -arch arm64 -o $(OutputPath)libaeroterm_pty.dylib %(NativePtySources.Identity)"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <Target Name="BuildNativePtyLinux" BeforeTargets="Build" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <MakeDir Directories="$(OutputPath)" />
+    <Exec Command="cc -shared -fPIC -o $(OutputPath)libaeroterm_pty.so %(NativePtySources.Identity) -lutil"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <ItemGroup>
+    <NativePtySources Include="native_pty.c" />
+  </ItemGroup>
+
+  <!-- Ensure the native library is copied to consuming projects -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <None Include="$(OutputPath)libaeroterm_pty.dylib" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="libaeroterm_pty.dylib" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <None Include="$(OutputPath)libaeroterm_pty.so" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Link="libaeroterm_pty.so" Visible="false" />
+  </ItemGroup>
+
+</Project>

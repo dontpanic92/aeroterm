@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="AeroTerm.WindowEffects\AeroTerm.WindowEffects.csproj" />
+  <Project Path="AeroTerm.Pty\AeroTerm.Pty.csproj" />
+  <Project Path="Tests\Tests.csproj" />
+</Solution>
