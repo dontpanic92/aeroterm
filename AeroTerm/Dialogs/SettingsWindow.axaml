@@ -39,6 +39,10 @@
                         <dialogs:AppearancePage />
                     </DataTemplate>
 
+                    <DataTemplate DataType="vm:UpdatesPageViewModel">
+                        <dialogs:UpdatesPage />
+                    </DataTemplate>
+
                     <!-- Fallback for pages without a specific template -->
                     <DataTemplate DataType="vm:SettingsPageViewModel">
                         <TextBlock Text="Page content loading..." />

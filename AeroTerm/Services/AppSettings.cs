@@ -40,6 +40,9 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private int backgroundColor = 0x1E1E1E;
     private int foregroundColor = 0xCCCCCC;
     private string colorSchemeName = "VS Code Dark+";
+    private bool autoCheckForUpdates = true;
+    private DateTime? lastUpdateCheckUtc;
+    private string? skippedVersion;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -187,6 +190,35 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the application should
+    /// automatically check for updates at startup.
+    /// </summary>
+    public bool AutoCheckForUpdates
+    {
+        get => this.autoCheckForUpdates;
+        set => this.SetField(ref this.autoCheckForUpdates, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the UTC timestamp of the last successful update check.
+    /// </summary>
+    public DateTime? LastUpdateCheckUtc
+    {
+        get => this.lastUpdateCheckUtc;
+        set => this.SetField(ref this.lastUpdateCheckUtc, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the version string the user chose to skip. When set,
+    /// the update notification is suppressed for this exact version.
+    /// </summary>
+    public string? SkippedVersion
+    {
+        get => this.skippedVersion;
+        set => this.SetField(ref this.skippedVersion, value);
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
@@ -228,6 +260,9 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.BackgroundColor = fresh.BackgroundColor;
         this.ForegroundColor = fresh.ForegroundColor;
         this.ColorSchemeName = fresh.ColorSchemeName;
+        this.AutoCheckForUpdates = fresh.AutoCheckForUpdates;
+        this.LastUpdateCheckUtc = fresh.LastUpdateCheckUtc;
+        this.SkippedVersion = fresh.SkippedVersion;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }

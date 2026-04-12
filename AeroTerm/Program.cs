@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using AeroTerm.Diagnostics;
 using Avalonia;
 using Microsoft.Extensions.Logging;
+using Velopack;
 
 /// <summary>
 /// The main entry point for the AeroTerm terminal emulator.
@@ -22,6 +23,10 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Velopack must be the first call — it handles install/update hooks
+        // and exits immediately when invoked by the updater process.
+        VelopackApp.Build().Run();
+
         string logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "AeroTerm",

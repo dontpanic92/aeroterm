@@ -1,0 +1,153 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: aeroterm_win_x64
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: aeroterm_osx_arm64
+          - os: macos-latest
+            rid: osx-x64
+            artifact: aeroterm_osx_x64
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: aeroterm_linux_x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore NuGet packages
+      run: dotnet restore aeroterm.slnx
+
+    - name: Build
+      run: dotnet build aeroterm.slnx --configuration Debug --no-restore --nologo
+
+    - name: Run tests
+      run: dotnet test Tests/Tests.csproj --configuration Debug --no-build --nologo
+
+    - name: Read version prefix
+      id: version
+      shell: bash
+      run: |
+        PREFIX=$(sed -n 's:.*<VersionPrefix>\(.*\)</VersionPrefix>.*:\1:p' Directory.Build.props)
+        VERSION="${PREFIX}-ci.${{ github.run_number }}"
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+    - name: Publish
+      run: dotnet publish AeroTerm/AeroTerm.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained -p:DebugType=none -p:AeroTermVersion=${{ steps.version.outputs.version }}
+
+    - name: Install vpk
+      run: dotnet tool install -g vpk
+
+    - name: Package with Velopack
+      shell: bash
+      run: |
+        CHANNEL="${{ matrix.rid }}-ci"
+        if [[ "${{ matrix.rid }}" == osx-* ]]; then
+          PACK_DIR="AeroTerm/bin/Release/net10.0/${{ matrix.rid }}/AeroTerm.app/Contents/MacOS"
+          MAIN_EXE="aeroterm"
+        elif [[ "${{ matrix.rid }}" == win-* ]]; then
+          PACK_DIR="AeroTerm/bin/Release/net10.0/${{ matrix.rid }}/publish"
+          MAIN_EXE="aeroterm.exe"
+        else
+          PACK_DIR="AeroTerm/bin/Release/net10.0/${{ matrix.rid }}/publish"
+          MAIN_EXE="aeroterm"
+        fi
+        VPK_ARGS=(
+          --packId AeroTerm
+          --packVersion "${{ steps.version.outputs.version }}"
+          --packDir "$PACK_DIR"
+          --mainExe "$MAIN_EXE"
+          --channel "$CHANNEL"
+          --outputDir staging
+        )
+        if [[ "${{ matrix.rid }}" == osx-* ]]; then
+          BUNDLE_ROOT="AeroTerm/bin/Release/net10.0/${{ matrix.rid }}/AeroTerm.app"
+          VPK_ARGS+=(--plist "${BUNDLE_ROOT}/Contents/Info.plist")
+        fi
+        vpk pack "${VPK_ARGS[@]}"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact }}
+        path: staging/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: gh-pages
+        path: gh-pages
+      continue-on-error: true
+
+    - name: Initialize gh-pages if needed
+      run: |
+        if [ ! -d gh-pages/.git ]; then
+          mkdir -p gh-pages
+          cd gh-pages
+          git init
+          git checkout -b gh-pages
+          touch .nojekyll
+          mkdir -p updates
+          git add .
+          git commit -m "Initialize GitHub Pages for update feed"
+        fi
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Deploy Velopack releases to gh-pages
+      shell: bash
+      run: |
+        UPDATES_DIR="gh-pages/updates"
+        mkdir -p "$UPDATES_DIR"
+
+        for RID in win-x64 osx-arm64 osx-x64 linux-x64; do
+          ARTIFACT_DIR="artifacts/aeroterm_${RID//-/_}"
+          if [ -d "$ARTIFACT_DIR" ]; then
+            cp "$ARTIFACT_DIR"/* "$UPDATES_DIR/" 2>/dev/null || true
+          fi
+        done
+
+        echo "Deployed files:"
+        ls -la "$UPDATES_DIR/"
+
+    - name: Push to gh-pages
+      run: |
+        cd gh-pages
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add -A
+        git diff --cached --quiet && echo "No changes" && exit 0
+        git commit -m "CI update: $(date -u +%Y%m%d)-${{ github.run_number }}"
+        git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages

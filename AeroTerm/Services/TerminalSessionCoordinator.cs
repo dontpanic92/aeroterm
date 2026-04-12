@@ -61,6 +61,10 @@ internal sealed class TerminalSessionCoordinator
     /// <summary>
     /// Detects the default shell, creates the <see cref="TerminalControl"/>,
     /// wires events, and starts the shell process.
+    /// The control is added to the visual tree before the process starts so
+    /// that Avalonia layout runs and the control has valid bounds. Without
+    /// this ordering the PTY would be created at 1×1 and the shell welcome
+    /// message would be truncated.
     /// </summary>
     public void Initialize()
     {
@@ -97,8 +101,14 @@ internal sealed class TerminalSessionCoordinator
             Dispatcher.UIThread.Post(() => this.BackgroundColorChanged?.Invoke(color));
         this.terminalControl.ProcessExited += this.OnProcessExited;
 
-        this.terminalControl.StartProcess(shell, args, env, cwd);
+        // Add the control to the visual tree first so Avalonia can lay it
+        // out and assign real bounds before we read DesiredColCount/DesiredRowCount.
         this.TerminalReady?.Invoke(this.terminalControl);
+
+        // Force a layout pass so the control gets its actual size.
+        Dispatcher.UIThread.RunJobs();
+
+        this.terminalControl.StartProcess(shell, args, env, cwd);
     }
 
     /// <summary>

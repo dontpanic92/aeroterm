@@ -77,6 +77,18 @@ public partial class SettingsWindow : Window
         switch (this.CloseReason)
         {
             case Result.Ok:
+                // Save update-related settings from the Updates page, if present.
+                if (this.DataContext is SettingsViewModel vm)
+                {
+                    foreach (var page in vm.Pages)
+                    {
+                        if (page is ViewModels.UpdatesPageViewModel updatesPage)
+                        {
+                            updatesPage.SaveToSettings();
+                        }
+                    }
+                }
+
                 this.settings.Save();
                 break;
             case Result.Cancel:

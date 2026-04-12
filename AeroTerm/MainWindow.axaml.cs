@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private readonly WindowEffectsService effectsService;
     private readonly TerminalSessionCoordinator coordinator;
     private readonly ILogger log;
+    private readonly IUpdateService updateService;
     private readonly Grid titleBar;
     private readonly TextBlock titleText;
     private readonly Border terminalBorder;
@@ -51,6 +52,7 @@ public partial class MainWindow : Window
     {
         this.settings = settings;
         this.log = AppLogger.For<MainWindow>();
+        this.updateService = new UpdateService(settings);
         this.InitializeComponent();
 
         this.titleBar = this.FindControl<Grid>("TitleBar")!;
@@ -67,6 +69,9 @@ public partial class MainWindow : Window
         this.coordinator.TitleChanged += this.OnTitleChanged;
         this.coordinator.BackgroundColorChanged += this.OnBackgroundColorChanged;
         this.coordinator.ProcessExitedNormally += this.OnProcessExitedNormally;
+        this.settings.PropertyChanged += this.OnSettingsPropertyChanged;
+
+        this.UpdateTitleBarForeground(settings.ForegroundColor);
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
@@ -118,6 +123,7 @@ public partial class MainWindow : Window
             var pages = new ViewModels.SettingsPageViewModel[]
             {
                 new ViewModels.AppearancePageViewModel(this.settings),
+                new ViewModels.UpdatesPageViewModel(this.settings, this.updateService),
             };
             var viewModel = new ViewModels.SettingsViewModel(pages);
             var dialog = new Dialogs.SettingsWindow(this.settings, viewModel);
@@ -223,6 +229,24 @@ public partial class MainWindow : Window
         {
             closeBtn.IsVisible = false;
         }
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AppSettings.ForegroundColor))
+        {
+            Dispatcher.UIThread.Post(() => this.UpdateTitleBarForeground(this.settings.ForegroundColor));
+        }
+    }
+
+    private void UpdateTitleBarForeground(int rgb)
+    {
+        byte r = (byte)((rgb >> 16) & 0xFF);
+        byte g = (byte)((rgb >> 8) & 0xFF);
+        byte b = (byte)(rgb & 0xFF);
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+
+        this.Resources["TitleBarForegroundBrush"] = brush;
     }
 
     private void CloseButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

@@ -7,6 +7,7 @@
     <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
     <Platforms>AnyCPU;x64;x86;ARM64</Platforms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +16,7 @@
     <PackageReference Include="Avalonia.Themes.Simple" Version="12.0.0" />
     <PackageReference Include="HarfBuzzSharp" Version="8.3.1.3" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.5" />
+    <PackageReference Include="Velopack" Version="0.0.1298" />
     <!-- Override vulnerable transitive dep from Avalonia.Desktop → Tmds.DBus.Protocol 0.90.3 -->
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.92.0" />
   </ItemGroup>
@@ -31,5 +33,29 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Tests" />
   </ItemGroup>
+
+  <!-- macOS .app bundle creation (runs only when publishing for osx-*) -->
+  <Target Name="CreateMacOSBundle" AfterTargets="Publish" Condition="$(RuntimeIdentifier.StartsWith('osx-'))">
+    <PropertyGroup>
+      <_PublishParent>$([System.IO.Path]::GetDirectoryName('$(PublishDir.TrimEnd('/\'))'))</_PublishParent>
+      <BundleDir>$(_PublishParent)/AeroTerm.app</BundleDir>
+    </PropertyGroup>
+    <RemoveDir Directories="$(BundleDir)" />
+    <MakeDir Directories="$(BundleDir)/Contents/MacOS" />
+    <MakeDir Directories="$(BundleDir)/Contents/Resources" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)../Packaging/macOS/Info.plist" DestinationFolder="$(BundleDir)/Contents/" />
+
+    <!-- Stamp the bundle version from the MSBuild VersionPrefix (numeric part only). -->
+    <Exec Command="sed -i '' 's/__BUNDLE_VERSION__/$(VersionPrefix)/g' '$(BundleDir)/Contents/Info.plist'" />
+
+    <!-- Copy all publish output (binary + native libraries such as libSkiaSharp, libHarfBuzzSharp) -->
+    <ItemGroup>
+      <_PublishFiles Include="$(PublishDir)**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PublishFiles)" DestinationFolder="$(BundleDir)/Contents/MacOS/%(RecursiveDir)" />
+
+    <Exec Command="chmod +x '$(BundleDir)/Contents/MacOS/aeroterm'" />
+    <Message Importance="high" Text="macOS app bundle created at $(BundleDir)" />
+  </Target>
 
 </Project>
