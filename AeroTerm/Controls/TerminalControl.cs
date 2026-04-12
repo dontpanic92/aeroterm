@@ -186,6 +186,17 @@ public class TerminalControl : Control, IDisposable
     }
 
     /// <summary>
+    /// Applies a color scheme to the terminal by updating the ANSI palette
+    /// and triggering a redraw.
+    /// </summary>
+    /// <param name="scheme">The color scheme to apply.</param>
+    public void ApplyColorScheme(Models.ColorScheme scheme)
+    {
+        this.buffer.SetAnsiPalette(scheme.Palette);
+        this.InvalidateVisual();
+    }
+
+    /// <summary>
     /// Sets the font priority list and rebuilds the font chain.
     /// </summary>
     /// <param name="fonts">Ordered list of font family names.</param>

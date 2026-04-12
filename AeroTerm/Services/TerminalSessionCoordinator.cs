@@ -8,6 +8,7 @@ namespace AeroTerm.Services;
 using System.Runtime.InteropServices;
 using AeroTerm.Controls;
 using AeroTerm.Diagnostics;
+using AeroTerm.Models;
 using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
 
@@ -72,6 +73,23 @@ internal sealed class TerminalSessionCoordinator
 
         this.terminalControl = new TerminalControl();
         this.terminalControl.EnableLigature = this.settings.EnableLigature;
+
+        var scheme = ColorSchemePresets.FindByName(this.settings.ColorSchemeName) ?? ColorSchemePresets.Default;
+        this.terminalControl.ApplyColorScheme(scheme);
+
+        this.settings.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(AppSettings.ColorSchemeName))
+            {
+                var newScheme = ColorSchemePresets.FindByName(this.settings.ColorSchemeName) ?? ColorSchemePresets.Default;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    this.terminalControl?.ApplyColorScheme(newScheme);
+                    this.settings.ForegroundColor = newScheme.Foreground;
+                    this.settings.BackgroundColor = newScheme.Background;
+                });
+            }
+        };
 
         this.terminalControl.TitleChanged += title =>
             Dispatcher.UIThread.Post(() => this.TitleChanged?.Invoke(title));

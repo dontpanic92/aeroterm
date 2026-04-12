@@ -1251,6 +1251,20 @@ public class TerminalBuffer
     }
 
     /// <summary>
+    /// Overrides the first 16 ANSI palette colors with the given values.
+    /// </summary>
+    /// <param name="colors">An array of at least 16 RGB color values.</param>
+    public void SetAnsiPalette(int[] colors)
+    {
+        if (colors.Length < 16)
+        {
+            return;
+        }
+
+        Array.Copy(colors, this.palette, 16);
+    }
+
+    /// <summary>
     /// Set the initial detected background color hint (e.g. from saved settings).
     /// Used as the starting value for <see cref="Screen.BackgroundColor"/> before
     /// screen analysis detects the actual predominant color.
