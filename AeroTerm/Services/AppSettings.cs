@@ -39,6 +39,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private bool enableLigature = true;
     private int backgroundColor = 0x1E1E1E;
     private int foregroundColor = 0xCCCCCC;
+    private string colorSchemeName = "VS Code Dark+";
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -177,6 +178,15 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets the name of the active color scheme.
+    /// </summary>
+    public string ColorSchemeName
+    {
+        get => this.colorSchemeName;
+        set => this.SetField(ref this.colorSchemeName, value);
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
@@ -217,6 +227,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.EnableLigature = fresh.EnableLigature;
         this.BackgroundColor = fresh.BackgroundColor;
         this.ForegroundColor = fresh.ForegroundColor;
+        this.ColorSchemeName = fresh.ColorSchemeName;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }

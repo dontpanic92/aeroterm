@@ -31,6 +31,7 @@ public partial class MainWindow : Window
     private readonly Grid titleBar;
     private readonly TextBlock titleText;
     private readonly Border terminalBorder;
+    private bool isSettingsDialogOpen;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
@@ -88,6 +89,47 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
+    /// <inheritdoc />
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        // Ctrl+Comma opens settings
+        if (e.Key == Key.OemComma && e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            _ = this.ShowSettingsDialogAsync();
+            e.Handled = true;
+            return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
+    private async Task ShowSettingsDialogAsync()
+    {
+        if (this.isSettingsDialogOpen)
+        {
+            return;
+        }
+
+        this.isSettingsDialogOpen = true;
+        IntPtr blurHandle = this.effectsService.BeginDialogBlurPreservation();
+
+        try
+        {
+            var pages = new ViewModels.SettingsPageViewModel[]
+            {
+                new ViewModels.AppearancePageViewModel(this.settings),
+            };
+            var viewModel = new ViewModels.SettingsViewModel(pages);
+            var dialog = new Dialogs.SettingsWindow(this.settings, viewModel);
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            this.effectsService.EndDialogBlurPreservation(blurHandle);
+            this.isSettingsDialogOpen = false;
+        }
+    }
+
     private void OnBackgroundBrushChanged(IBrush brush)
     {
         this.titleBar.Background = brush;
@@ -142,6 +184,11 @@ public partial class MainWindow : Window
         {
             this.BeginMoveDrag(e);
         }
+    }
+
+    private void SettingsButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        _ = this.ShowSettingsDialogAsync();
     }
 
     private void MinimizeButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

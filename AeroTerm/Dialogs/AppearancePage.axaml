@@ -1,0 +1,75 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:AeroTerm.ViewModels"
+             xmlns:models="using:AeroTerm.Models"
+             x:Class="AeroTerm.Dialogs.AppearancePage"
+             x:CompileBindings="True"
+             x:DataType="vm:AppearancePageViewModel">
+    <StackPanel Spacing="10">
+        <!-- Window Effects -->
+        <GroupBox Header="Window" Padding="8,8">
+            <StackPanel>
+                <CheckBox IsChecked="{Binding EnableLigature, Mode=TwoWay}" Content="Enable Font Ligature" Margin="0,0,0,5" />
+
+                <CheckBox IsChecked="{Binding EnableBlurBehind, Mode=TwoWay}" Content="Enable Window Transparency" Margin="0,0,0,5" />
+
+                <RadioButton Content="Transparent" GroupName="BlurKind" Margin="20,0,0,3"
+                             IsEnabled="{Binding IsTransparentEnabled}"
+                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Transparent}, Mode=TwoWay}" />
+
+                <RadioButton Content="Blur (Gaussian)" GroupName="BlurKind" Margin="20,0,0,3"
+                             IsEnabled="{Binding IsGaussianEnabled}"
+                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Gaussian}, Mode=TwoWay}" />
+
+                <RadioButton Content="Acrylic Blur" GroupName="BlurKind" Margin="20,0,0,3"
+                             IsEnabled="{Binding IsAcrylicEnabled}"
+                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Acrylic}, Mode=TwoWay}" />
+
+                <RadioButton Content="Mica (Windows only)" GroupName="BlurKind" Margin="20,0,0,5"
+                             IsEnabled="{Binding IsMicaEnabled}"
+                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Mica}, Mode=TwoWay}" />
+
+                <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
+                    <TextBlock Text="Background Opacity" VerticalAlignment="Center" />
+                    <Slider Value="{Binding BackgroundOpacity, Mode=TwoWay}" Width="200" Minimum="0.01" Maximum="1"
+                            TickFrequency="0.01" IsSnapToTickEnabled="True" Margin="10,0"
+                            IsEnabled="{Binding IsOpacityEnabled}" />
+                    <TextBlock Text="{Binding OpacityLabel}" Width="40" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Color Scheme -->
+        <GroupBox Header="Color Scheme" Padding="8,8">
+            <StackPanel Spacing="8">
+                <ComboBox ItemsSource="{Binding ColorSchemes}"
+                          SelectedItem="{Binding SelectedColorScheme, Mode=TwoWay}"
+                          Width="250" HorizontalAlignment="Left">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="models:ColorScheme">
+                            <TextBlock Text="{Binding Name}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <!-- Preview swatches: first 6 palette colors -->
+                <ItemsControl ItemsSource="{Binding PreviewSwatches}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="4" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Width="24" Height="24" CornerRadius="3">
+                                <Border.Background>
+                                    <SolidColorBrush x:CompileBindings="False" Color="{Binding Converter={x:Static vm:IntColorConverter.Instance}}" />
+                                </Border.Background>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </GroupBox>
+    </StackPanel>
+</UserControl>

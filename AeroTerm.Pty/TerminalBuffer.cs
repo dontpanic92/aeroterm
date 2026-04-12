@@ -1262,6 +1262,49 @@ public class TerminalBuffer
         }
 
         Array.Copy(colors, this.palette, 16);
+        this.allDirty = true;
+    }
+
+    /// <summary>
+    /// Replaces the default foreground and background colors on all existing
+    /// cells, so that a color scheme change takes immediate visual effect.
+    /// </summary>
+    /// <param name="newFg">The new default foreground color.</param>
+    /// <param name="newBg">The new default background color.</param>
+    public void RecolorDefaults(int newFg, int newBg)
+    {
+        int oldFg = this.defaultFg;
+        int oldBg = this.defaultBg;
+        this.defaultFg = newFg;
+        this.defaultBg = newBg;
+        this.detectedBg = newBg;
+
+        if (this.cells is not null && (oldFg != newFg || oldBg != newBg))
+        {
+            for (int i = 0; i < this.Rows; i++)
+            {
+                for (int j = 0; j < this.Cols; j++)
+                {
+                    RemapCellDefaultColor(ref this.cells[i, j], oldFg, newFg, oldBg, newBg);
+                }
+            }
+
+            if (this.altCells is not null)
+            {
+                int altRows = this.altCells.GetLength(0);
+                int altCols = this.altCells.GetLength(1);
+                for (int i = 0; i < altRows; i++)
+                {
+                    for (int j = 0; j < altCols; j++)
+                    {
+                        RemapCellDefaultColor(ref this.altCells[i, j], oldFg, newFg, oldBg, newBg);
+                    }
+                }
+            }
+
+            this.allDirty = true;
+            this.bgHistogramValid = false;
+        }
     }
 
     /// <summary>
@@ -1410,6 +1453,32 @@ public class TerminalBuffer
         }
 
         return palette;
+    }
+
+    private static void RemapCellDefaultColor(ref Cell cell, int oldFg, int newFg, int oldBg, int newBg)
+    {
+        bool changed = false;
+        int fg = cell.ForegroundColor;
+        int bg = cell.BackgroundColor;
+
+        if (fg == oldFg)
+        {
+            fg = newFg;
+            changed = true;
+        }
+
+        if (bg == oldBg)
+        {
+            bg = newBg;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            cell.Set(
+                cell.Character,
+                new CellStyle(fg, bg, cell.SpecialColor, cell.Reverse, cell.Italic, cell.Bold, cell.Underline, cell.Undercurl));
+        }
     }
 
     private static bool[] CreateDefaultTabStops(int cols)

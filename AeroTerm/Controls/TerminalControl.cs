@@ -193,6 +193,20 @@ public class TerminalControl : Control, IDisposable
     public void ApplyColorScheme(Models.ColorScheme scheme)
     {
         this.buffer.SetAnsiPalette(scheme.Palette);
+        this.buffer.RecolorDefaults(scheme.Foreground, scheme.Background);
+
+        // Nudge the PTY with a same-size resize to trigger SIGWINCH,
+        // which causes the shell/application to redraw with new colors.
+        // Palette-indexed colors in existing cells are baked as RGB at
+        // write time, so only a full shell repaint can fix them.
+        if (this.ptyConnection is not null)
+        {
+            int cols = (int)this.DesiredColCount;
+            int rows = (int)this.DesiredRowCount;
+            this.ptyConnection.Resize(cols, rows);
+        }
+
+        this.BackgroundColorChanged?.Invoke(scheme.Background);
         this.InvalidateVisual();
     }
 
