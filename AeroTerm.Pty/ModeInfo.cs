@@ -1,0 +1,75 @@
+// <copyright file="ModeInfo.cs">
+// Copyright (c) AeroTerm Developers. All rights reserved.
+// Licensed under the GPLv2 license. See LICENSE file in the project root for full license information.
+// </copyright>
+
+namespace AeroTerm.Pty;
+
+/// <summary>
+/// Terminal mode info for cursor and pointer display.
+/// </summary>
+public class ModeInfo
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ModeInfo"/> class.
+    /// </summary>
+    /// <param name="cursorShape">Cursor shape info.</param>
+    /// <param name="cellPercentage">Cursor size info.</param>
+    /// <param name="cursorBlinking">Cursor blinking info.</param>
+    /// <param name="pointerShape">Pointer shape name, if specified by the terminal.</param>
+    /// <param name="cursorVisible">A value indicating whether the text cursor should be shown.</param>
+    /// <param name="cursorStyleEnabled">A value indicating whether mode-specific cursor styling should be applied.</param>
+    /// <param name="pointerMode">Pointer auto-hide mode using terminal-style semantics.</param>
+    public ModeInfo(
+        CursorShape cursorShape,
+        int cellPercentage,
+        CursorBlinking cursorBlinking,
+        string? pointerShape = null,
+        bool cursorVisible = true,
+        bool cursorStyleEnabled = true,
+        PointerMode pointerMode = PointerMode.NeverHide)
+    {
+        this.CursorShape = cursorShape;
+        this.CellPercentage = cellPercentage;
+        this.CursorBlinking = cursorBlinking;
+        this.PointerShape = pointerShape;
+        this.CursorVisible = cursorVisible;
+        this.CursorStyleEnabled = cursorStyleEnabled;
+        this.PointerMode = pointerMode;
+    }
+
+    /// <summary>
+    /// Gets the cursor shape.
+    /// </summary>
+    public CursorShape CursorShape { get; }
+
+    /// <summary>
+    /// Gets the percentage of the cursor should occupy.
+    /// </summary>
+    public int CellPercentage { get; }
+
+    /// <summary>
+    /// Gets the blinking setting for the cursor.
+    /// </summary>
+    public CursorBlinking CursorBlinking { get; }
+
+    /// <summary>
+    /// Gets the pointer shape name, if specified by the terminal.
+    /// </summary>
+    public string? PointerShape { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the cursor should be visible.
+    /// </summary>
+    public bool CursorVisible { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether mode-specific cursor styling should be honored.
+    /// </summary>
+    public bool CursorStyleEnabled { get; }
+
+    /// <summary>
+    /// Gets the pointer auto-hide mode using terminal-style semantics.
+    /// </summary>
+    public PointerMode PointerMode { get; }
+}
