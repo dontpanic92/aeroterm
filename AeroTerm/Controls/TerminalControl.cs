@@ -7,6 +7,7 @@ namespace AeroTerm.Controls;
 
 using System.Text;
 using AeroTerm.Pty;
+using AeroTerm.Utilities;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -75,7 +76,7 @@ public class TerminalControl : Control, IDisposable
                 e.Client = this.imeClient;
             });
 
-        this.RebuildFontChain(new List<string> { "Cascadia Mono", "Consolas", "monospace" });
+        this.RebuildFontChain(FontPriorityList.GetDefaultPlatformFonts().ToList());
         this.textParam = new TextLayoutParameters(this.fontChain.PrimaryFontName, 11);
     }
 
@@ -223,6 +224,22 @@ public class TerminalControl : Control, IDisposable
             this.TryResize();
         }
 
+        this.InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Sets the font size in points and rebuilds the text layout.
+    /// </summary>
+    /// <param name="pointSize">The font size in points.</param>
+    public void SetFontSize(double pointSize)
+    {
+        if (pointSize <= 0 || this.fontChain.PrimaryFontName.Length == 0)
+        {
+            return;
+        }
+
+        this.textParam = new TextLayoutParameters(this.fontChain.PrimaryFontName, (float)pointSize);
+        this.TryResize();
         this.InvalidateVisual();
     }
 

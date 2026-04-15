@@ -78,6 +78,32 @@ public static class FontPriorityList
     }
 
     /// <summary>
+    /// Expands sentinel entries in the list by replacing each
+    /// <see cref="SystemMonoSentinel"/> with the platform-specific default
+    /// monospace fonts from <see cref="GetDefaultPlatformFonts"/>.
+    /// Non-sentinel entries are passed through unchanged.
+    /// </summary>
+    /// <param name="list">The font list (may contain sentinels).</param>
+    /// <returns>A new list with sentinels replaced by concrete font names.</returns>
+    public static List<string> Expand(IList<string> list)
+    {
+        var result = new List<string>(list.Count + 4);
+        foreach (var entry in list)
+        {
+            if (IsSentinel(entry))
+            {
+                result.AddRange(GetDefaultPlatformFonts());
+            }
+            else
+            {
+                result.Add(entry);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Returns the platform-specific default monospace font names.
     /// </summary>
     /// <returns>An ordered list of default monospace fonts for the current platform.</returns>

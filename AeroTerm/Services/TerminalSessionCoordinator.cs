@@ -9,6 +9,7 @@ using System.Runtime.InteropServices;
 using AeroTerm.Controls;
 using AeroTerm.Diagnostics;
 using AeroTerm.Models;
+using AeroTerm.Utilities;
 using Avalonia.Threading;
 using Microsoft.Extensions.Logging;
 
@@ -77,6 +78,7 @@ internal sealed class TerminalSessionCoordinator
 
         this.terminalControl = new TerminalControl();
         this.terminalControl.EnableLigature = this.settings.EnableLigature;
+        this.ApplyFontSettings();
 
         var scheme = ColorSchemePresets.FindByName(this.settings.ColorSchemeName) ?? ColorSchemePresets.Default;
         this.terminalControl.ApplyColorScheme(scheme);
@@ -92,6 +94,11 @@ internal sealed class TerminalSessionCoordinator
                     this.settings.ForegroundColor = newScheme.Foreground;
                     this.settings.BackgroundColor = newScheme.Background;
                 });
+            }
+
+            if (e.PropertyName is nameof(AppSettings.FallbackFonts) or nameof(AppSettings.FontSize))
+            {
+                Dispatcher.UIThread.Post(() => this.ApplyFontSettings());
             }
         };
 
@@ -161,6 +168,23 @@ internal sealed class TerminalSessionCoordinator
         env["TERM"] = "xterm-256color";
         env["COLORTERM"] = "truecolor";
         return env;
+    }
+
+    private void ApplyFontSettings()
+    {
+        if (this.terminalControl is null)
+        {
+            return;
+        }
+
+        var normalized = FontPriorityList.Normalize(this.settings.FallbackFonts);
+        var expanded = FontPriorityList.Expand(normalized);
+        this.terminalControl.SetFontPriorityList(expanded);
+
+        if (this.settings.FontSize > 0)
+        {
+            this.terminalControl.SetFontSize(this.settings.FontSize);
+        }
     }
 
     private void OnProcessExited()

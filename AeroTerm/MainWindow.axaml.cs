@@ -229,6 +229,13 @@ public partial class MainWindow : Window
         {
             closeBtn.IsVisible = false;
         }
+
+        // Hide logo text on macOS (native title bar shows app name)
+        var logoText = this.FindControl<TextBlock>("LogoText");
+        if (logoText != null)
+        {
+            logoText.IsVisible = false;
+        }
     }
 
     private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

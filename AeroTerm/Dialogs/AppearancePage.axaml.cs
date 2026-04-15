@@ -5,7 +5,10 @@
 
 namespace AeroTerm.Dialogs;
 
+using AeroTerm.ViewModels;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 
 /// <summary>
 /// Appearance settings page.
@@ -18,5 +21,39 @@ public partial class AppearancePage : UserControl
     public AppearancePage()
     {
         this.InitializeComponent();
+    }
+
+    private AppearancePageViewModel? ViewModel => this.DataContext as AppearancePageViewModel;
+
+    private async void FontAdd_Click(object? sender, RoutedEventArgs e)
+    {
+        var owner = this.FindAncestorOfType<Window>();
+        if (owner is null || this.ViewModel is null)
+        {
+            return;
+        }
+
+        var picker = new FontPickerWindow();
+        await picker.ShowDialog(owner);
+
+        if (!string.IsNullOrWhiteSpace(picker.SelectedFontName))
+        {
+            this.ViewModel.AddFont(picker.SelectedFontName);
+        }
+    }
+
+    private void FontRemove_Click(object? sender, RoutedEventArgs e)
+    {
+        this.ViewModel?.RemoveFont();
+    }
+
+    private void FontMoveUp_Click(object? sender, RoutedEventArgs e)
+    {
+        this.ViewModel?.MoveFontUp();
+    }
+
+    private void FontMoveDown_Click(object? sender, RoutedEventArgs e)
+    {
+        this.ViewModel?.MoveFontDown();
     }
 }
