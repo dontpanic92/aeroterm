@@ -96,9 +96,23 @@ internal sealed class TerminalSessionCoordinator
                 });
             }
 
-            if (e.PropertyName is nameof(AppSettings.FallbackFonts) or nameof(AppSettings.FontSize))
+            if (e.PropertyName is nameof(AppSettings.FallbackFonts)
+                or nameof(AppSettings.FontSize)
+                or nameof(AppSettings.FontFamily))
             {
                 Dispatcher.UIThread.Post(() => this.ApplyFontSettings());
+            }
+
+            if (e.PropertyName is nameof(AppSettings.EnableLigature))
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (this.terminalControl is not null)
+                    {
+                        this.terminalControl.EnableLigature = this.settings.EnableLigature;
+                        this.terminalControl.InvalidateVisual();
+                    }
+                });
             }
         };
 
@@ -177,14 +191,15 @@ internal sealed class TerminalSessionCoordinator
             return;
         }
 
-        var normalized = FontPriorityList.Normalize(this.settings.FallbackFonts);
-        var expanded = FontPriorityList.Expand(normalized);
-        this.terminalControl.SetFontPriorityList(expanded);
-
-        if (this.settings.FontSize > 0)
+        var fontList = new List<string>(this.settings.FallbackFonts);
+        if (!string.IsNullOrWhiteSpace(this.settings.FontFamily))
         {
-            this.terminalControl.SetFontSize(this.settings.FontSize);
+            fontList.Insert(0, this.settings.FontFamily);
         }
+
+        var normalized = FontPriorityList.Normalize(fontList);
+        var expanded = FontPriorityList.Expand(normalized);
+        this.terminalControl.ApplyFontChange(expanded, this.settings.FontSize);
     }
 
     private void OnProcessExited()

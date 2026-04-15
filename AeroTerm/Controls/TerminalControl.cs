@@ -243,6 +243,26 @@ public class TerminalControl : Control, IDisposable
         this.InvalidateVisual();
     }
 
+    /// <summary>
+    /// Atomically updates the font priority list and font size, performing
+    /// a single resize and invalidation. Use this instead of calling
+    /// <see cref="SetFontPriorityList"/> and <see cref="SetFontSize"/>
+    /// separately to avoid an intermediate resize with stale metrics.
+    /// </summary>
+    /// <param name="fonts">Ordered list of font family names.</param>
+    /// <param name="pointSize">The font size in points.</param>
+    public void ApplyFontChange(List<string> fonts, double pointSize)
+    {
+        this.RebuildFontChain(fonts);
+        if (this.fontChain.PrimaryFontName.Length > 0 && pointSize > 0)
+        {
+            this.textParam = new TextLayoutParameters(this.fontChain.PrimaryFontName, (float)pointSize);
+            this.TryResize();
+        }
+
+        this.InvalidateVisual();
+    }
+
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
