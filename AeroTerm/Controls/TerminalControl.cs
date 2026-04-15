@@ -496,6 +496,10 @@ public class TerminalControl : Control, IDisposable
         {
             // PTY disposed during shutdown.
         }
+        catch (UnauthorizedAccessException)
+        {
+            // PTY file descriptor closed during shutdown (macOS/Linux).
+        }
     }
 
     private void WriteToPty(byte[] data)
@@ -514,6 +518,10 @@ public class TerminalControl : Control, IDisposable
             catch (ObjectDisposedException)
             {
                 // PTY disposed.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // PTY file descriptor closed during shutdown (macOS/Linux).
             }
         }
     }
