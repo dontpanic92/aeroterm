@@ -153,7 +153,7 @@ public class TerminalBuffer
     /// Gets or sets the pointer auto-hide mode set via XTSMPOINTER (CSI > Ps p).
     /// 0 = never hide, 1 = hide when tracking not enabled (default), 2 = always hide, 3 = always hide even on leave.
     /// </summary>
-    public int PointerMode { get; set; } = 1;
+    public int PointerMode { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether application cursor keys mode (DECCKM) is enabled.
