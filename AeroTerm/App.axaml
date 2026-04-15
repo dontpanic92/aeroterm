@@ -4,6 +4,13 @@
              x:Class="AeroTerm.App"
              Name="AeroTerm"
              RequestedThemeVariant="Default">
+    <NativeMenu.Menu>
+        <NativeMenu>
+            <NativeMenuItem Header="Settings..."
+                            Gesture="⌘+OemComma"
+                            Click="OnSettingsClicked" />
+        </NativeMenu>
+    </NativeMenu.Menu>
     <Application.Resources>
         <!-- Suppress default WindowDrawnDecorations overlay -->
         <ControlTheme x:Key="{x:Type chrome:WindowDrawnDecorations}"

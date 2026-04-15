@@ -85,6 +85,14 @@ public partial class MainWindow : Window
         this.Opened += this.OnWindowOpened;
     }
 
+    /// <summary>
+    /// Opens the settings dialog. Called from the macOS native app menu.
+    /// </summary>
+    public void OpenSettings()
+    {
+        _ = this.ShowSettingsDialogAsync();
+    }
+
     /// <inheritdoc />
     protected override void OnClosing(WindowClosingEventArgs e)
     {
@@ -212,9 +220,15 @@ public partial class MainWindow : Window
     private void SetupMacOSTitleBar()
     {
         // Hide custom titlebar buttons on macOS (uses native traffic lights)
+        var settingsBtn = this.FindControl<Button>("SettingsButton");
         var minimizeBtn = this.FindControl<Button>("MinimizeButton");
         var maximizeBtn = this.FindControl<Button>("MaximizeButton");
         var closeBtn = this.FindControl<Button>("CloseButton");
+        if (settingsBtn != null)
+        {
+            settingsBtn.IsVisible = false;
+        }
+
         if (minimizeBtn != null)
         {
             minimizeBtn.IsVisible = false;

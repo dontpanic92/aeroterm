@@ -32,4 +32,16 @@ public class App : Application
 
         base.OnFrameworkInitializationCompleted();
     }
+
+    /// <summary>
+    /// Handles the Settings menu item click from the macOS native app menu.
+    /// </summary>
+    private void OnSettingsClicked(object? sender, EventArgs e)
+    {
+        if (this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+            && desktop.MainWindow is MainWindow mainWindow)
+        {
+            mainWindow.OpenSettings();
+        }
+    }
 }
