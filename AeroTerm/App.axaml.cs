@@ -5,8 +5,11 @@
 
 namespace AeroTerm;
 
+using System.Linq;
+using System.Runtime.InteropServices;
 using AeroTerm.Services;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
@@ -26,11 +29,39 @@ public class App : Application
     {
         if (this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var mainWindow = new MainWindow(AppSettings.Default);
-            desktop.MainWindow = mainWindow;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            }
+
+            desktop.MainWindow = this.CreateNewWindow();
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                this.SetupMacOSActivation();
+            }
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Creates and shows a new terminal window.
+    /// </summary>
+    /// <returns>The newly created window.</returns>
+    public MainWindow CreateNewWindow()
+    {
+        var window = new MainWindow(AppSettings.Default);
+        window.Show();
+        return window;
+    }
+
+    /// <summary>
+    /// Handles the New Window menu item click from the macOS native app menu.
+    /// </summary>
+    private void OnNewWindowClicked(object? sender, EventArgs e)
+    {
+        this.CreateNewWindow();
     }
 
     /// <summary>
@@ -38,10 +69,31 @@ public class App : Application
     /// </summary>
     private void OnSettingsClicked(object? sender, EventArgs e)
     {
-        if (this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
-            && desktop.MainWindow is MainWindow mainWindow)
+        if (this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            mainWindow.OpenSettings();
+            var target = desktop.Windows.OfType<MainWindow>().FirstOrDefault(w => w.IsActive)
+                         ?? desktop.Windows.OfType<MainWindow>().FirstOrDefault();
+            target?.OpenSettings();
+        }
+    }
+
+    /// <summary>
+    /// On macOS, reopens a window when the app is activated with no windows
+    /// (e.g. clicking the dock icon).
+    /// </summary>
+    private void SetupMacOSActivation()
+    {
+        if (this.ApplicationLifetime is IActivatableLifetime activatable)
+        {
+            activatable.Activated += (_, args) =>
+            {
+                if (args.Kind == ActivationKind.Reopen
+                    && this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d
+                    && !d.Windows.OfType<MainWindow>().Any())
+                {
+                    this.CreateNewWindow();
+                }
+            };
         }
     }
 }

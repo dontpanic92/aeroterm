@@ -6,6 +6,10 @@
              RequestedThemeVariant="Default">
     <NativeMenu.Menu>
         <NativeMenu>
+            <NativeMenuItem Header="New Window"
+                            Gesture="⌘+N"
+                            Click="OnNewWindowClicked" />
+            <NativeMenuItemSeparator />
             <NativeMenuItem Header="Settings..."
                             Gesture="⌘+OemComma"
                             Click="OnSettingsClicked" />
