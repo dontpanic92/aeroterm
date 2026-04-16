@@ -7,7 +7,7 @@
     <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
     <Platforms>AnyCPU;x64;x86;ARM64</Platforms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">Assets\aeroterm.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\aeroterm.ico</ApplicationIcon>
     <PublishAot>true</PublishAot>
   </PropertyGroup>
 

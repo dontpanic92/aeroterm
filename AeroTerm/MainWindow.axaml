@@ -2,7 +2,6 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="AeroTerm.MainWindow"
         Title="AeroTerm"
-        Icon="/Assets/aeroterm.ico"
         RequestedThemeVariant="Light"
         TransparencyLevelHint="None"
         Background="Transparent"

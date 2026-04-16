@@ -5,7 +5,6 @@
         x:Class="AeroTerm.Dialogs.SettingsWindow"
         x:CompileBindings="True"
         x:DataType="vm:SettingsViewModel"
-        Icon="/Assets/aeroterm.ico"
         Title="Settings" Height="480" Width="680"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
