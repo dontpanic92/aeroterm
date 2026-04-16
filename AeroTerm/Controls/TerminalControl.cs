@@ -43,6 +43,8 @@ public class TerminalControl : Control, IDisposable
     private int lastReportedBg = -1;
     private volatile bool isDisposed;
     private int redrawQueued;
+    private int lastPtyCols;
+    private int lastPtyRows;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -175,6 +177,8 @@ public class TerminalControl : Control, IDisposable
 
         int cols = (int)this.DesiredColCount;
         int rows = (int)this.DesiredRowCount;
+        this.lastPtyCols = cols;
+        this.lastPtyRows = rows;
         this.ptyConnection = PtyConnectionFactory.Create(app, args, env, cwd, rows, cols);
         this.ptyConnection.ProcessExited += this.OnProcessExited;
 
@@ -536,7 +540,13 @@ public class TerminalControl : Control, IDisposable
         }
 
         this.buffer.Resize(cols, rows);
-        this.ptyConnection?.Resize(cols, rows);
+
+        if (cols != this.lastPtyCols || rows != this.lastPtyRows)
+        {
+            this.lastPtyCols = cols;
+            this.lastPtyRows = rows;
+            this.ptyConnection?.Resize(cols, rows);
+        }
     }
 
     private void UpdateModeInfoFromBuffer()

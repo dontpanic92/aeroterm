@@ -150,7 +150,16 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     public List<string> FallbackFonts
     {
         get => this.fallbackFonts;
-        set => this.SetField(ref this.fallbackFonts, value);
+        set
+        {
+            if (value is not null && this.fallbackFonts.SequenceEqual(value))
+            {
+                return;
+            }
+
+            this.fallbackFonts = value ?? new List<string>();
+            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.FallbackFonts)));
+        }
     }
 
     /// <summary>

@@ -5,7 +5,6 @@
 
 namespace AeroTerm.Controls;
 
-using System.Runtime.InteropServices;
 using SkiaSharp;
 
 /// <summary>
@@ -18,13 +17,23 @@ public sealed class FontFallbackChain : IDisposable
     private readonly List<SKTypeface> chain = new List<SKTypeface>();
     private readonly Dictionary<TypefaceKey, SKTypeface> styledCache = new Dictionary<TypefaceKey, SKTypeface>();
     private readonly Dictionary<GlyphKey, SKTypeface> glyphCache = new Dictionary<GlyphKey, SKTypeface>();
+    private readonly object syncLock = new object();
     private bool isDisposed;
 
     /// <summary>
     /// Gets the primary typeface (first entry in the chain), used for
     /// calculating <c>CharWidth</c> and <c>LineHeight</c>.
     /// </summary>
-    public SKTypeface? PrimaryTypeface => this.chain.Count > 0 ? this.chain[0] : null;
+    public SKTypeface? PrimaryTypeface
+    {
+        get
+        {
+            lock (this.syncLock)
+            {
+                return this.chain.Count > 0 ? this.chain[0] : null;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the family name of the primary typeface.
@@ -38,17 +47,40 @@ public sealed class FontFallbackChain : IDisposable
     /// <param name="fontNames">The ordered font family names.</param>
     public void Rebuild(IReadOnlyList<string> fontNames)
     {
-        this.DisposeAll();
-
+        // Build the new chain outside the lock so that font loading
+        // does not block the render thread.
+        var newChain = new List<SKTypeface>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         foreach (var name in fontNames)
         {
-            if (!string.IsNullOrWhiteSpace(name))
+            if (!string.IsNullOrWhiteSpace(name) && seen.Add(name))
             {
-                this.AddFont(name, seen);
+                var typeface = CreateValidatedTypeface(name);
+                if (typeface is not null)
+                {
+                    newChain.Add(typeface);
+                }
             }
         }
+
+        List<SKTypeface> oldChain;
+        Dictionary<TypefaceKey, SKTypeface> oldStyled;
+        Dictionary<GlyphKey, SKTypeface> oldGlyph;
+
+        lock (this.syncLock)
+        {
+            oldChain = new List<SKTypeface>(this.chain);
+            oldStyled = new Dictionary<TypefaceKey, SKTypeface>(this.styledCache);
+            oldGlyph = new Dictionary<GlyphKey, SKTypeface>(this.glyphCache);
+
+            this.chain.Clear();
+            this.chain.AddRange(newChain);
+            this.styledCache.Clear();
+            this.glyphCache.Clear();
+        }
+
+        // Dispose old typefaces outside the lock.
+        DisposeTypefaces(oldChain, oldStyled, oldGlyph);
     }
 
     /// <summary>
@@ -63,35 +95,38 @@ public sealed class FontFallbackChain : IDisposable
     /// <returns>The best-matching typeface, or the primary typeface if nothing matches.</returns>
     public SKTypeface GetTypefaceForGlyph(int codePoint, string text, SKFontStyleWeight weight, SKFontStyleSlant slant)
     {
-        var key = new GlyphKey(weight, slant, codePoint);
-        if (this.glyphCache.TryGetValue(key, out var cached))
+        lock (this.syncLock)
         {
-            return cached;
-        }
-
-        // Search through the chain for a typeface that contains the glyph.
-        foreach (var baseTypeface in this.chain)
-        {
-            var styled = this.GetStyledVariant(baseTypeface, weight, slant);
-            if (styled.ContainsGlyphs(text))
+            var key = new GlyphKey(weight, slant, codePoint);
+            if (this.glyphCache.TryGetValue(key, out var cached))
             {
-                this.glyphCache[key] = styled;
-                return styled;
+                return cached;
             }
-        }
 
-        // Last resort: ask the OS font matcher.
-        var osMatch = SKFontManager.Default.MatchCharacter(codePoint);
-        if (osMatch is not null)
-        {
-            this.glyphCache[key] = osMatch;
-            return osMatch;
-        }
+            // Search through the chain for a typeface that contains the glyph.
+            foreach (var baseTypeface in this.chain)
+            {
+                var styled = this.GetStyledVariantLocked(baseTypeface, weight, slant);
+                if (styled.ContainsGlyphs(text))
+                {
+                    this.glyphCache[key] = styled;
+                    return styled;
+                }
+            }
 
-        // Nothing found; return primary styled variant so rendering doesn't crash.
-        var fallback = this.GetStyledTypeface(weight, slant);
-        this.glyphCache[key] = fallback;
-        return fallback;
+            // Last resort: ask the OS font matcher.
+            var osMatch = SKFontManager.Default.MatchCharacter(codePoint);
+            if (osMatch is not null)
+            {
+                this.glyphCache[key] = osMatch;
+                return osMatch;
+            }
+
+            // Nothing found; return primary styled variant so rendering doesn't crash.
+            var fallback = this.GetStyledTypefaceLocked(weight, slant);
+            this.glyphCache[key] = fallback;
+            return fallback;
+        }
     }
 
     /// <summary>
@@ -102,12 +137,10 @@ public sealed class FontFallbackChain : IDisposable
     /// <returns>The styled typeface.</returns>
     public SKTypeface GetStyledTypeface(SKFontStyleWeight weight, SKFontStyleSlant slant)
     {
-        if (this.PrimaryTypeface is null)
+        lock (this.syncLock)
         {
-            return SKTypeface.Default;
+            return this.GetStyledTypefaceLocked(weight, slant);
         }
-
-        return this.GetStyledVariant(this.PrimaryTypeface, weight, slant);
     }
 
     /// <inheritdoc />
@@ -115,8 +148,47 @@ public sealed class FontFallbackChain : IDisposable
     {
         if (!this.isDisposed)
         {
-            this.DisposeAll();
+            lock (this.syncLock)
+            {
+                DisposeTypefaces(this.chain, this.styledCache, this.glyphCache);
+                this.chain.Clear();
+                this.styledCache.Clear();
+                this.glyphCache.Clear();
+            }
+
             this.isDisposed = true;
+        }
+    }
+
+    private static void DisposeTypefaces(
+        List<SKTypeface> chain,
+        Dictionary<TypefaceKey, SKTypeface> styledCache,
+        Dictionary<GlyphKey, SKTypeface> glyphCache)
+    {
+        var toDispose = new HashSet<SKTypeface>();
+
+        foreach (var tf in chain)
+        {
+            toDispose.Add(tf);
+        }
+
+        foreach (var tf in styledCache.Values)
+        {
+            toDispose.Add(tf);
+        }
+
+        foreach (var tf in glyphCache.Values)
+        {
+            toDispose.Add(tf);
+        }
+
+        foreach (var tf in toDispose)
+        {
+            // SKTypeface.Default must not be disposed.
+            if (tf != SKTypeface.Default)
+            {
+                tf.Dispose();
+            }
         }
     }
 
@@ -134,7 +206,18 @@ public sealed class FontFallbackChain : IDisposable
         return null;
     }
 
-    private SKTypeface GetStyledVariant(SKTypeface baseTypeface, SKFontStyleWeight weight, SKFontStyleSlant slant)
+    private SKTypeface GetStyledTypefaceLocked(SKFontStyleWeight weight, SKFontStyleSlant slant)
+    {
+        var primary = this.chain.Count > 0 ? this.chain[0] : null;
+        if (primary is null)
+        {
+            return SKTypeface.Default;
+        }
+
+        return this.GetStyledVariantLocked(primary, weight, slant);
+    }
+
+    private SKTypeface GetStyledVariantLocked(SKTypeface baseTypeface, SKFontStyleWeight weight, SKFontStyleSlant slant)
     {
         var key = new TypefaceKey(baseTypeface.FamilyName, weight, slant);
         if (this.styledCache.TryGetValue(key, out var styled))
@@ -154,54 +237,6 @@ public sealed class FontFallbackChain : IDisposable
         styled = variant ?? baseTypeface;
         this.styledCache[key] = styled;
         return styled;
-    }
-
-    private void AddFont(string name, HashSet<string> seen)
-    {
-        if (string.IsNullOrWhiteSpace(name) || !seen.Add(name))
-        {
-            return;
-        }
-
-        var typeface = CreateValidatedTypeface(name);
-        if (typeface is not null)
-        {
-            this.chain.Add(typeface);
-        }
-    }
-
-    private void DisposeAll()
-    {
-        // Collect all unique typefaces to dispose (chain + styled cache + glyph cache).
-        var toDispose = new HashSet<SKTypeface>();
-
-        foreach (var tf in this.chain)
-        {
-            toDispose.Add(tf);
-        }
-
-        foreach (var tf in this.styledCache.Values)
-        {
-            toDispose.Add(tf);
-        }
-
-        foreach (var tf in this.glyphCache.Values)
-        {
-            toDispose.Add(tf);
-        }
-
-        this.chain.Clear();
-        this.styledCache.Clear();
-        this.glyphCache.Clear();
-
-        foreach (var tf in toDispose)
-        {
-            // SKTypeface.Default must not be disposed.
-            if (tf != SKTypeface.Default)
-            {
-                tf.Dispose();
-            }
-        }
     }
 
     /// <summary>
