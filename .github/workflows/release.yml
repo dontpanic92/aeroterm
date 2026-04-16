@@ -77,6 +77,7 @@ jobs:
         if [[ "${{ matrix.rid }}" == osx-* ]]; then
           PACK_DIR="AeroTerm/bin/Release/net10.0/${{ matrix.rid }}/AeroTerm.app/Contents/MacOS"
           MAIN_EXE="aeroterm"
+          ICON_PATH="AeroTerm/Assets/aeroterm.icns"
         elif [[ "${{ matrix.rid }}" == win-* ]]; then
           PACK_DIR="AeroTerm/bin/Release/net10.0/${{ matrix.rid }}/publish"
           MAIN_EXE="aeroterm.exe"
@@ -95,6 +96,9 @@ jobs:
         if [[ "${{ matrix.rid }}" == osx-* ]]; then
           BUNDLE_ROOT="AeroTerm/bin/Release/net10.0/${{ matrix.rid }}/AeroTerm.app"
           VPK_ARGS+=(--plist "${BUNDLE_ROOT}/Contents/Info.plist")
+          VPK_ARGS+=(--icon "$ICON_PATH")
+        elif [[ "${{ matrix.rid }}" == win-* ]]; then
+          VPK_ARGS+=(--icon "AeroTerm/Assets/aeroterm.ico")
         fi
         vpk pack "${VPK_ARGS[@]}"
 
