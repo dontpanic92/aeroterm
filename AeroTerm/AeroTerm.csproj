@@ -7,6 +7,7 @@
     <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
     <Platforms>AnyCPU;x64;x86;ARM64</Platforms>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon Condition="$([MSBuild]::IsOSPlatform('Windows'))">Assets\aeroterm.ico</ApplicationIcon>
     <PublishAot>true</PublishAot>
   </PropertyGroup>
 
@@ -43,7 +44,8 @@
     <RemoveDir Directories="$(BundleDir)" />
     <MakeDir Directories="$(BundleDir)/Contents/MacOS" />
     <MakeDir Directories="$(BundleDir)/Contents/Resources" />
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)../Packaging/macOS/Info.plist" DestinationFolder="$(BundleDir)/Contents/" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Assets/Info.plist" DestinationFolder="$(BundleDir)/Contents/" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)Assets/aeroterm.icns" DestinationFolder="$(BundleDir)/Contents/Resources/" />
 
     <!-- Stamp the bundle version from the MSBuild VersionPrefix (numeric part only). -->
     <Exec Command="sed -i '' 's/__BUNDLE_VERSION__/$(VersionPrefix)/g' '$(BundleDir)/Contents/Info.plist'" />
