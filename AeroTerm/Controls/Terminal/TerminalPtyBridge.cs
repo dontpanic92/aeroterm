@@ -24,7 +24,6 @@ internal sealed class TerminalPtyBridge : IDisposable
     private Thread? readerThread;
     private int lastPtyCols;
     private int lastPtyRows;
-    private long synchronizedOutputSinceTicks;
     private int redrawQueued;
     private volatile bool isDisposed;
 
@@ -175,6 +174,32 @@ internal sealed class TerminalPtyBridge : IDisposable
         Interlocked.Exchange(ref this.redrawQueued, 0);
     }
 
+    /// <summary>
+    /// Schedules a coalesced redraw on the UI thread. Safe to call from any
+    /// thread; concurrent callers collapse onto a single posted tick via the
+    /// same latch used by the reader loop.
+    /// </summary>
+    public void RequestRedraw()
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (Interlocked.Exchange(ref this.redrawQueued, 1) == 0)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!this.isDisposed)
+                {
+                    this.host.OnRedrawTick();
+                }
+
+                Interlocked.Exchange(ref this.redrawQueued, 0);
+            });
+        }
+    }
+
     private void OnProcessExited(object? sender, EventArgs e)
     {
         Dispatcher.UIThread.Post(() => this.ProcessExited?.Invoke());
@@ -196,40 +221,17 @@ internal sealed class TerminalPtyBridge : IDisposable
                 int scrollbackDelta = this.host.ProcessAndReportScrollbackDelta(buf.AsSpan(0, read));
                 this.host.OnAfterParse(scrollbackDelta);
 
-                // DECSET 2026 — synchronized output. Defer repaints while enabled
-                // so the app can stage a full frame atomically. A 150 ms safety
-                // timer mirrors the de-facto industry default (kitty / WezTerm)
-                // and guards against a runaway app that never disables the mode.
+                // DECSET 2026 — synchronized output. While the emitter has
+                // the mode enabled we skip the redraw post entirely; the
+                // SynchronizedUpdateCoordinator in the host handles the
+                // eventual flush (either when the emitter sends CSI ? 2026 l
+                // or via its 150 ms watchdog).
                 if (this.host.SynchronizedOutput)
                 {
-                    if (this.synchronizedOutputSinceTicks == 0)
-                    {
-                        this.synchronizedOutputSinceTicks = Environment.TickCount64;
-                    }
-
-                    if (Environment.TickCount64 - this.synchronizedOutputSinceTicks < 150)
-                    {
-                        continue;
-                    }
-                }
-                else
-                {
-                    this.synchronizedOutputSinceTicks = 0;
+                    continue;
                 }
 
-                // Queue a redraw on the UI thread, coalescing rapid updates.
-                if (Interlocked.Exchange(ref this.redrawQueued, 1) == 0)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (!this.isDisposed)
-                        {
-                            this.host.OnRedrawTick();
-                        }
-
-                        Interlocked.Exchange(ref this.redrawQueued, 0);
-                    });
-                }
+                this.RequestRedraw();
             }
         }
         catch (IOException)

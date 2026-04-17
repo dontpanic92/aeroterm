@@ -48,6 +48,7 @@ public class TerminalControl : Control, IDisposable
 
     private readonly TerminalClipboardBridge clipboard;
     private readonly TerminalPtyBridge ptyBridge;
+    private readonly SynchronizedUpdateCoordinator syncUpdateCoordinator;
     private readonly TerminalPointerHandler pointerHandler;
     private readonly TerminalVisualHost visualHost;
 
@@ -102,6 +103,13 @@ public class TerminalControl : Control, IDisposable
 
         this.ptyBridge = new TerminalPtyBridge(ptyFactory, new ReaderHost(this));
         this.ptyBridge.ProcessExited += () => this.ProcessExited?.Invoke();
+
+        // DECSET 2026 — synchronized update. The coordinator owns the 150 ms
+        // watchdog and the "flush one redraw on exit" post so the reader
+        // thread can stay oblivious to both.
+        this.syncUpdateCoordinator = new SynchronizedUpdateCoordinator(
+            this.buffer,
+            () => this.ptyBridge.RequestRedraw());
 
         this.inputHandler = new TerminalInputHandler(this.ptyBridge.WriteToPty);
 
@@ -752,6 +760,7 @@ public class TerminalControl : Control, IDisposable
             if (disposing)
             {
                 this.searchRecomputeTimer.Stop();
+                this.syncUpdateCoordinator.Dispose();
                 this.ptyBridge.Dispose();
                 Dispatcher.UIThread.Post(this.DisposeCachedResources, DispatcherPriority.Background);
             }

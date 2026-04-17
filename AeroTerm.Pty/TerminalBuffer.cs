@@ -124,6 +124,8 @@ public class TerminalBuffer
     // row r). Reflow concatenates such rows into a single logical line.
     private bool[] rowWrapped;
 
+    private bool synchronizedOutput;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalBuffer"/> class.
     /// </summary>
@@ -141,6 +143,13 @@ public class TerminalBuffer
         this.ClearRegion(0, 0, rows - 1, cols - 1);
         this.allDirty = true;
     }
+
+    /// <summary>
+    /// Raised whenever <see cref="SynchronizedOutput"/> transitions. The boolean
+    /// payload is the new value. Raised on the thread that mutated the property
+    /// (typically the PTY reader thread while the VT parser is running).
+    /// </summary>
+    public event EventHandler<bool>? SynchronizedOutputChanged;
 
     /// <summary>
     /// Gets the row count.
@@ -237,10 +246,24 @@ public class TerminalBuffer
     public bool BracketedPasteEnabled { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether synchronized output mode is enabled.
-    /// When enabled, screen updates should be batched until the mode is reset.
+    /// Gets or sets a value indicating whether synchronized output mode (DECSET 2026) is enabled.
+    /// When enabled, screen updates should be batched until the mode is reset. Setting this
+    /// property raises <see cref="SynchronizedOutputChanged"/> on transitions.
     /// </summary>
-    public bool SynchronizedOutput { get; set; }
+    public bool SynchronizedOutput
+    {
+        get => this.synchronizedOutput;
+        set
+        {
+            if (this.synchronizedOutput == value)
+            {
+                return;
+            }
+
+            this.synchronizedOutput = value;
+            this.SynchronizedOutputChanged?.Invoke(this, value);
+        }
+    }
 
     /// <summary>
     /// Gets or sets a value indicating whether focus event reporting is enabled.
