@@ -131,4 +131,49 @@ public class AppSettingsTests
         Assert.That(loaded, Is.Not.Null);
         Assert.That(loaded!.TabBarOrientation, Is.EqualTo(TabBarOrientation.Horizontal));
     }
+
+    /// <summary>
+    /// <see cref="AppSettings.BellAction"/> survives a JSON round-trip for
+    /// every enum value — including the newly-introduced
+    /// <see cref="BellAction.VisualAndAudio"/>.
+    /// </summary>
+    /// <param name="value">The bell-action enum value under test.</param>
+    [Test]
+    public void BellAction_RoundTripsThroughJson(
+        [Values(
+            BellAction.None,
+            BellAction.Visual,
+            BellAction.Audio,
+            BellAction.Notification,
+            BellAction.VisualAndAudio,
+            BellAction.All)] BellAction value)
+    {
+        var ctx = AppSettingsJsonContext.Default.AppSettings;
+
+        var settings = new AppSettings { BellAction = value };
+        string json = JsonSerializer.Serialize(settings, ctx);
+        var loaded = JsonSerializer.Deserialize(json, ctx);
+
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.BellAction, Is.EqualTo(value));
+    }
+
+    /// <summary>
+    /// Legacy settings files written before <see cref="AppSettings.BellAction"/>
+    /// existed deserialize cleanly and default to
+    /// <see cref="BellAction.Visual"/> (the existing default).
+    /// </summary>
+    [Test]
+    public void BellAction_MissingFromLegacyJson_DefaultsToVisual()
+    {
+        const string LegacyJson =
+            "{\n" +
+            "  \"EnableBlurBehind\": true,\n" +
+            "  \"FontSize\": 11\n" +
+            "}";
+
+        var loaded = JsonSerializer.Deserialize(LegacyJson, AppSettingsJsonContext.Default.AppSettings);
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.BellAction, Is.EqualTo(BellAction.Visual));
+    }
 }

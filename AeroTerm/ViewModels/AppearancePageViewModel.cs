@@ -336,6 +336,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         BellAction.Visual,
         BellAction.Audio,
         BellAction.Notification,
+        BellAction.VisualAndAudio,
         BellAction.All,
     };
 

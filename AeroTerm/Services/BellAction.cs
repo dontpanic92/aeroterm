@@ -13,25 +13,31 @@ public enum BellAction
     /// <summary>
     /// Ignore the bell.
     /// </summary>
-    None,
+    None = 0,
 
     /// <summary>
     /// Briefly flash the window to indicate the bell.
     /// </summary>
-    Visual,
+    Visual = 1,
 
     /// <summary>
     /// Play the platform default beep.
     /// </summary>
-    Audio,
+    Audio = 2,
 
     /// <summary>
     /// Post an OS notification.
     /// </summary>
-    Notification,
+    Notification = 3,
 
     /// <summary>
-    /// Do all of the above.
+    /// Do all of the above (visual flash, audio beep, and OS notification).
     /// </summary>
-    All,
+    All = 4,
+
+    /// <summary>
+    /// Visual flash and audio beep, but no OS notification. Handy when the
+    /// user wants an obvious in-app cue without interrupting other apps.
+    /// </summary>
+    VisualAndAudio = 5,
 }
