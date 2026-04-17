@@ -5,6 +5,7 @@
 
 namespace AeroTerm;
 
+using System;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -21,6 +22,33 @@ using Avalonia.Markup.Xaml;
 /// </summary>
 public class App : Application
 {
+    private static KeybindingStore? keybindingStore;
+    private static KeybindingSet keybindings = KeybindingSet.Defaults;
+
+    /// <summary>
+    /// Raised whenever <see cref="Keybindings"/> has been reloaded from
+    /// the store. Consumers that cache the current set should refresh.
+    /// </summary>
+    public static event Action? KeybindingsChanged;
+
+    /// <summary>
+    /// Gets the current application-wide keybinding set.
+    /// </summary>
+    public static KeybindingSet Keybindings => keybindings;
+
+    /// <summary>
+    /// Gets the process-wide keybinding store. Created lazily on first
+    /// access so tests can swap it via <see cref="SetKeybindingStoreForTesting"/>.
+    /// </summary>
+    public static KeybindingStore KeybindingStore
+    {
+        get
+        {
+            keybindingStore ??= new KeybindingStore();
+            return keybindingStore;
+        }
+    }
+
     /// <summary>
     /// Gets or sets a test-only seam. When set, <see cref="MainWindow"/>
     /// uses this factory to construct tab content instead of spawning a
@@ -38,6 +66,16 @@ public class App : Application
     /// </summary>
     internal static Func<MainWindow, Task<bool>>? TestConfirmCloseHandler { get; set; }
 
+    /// <summary>
+    /// Reloads the keybindings from the current <see cref="KeybindingStore"/>
+    /// and raises <see cref="KeybindingsChanged"/>.
+    /// </summary>
+    public static void ReloadKeybindings()
+    {
+        keybindings = KeybindingStore.Load();
+        KeybindingsChanged?.Invoke();
+    }
+
     /// <inheritdoc />
     public override void Initialize()
     {
@@ -47,6 +85,11 @@ public class App : Application
     /// <inheritdoc />
     public override void OnFrameworkInitializationCompleted()
     {
+        // Load keybindings once at startup — persisted overrides (if any)
+        // are merged on top of the platform defaults. Missing or malformed
+        // keybindings.json falls back to defaults silently.
+        ReloadKeybindings();
+
         if (this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
@@ -75,6 +118,17 @@ public class App : Application
         var window = new MainWindow(AppSettings.Default);
         window.Show();
         return window;
+    }
+
+    /// <summary>
+    /// Replaces the process-wide keybinding store (tests only).
+    /// </summary>
+    /// <param name="store">The replacement store, or <see langword="null"/> to reset.</param>
+    internal static void SetKeybindingStoreForTesting(KeybindingStore? store)
+    {
+        keybindingStore = store;
+        keybindings = (store ?? new KeybindingStore()).Load();
+        KeybindingsChanged?.Invoke();
     }
 
     /// <summary>

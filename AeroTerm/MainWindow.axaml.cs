@@ -337,6 +337,7 @@ public partial class MainWindow : Window
             var pages = new ViewModels.SettingsPageViewModel[]
             {
                 new ViewModels.AppearancePageViewModel(this.settings),
+                new ViewModels.KeybindingsPageViewModel(App.KeybindingStore),
                 new ViewModels.UpdatesPageViewModel(this.settings, this.updateService),
             };
             var viewModel = new ViewModels.SettingsViewModel(pages);

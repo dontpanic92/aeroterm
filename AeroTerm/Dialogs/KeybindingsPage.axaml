@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:AeroTerm.ViewModels"
+             xmlns:dialogs="using:AeroTerm.Dialogs"
+             x:Class="AeroTerm.Dialogs.KeybindingsPage"
+             x:CompileBindings="True"
+             x:DataType="vm:KeybindingsPageViewModel">
+    <StackPanel Spacing="8">
+        <TextBlock Text="Click a chord to record a new one. Press Esc to cancel."
+                   Foreground="Gray" FontSize="12" />
+
+        <ItemsControl ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:KeybindingRow">
+                    <Grid dialogs:SettingsSearch.Label="{Binding DisplayName}"
+                          ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding DisplayName}"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1"
+                                MinWidth="160"
+                                Margin="0,0,6,0"
+                                Click="ChordButton_Click"
+                                KeyDown="ChordButton_KeyDown">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{Binding ChordText}" />
+                                <TextBlock Text=" (recording…)"
+                                           Foreground="OrangeRed"
+                                           IsVisible="{Binding IsRecording}" />
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="2"
+                                Content="Reset"
+                                IsVisible="{Binding IsCustomized}"
+                                Click="ResetRowButton_Click" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Button Content="Reset all to defaults"
+                Margin="0,8,0,0"
+                Click="ResetAllButton_Click"
+                HorizontalAlignment="Left" />
+    </StackPanel>
+</UserControl>

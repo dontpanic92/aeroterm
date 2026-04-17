@@ -65,6 +65,10 @@
                             <dialogs:UpdatesPage />
                         </DataTemplate>
 
+                        <DataTemplate DataType="vm:KeybindingsPageViewModel">
+                            <dialogs:KeybindingsPage />
+                        </DataTemplate>
+
                         <!-- Fallback for pages without a specific template -->
                         <DataTemplate DataType="vm:SettingsPageViewModel">
                             <TextBlock Text="Page content loading..." />

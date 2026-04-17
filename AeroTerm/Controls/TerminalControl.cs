@@ -8,6 +8,7 @@ namespace AeroTerm.Controls;
 using System.Runtime.InteropServices;
 using System.Text;
 using AeroTerm.Pty;
+using AeroTerm.Services;
 using AeroTerm.Utilities;
 using Avalonia;
 using Avalonia.Controls;
