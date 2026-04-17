@@ -106,36 +106,34 @@ jobs:
     if: github.event_name == 'push'
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout gh-pages-src (static web content)
+      uses: actions/checkout@v4
       with:
-        ref: gh-pages
-        path: gh-pages
-      continue-on-error: true
-
-    - name: Initialize gh-pages if needed
-      run: |
-        if [ ! -d gh-pages/.git ]; then
-          mkdir -p gh-pages
-          cd gh-pages
-          git init
-          git checkout -b gh-pages
-          touch .nojekyll
-          mkdir -p updates
-          git add .
-          git commit -m "Initialize GitHub Pages for update feed"
-        fi
+        ref: gh-pages-src
+        path: site-src
 
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
         path: artifacts
 
-    - name: Deploy Velopack releases to gh-pages
+    - name: Assemble deploy tree
       shell: bash
       run: |
-        UPDATES_DIR="gh-pages/updates"
-        mkdir -p "$UPDATES_DIR"
+        set -euo pipefail
+        DEPLOY_DIR="deploy"
+        rm -rf "$DEPLOY_DIR"
+        mkdir -p "$DEPLOY_DIR"
 
+        # Copy static web content from gh-pages-src (excluding .git).
+        rsync -a --exclude='.git' site-src/ "$DEPLOY_DIR/"
+
+        # Ensure GitHub Pages does not run Jekyll over the binaries.
+        touch "$DEPLOY_DIR/.nojekyll"
+
+        # Place the latest CI artifacts under updates/ (no previous binaries carried over).
+        UPDATES_DIR="$DEPLOY_DIR/updates"
+        mkdir -p "$UPDATES_DIR"
         for RID in win-x64 osx-arm64 osx-x64 linux-x64; do
           ARTIFACT_DIR="artifacts/aeroterm_${RID//-/_}"
           if [ -d "$ARTIFACT_DIR" ]; then
@@ -143,15 +141,20 @@ jobs:
           fi
         done
 
-        echo "Deployed files:"
+        echo "Deploy tree:"
+        ls -la "$DEPLOY_DIR/"
+        echo "Updates:"
         ls -la "$UPDATES_DIR/"
 
-    - name: Push to gh-pages
+    - name: Force-push single-commit gh-pages
+      shell: bash
       run: |
-        cd gh-pages
+        set -euo pipefail
+        cd deploy
+        git init -q -b gh-pages
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git add -A
-        git diff --cached --quiet && echo "No changes" && exit 0
-        git commit -m "CI update: $(date -u +%Y%m%d)-${{ github.run_number }}"
-        git push "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+        git commit -q -m "CI update: $(date -u +%Y%m%d)-${{ github.run_number }}"
+        # Force-push so gh-pages always has a single commit containing only the latest build.
+        git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
