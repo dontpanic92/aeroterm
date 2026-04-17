@@ -83,4 +83,10 @@ public enum KeybindingAction
 
     /// <summary>Move the active tab one slot to the right.</summary>
     MoveTabRight,
+
+    /// <summary>Create a new tab group from the active tab.</summary>
+    GroupNewFromActive,
+
+    /// <summary>Remove the active tab from its current group.</summary>
+    UngroupActive,
 }

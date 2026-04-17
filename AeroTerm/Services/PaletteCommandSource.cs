@@ -128,6 +128,44 @@ public static class PaletteCommandSource
                 return ValueTask.CompletedTask;
             }));
 
+        // --- Group commands --------------------------------------------------
+        list.Add(new PaletteCommand(
+            Id: "group.new-from-active",
+            Title: "New group from active tab",
+            Subtitle: "Create a fresh group and assign the active tab.",
+            Category: "Group",
+            Execute: () =>
+            {
+                host.CreateGroupFromActiveTab();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "group.ungroup-active",
+            Title: "Remove active tab from group",
+            Subtitle: null,
+            Category: "Group",
+            Execute: () =>
+            {
+                host.UngroupActiveTab();
+                return ValueTask.CompletedTask;
+            }));
+
+        foreach (var group in host.TabGroups)
+        {
+            var captured = group;
+            list.Add(new PaletteCommand(
+                Id: $"group.assign.{captured.Id}",
+                Title: $"Add active tab to group: {captured.Name}",
+                Subtitle: null,
+                Category: "Group",
+                Execute: () =>
+                {
+                    host.AssignActiveTabToGroup(captured.Id);
+                    return ValueTask.CompletedTask;
+                }));
+        }
+
         for (int i = 0; i < host.TabTitles.Count; i++)
         {
             int index = i;

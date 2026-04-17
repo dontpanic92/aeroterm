@@ -86,7 +86,9 @@ public partial class MainWindow : Window
         this.tabStrip.ManageProfilesRequested += () => _ = this.ShowSettingsDialogAsync();
         this.tabStrip.TabReorderRequested += (from, to) => this.tabView.MoveTab(from, to);
         this.tabStrip.TabDetachRequested += this.OnTabDetachRequested;
+        this.tabStrip.TabGroupAssignmentRequested += this.OnTabGroupAssignmentRequested;
         this.tabStrip.Profiles = App.Profiles.Profiles;
+        this.tabStrip.GroupStore = App.TabGroupStore;
         App.ProfilesChanged += this.OnProfilesChanged;
         this.tabStripHost.Child = this.tabStrip;
         this.tabView.Tabs.CollectionChanged += this.OnTabsCollectionChanged;
@@ -247,6 +249,18 @@ public partial class MainWindow : Window
         if (resolved?.Action == KeybindingAction.MoveTabRight)
         {
             this.tabView.MoveActiveTabRight();
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.GroupNewFromActive)
+        {
+            this.CreateGroupFromActiveTab();
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.UngroupActive)
+        {
+            this.UngroupActiveTab();
             return true;
         }
 
@@ -551,6 +565,41 @@ public partial class MainWindow : Window
         {
             this.DuplicateTab(active);
         }
+    }
+
+    private void CreateGroupFromActiveTab()
+    {
+        if (this.tabView.ActiveTab is not { } active)
+        {
+            return;
+        }
+
+        var store = App.TabGroupStore;
+        int n = store.Groups.Count + 1;
+        var group = store.CreateGroup($"Group {n}");
+        active.GroupId = group.Id;
+    }
+
+    private void UngroupActiveTab()
+    {
+        if (this.tabView.ActiveTab is { } active)
+        {
+            active.GroupId = null;
+        }
+    }
+
+    private void OnTabGroupAssignmentRequested(TabSession tab, string? groupId)
+    {
+        if (groupId == TabStrip.CreateGroupSentinel)
+        {
+            var store = App.TabGroupStore;
+            int n = store.Groups.Count + 1;
+            var group = store.CreateGroup($"Group {n}");
+            tab.GroupId = group.Id;
+            return;
+        }
+
+        tab.GroupId = groupId;
     }
 
     private void DuplicateTabFromStrip(TabSession source)

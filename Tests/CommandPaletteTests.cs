@@ -238,6 +238,8 @@ public class CommandPaletteTests
 
         public AppSettings Settings => this.FakeSettings;
 
+        public IReadOnlyList<TabGroup> TabGroups => Array.Empty<TabGroup>();
+
         public void NewTab() => this.NewTabCalls++;
 
         public void NewTabFromProfile(Profile profile)
@@ -285,6 +287,18 @@ public class CommandPaletteTests
         }
 
         public void ReloadKeybindings()
+        {
+        }
+
+        public void CreateGroupFromActiveTab()
+        {
+        }
+
+        public void AssignActiveTabToGroup(string groupId)
+        {
+        }
+
+        public void UngroupActiveTab()
         {
         }
     }

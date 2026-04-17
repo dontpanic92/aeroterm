@@ -73,6 +73,8 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.OpenCommandPalette, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.P)));
             list.Add(new Keybinding(KeybindingAction.MoveTabLeft, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.PageUp)));
             list.Add(new Keybinding(KeybindingAction.MoveTabRight, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.PageDown)));
+            list.Add(new Keybinding(KeybindingAction.GroupNewFromActive, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.G)));
+            list.Add(new Keybinding(KeybindingAction.UngroupActive, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.G)));
 
             // OpenSettings, NewWindow, CloseWindow: handled by the macOS
             // native menu / OS, so no chord defaults here — avoids
@@ -102,6 +104,8 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.OpenCommandPalette, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.P)));
             list.Add(new Keybinding(KeybindingAction.MoveTabLeft, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.PageUp)));
             list.Add(new Keybinding(KeybindingAction.MoveTabRight, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.PageDown)));
+            list.Add(new Keybinding(KeybindingAction.GroupNewFromActive, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.G)));
+            list.Add(new Keybinding(KeybindingAction.UngroupActive, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.G)));
         }
 
         return list;
@@ -138,6 +142,8 @@ public sealed class KeybindingSet
         KeybindingAction.OpenCommandPalette => "Open command palette",
         KeybindingAction.MoveTabLeft => "Move tab left",
         KeybindingAction.MoveTabRight => "Move tab right",
+        KeybindingAction.GroupNewFromActive => "Group: new group from active tab",
+        KeybindingAction.UngroupActive => "Group: ungroup active tab",
         _ => action.ToString(),
     };
 

@@ -33,6 +33,14 @@ using Avalonia.VisualTree;
 /// </summary>
 public sealed class TabStrip : UserControl
 {
+    /// <summary>
+    /// Sentinel value passed via <see cref="TabGroupAssignmentRequested"/>
+    /// when the user picks "New group…" from a tab's context menu. The
+    /// subscriber is expected to create a fresh group via the app-level
+    /// store and assign the tab to it.
+    /// </summary>
+    public const string CreateGroupSentinel = "__aeroterm_create_new_group__";
+
     private const double DragStartThreshold = 5.0;
 
     private static readonly IBrush ActiveTabBrush = Brushes.Transparent;
@@ -50,6 +58,7 @@ public sealed class TabStrip : UserControl
     private readonly Rectangle dropIndicator;
     private TabView? tabView;
     private IReadOnlyList<Profile> profiles = new List<Profile>();
+    private TabGroupStore? groupStore;
     private DragState? drag;
 
     /// <summary>
@@ -155,6 +164,15 @@ public sealed class TabStrip : UserControl
     public event Action<TabSession, PixelPoint>? TabDetachRequested;
 
     /// <summary>
+    /// Raised when the user picks an entry from a tab's "Add to group"
+    /// submenu, "Remove from group", or "New group…". The group id is
+    /// the target group's identifier, <c>null</c> to ungroup, or
+    /// <see cref="CreateGroupSentinel"/> to request creation of a new
+    /// group and assignment of the tab to it.
+    /// </summary>
+    public event Action<TabSession, string?>? TabGroupAssignmentRequested;
+
+    /// <summary>
     /// Gets or sets the profile list populated into the "+" button's
     /// dropdown menu. Setting this rebuilds the flyout items. When
     /// <c>null</c> or empty, no dropdown arrow items are shown but the
@@ -167,6 +185,38 @@ public sealed class TabStrip : UserControl
         {
             this.profiles = value ?? new List<Profile>();
             this.RebuildProfileFlyout();
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the <see cref="TabGroupStore"/> backing the "Add to
+    /// group" context-menu submenu and group-colored pills above each
+    /// tab header. When <c>null</c>, tabs render without a pill and
+    /// only offer "New group…"/"Remove from group" in the menu.
+    /// </summary>
+    public TabGroupStore? GroupStore
+    {
+        get => this.groupStore;
+        set
+        {
+            if (ReferenceEquals(this.groupStore, value))
+            {
+                return;
+            }
+
+            if (this.groupStore is not null)
+            {
+                this.groupStore.GroupsChanged -= this.OnGroupsChanged;
+            }
+
+            this.groupStore = value;
+
+            if (this.groupStore is not null)
+            {
+                this.groupStore.GroupsChanged += this.OnGroupsChanged;
+            }
+
+            this.OnGroupsChanged();
         }
     }
 
@@ -291,10 +341,11 @@ public sealed class TabStrip : UserControl
 
     private void AddHeader(TabSession tab, int index = -1)
     {
-        var header = new TabHeader(tab);
+        var header = new TabHeader(tab, this);
         header.ActivateRequested += t => this.tabView?.ActivateTab(t);
         header.CloseRequested += t => this.tabView?.CloseTab(t);
         header.DuplicateRequested += t => this.DuplicateTabRequested?.Invoke(t);
+        header.GroupAssignmentRequested += (t, g) => this.TabGroupAssignmentRequested?.Invoke(t, g);
         this.headers[tab] = header;
         if (index < 0 || index >= this.tabsPanel.Children.Count)
         {
@@ -531,6 +582,19 @@ public sealed class TabStrip : UserControl
     }
 
     /// <summary>
+    /// Refreshes every header's pill visibility, fill color, and
+    /// context-menu "Add to group" submenu entries to reflect the
+    /// current <see cref="GroupStore"/> contents.
+    /// </summary>
+    private void OnGroupsChanged()
+    {
+        foreach (var header in this.headers.Values)
+        {
+            header.RefreshGroup();
+        }
+    }
+
+    /// <summary>
     /// Captures the state of an in-progress tab-strip drag: the dragged
     /// session, its original index, the press origin, and the captured
     /// pointer. Only becomes visually observable once the pointer crosses
@@ -559,20 +623,24 @@ public sealed class TabStrip : UserControl
 
     /// <summary>
     /// Individual tab header button with title, close glyph, middle-click
-    /// close, and active/inactive styling.
+    /// close, active/inactive styling, and an optional colored pill above
+    /// the header indicating tab-group membership.
     /// </summary>
     private sealed class TabHeader : Border
     {
         private readonly TabSession tab;
+        private readonly TabStrip owner;
         private readonly TextBlock titleBlock;
         private readonly Button closeButton;
         private readonly Rectangle divider;
+        private readonly Rectangle groupPill;
         private bool isActive;
         private bool hasMultipleTabs;
 
-        public TabHeader(TabSession tab)
+        public TabHeader(TabSession tab, TabStrip owner)
         {
             this.tab = tab;
+            this.owner = owner;
             this.Width = 160;
             this.Height = 28;
             this.CornerRadius = new CornerRadius(6, 6, 0, 0);
@@ -590,8 +658,25 @@ public sealed class TabStrip : UserControl
             var grid = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+                RowDefinitions = new RowDefinitions("Auto,*"),
                 VerticalAlignment = VerticalAlignment.Stretch,
             };
+
+            this.groupPill = new Rectangle
+            {
+                Height = 3,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(6, 0, 6, 0),
+                RadiusX = 1.5,
+                RadiusY = 1.5,
+                IsVisible = false,
+                IsHitTestVisible = false,
+            };
+            Grid.SetRow(this.groupPill, 0);
+            Grid.SetColumn(this.groupPill, 0);
+            Grid.SetColumnSpan(this.groupPill, 3);
+            grid.Children.Add(this.groupPill);
 
             this.titleBlock = new TextBlock
             {
@@ -602,6 +687,7 @@ public sealed class TabStrip : UserControl
                 FontSize = 12,
                 Text = tab.Title,
             };
+            Grid.SetRow(this.titleBlock, 1);
             Grid.SetColumn(this.titleBlock, 0);
             grid.Children.Add(this.titleBlock);
 
@@ -631,6 +717,7 @@ public sealed class TabStrip : UserControl
                 e.Handled = true;
                 this.CloseRequested?.Invoke(this.tab);
             };
+            Grid.SetRow(this.closeButton, 1);
             Grid.SetColumn(this.closeButton, 1);
             grid.Children.Add(this.closeButton);
 
@@ -642,6 +729,7 @@ public sealed class TabStrip : UserControl
                 Fill = DividerBrush,
                 IsVisible = false,
             };
+            Grid.SetRow(this.divider, 1);
             Grid.SetColumn(this.divider, 2);
             grid.Children.Add(this.divider);
 
@@ -653,6 +741,7 @@ public sealed class TabStrip : UserControl
             this.PointerEntered += this.OnPointerEntered;
             this.PointerExited += this.OnPointerExited;
             this.AttachContextMenu();
+            this.RefreshGroup();
             tab.PropertyChanged += this.OnTabPropertyChanged;
         }
 
@@ -662,8 +751,17 @@ public sealed class TabStrip : UserControl
 
         public event Action<TabSession>? DuplicateRequested;
 
+        public event Action<TabSession, string?>? GroupAssignmentRequested;
+
         /// <summary>Gets the session this header represents.</summary>
         public TabSession Session => this.tab;
+
+        /// <summary>
+        /// Gets the colored pill rectangle. Exposed (internal-only via
+        /// the enclosing private class contract) so headless UI tests
+        /// can assert visibility + fill when a tab joins a group.
+        /// </summary>
+        public Rectangle GroupPill => this.groupPill;
 
         public void Detach()
         {
@@ -677,6 +775,39 @@ public sealed class TabStrip : UserControl
             this.Background = active ? ActiveTabBrush : InactiveTabBrush;
             this.divider.IsVisible = active && this.hasMultipleTabs;
             this.closeButton.IsVisible = this.hasMultipleTabs && (active || this.IsPointerOver);
+        }
+
+        /// <summary>
+        /// Refreshes the group pill's visibility and fill color from
+        /// the tab's current <see cref="TabSession.GroupId"/> and the
+        /// owning strip's <see cref="TabStrip.GroupStore"/>. Also
+        /// rebuilds the context menu so the "Add to group" submenu
+        /// reflects the live group list.
+        /// </summary>
+        public void RefreshGroup()
+        {
+            TabGroup? group = null;
+            var gid = this.tab.GroupId;
+            if (!string.IsNullOrEmpty(gid))
+            {
+                group = this.owner.groupStore?.Find(gid);
+            }
+
+            if (group is null)
+            {
+                this.groupPill.IsVisible = false;
+                this.groupPill.Fill = null;
+            }
+            else
+            {
+                this.groupPill.Fill = new SolidColorBrush(Color.FromRgb(
+                    (byte)((group.Color >> 16) & 0xFF),
+                    (byte)((group.Color >> 8) & 0xFF),
+                    (byte)(group.Color & 0xFF)));
+                this.groupPill.IsVisible = true;
+            }
+
+            this.AttachContextMenu();
         }
 
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -729,6 +860,10 @@ public sealed class TabStrip : UserControl
                 AutomationProperties.SetName(this, this.tab.Title);
                 AutomationProperties.SetName(this.closeButton, $"Close tab: {this.tab.Title}");
             }
+            else if (e.PropertyName == nameof(TabSession.GroupId))
+            {
+                this.RefreshGroup();
+            }
         }
 
         private void AttachContextMenu()
@@ -739,9 +874,41 @@ public sealed class TabStrip : UserControl
             var closeItem = new MenuItem { Header = "Close tab" };
             closeItem.Click += (_, _) => this.CloseRequested?.Invoke(this.tab);
 
+            var addToGroupItem = new MenuItem { Header = "Add to group" };
+            var store = this.owner.groupStore;
+            if (store is not null)
+            {
+                foreach (var g in store.Groups)
+                {
+                    var captured = g;
+                    var sub = new MenuItem { Header = captured.Name };
+                    sub.Click += (_, _) => this.GroupAssignmentRequested?.Invoke(this.tab, captured.Id);
+                    addToGroupItem.Items.Add(sub);
+                }
+
+                if (store.Groups.Count > 0)
+                {
+                    addToGroupItem.Items.Add(new Separator());
+                }
+            }
+
+            var newGroupItem = new MenuItem { Header = "New group…" };
+            newGroupItem.Click += (_, _) => this.GroupAssignmentRequested?.Invoke(this.tab, CreateGroupSentinel);
+            addToGroupItem.Items.Add(newGroupItem);
+
+            var removeFromGroupItem = new MenuItem
+            {
+                Header = "Remove from group",
+                IsEnabled = !string.IsNullOrEmpty(this.tab.GroupId),
+            };
+            removeFromGroupItem.Click += (_, _) => this.GroupAssignmentRequested?.Invoke(this.tab, null);
+
             var menu = new ContextMenu();
             menu.Items.Add(duplicateItem);
             menu.Items.Add(closeItem);
+            menu.Items.Add(new Separator());
+            menu.Items.Add(addToGroupItem);
+            menu.Items.Add(removeFromGroupItem);
             this.ContextMenu = menu;
         }
     }

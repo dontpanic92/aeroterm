@@ -51,6 +51,9 @@ public partial class MainWindow : IPaletteHost
     /// <inheritdoc />
     AppSettings IPaletteHost.Settings => this.settings;
 
+    /// <inheritdoc />
+    IReadOnlyList<TabGroup> IPaletteHost.TabGroups => App.TabGroupStore.Groups;
+
     /// <summary>
     /// Opens the Cmd/Ctrl+Shift+P command palette non-modally. The
     /// palette constructs its command list from a snapshot of the
@@ -119,4 +122,19 @@ public partial class MainWindow : IPaletteHost
 
     /// <inheritdoc />
     void IPaletteHost.ReloadKeybindings() => App.ReloadKeybindings();
+
+    /// <inheritdoc />
+    void IPaletteHost.CreateGroupFromActiveTab() => this.CreateGroupFromActiveTab();
+
+    /// <inheritdoc />
+    void IPaletteHost.AssignActiveTabToGroup(string groupId)
+    {
+        if (this.tabView.ActiveTab is { } active)
+        {
+            active.GroupId = groupId;
+        }
+    }
+
+    /// <inheritdoc />
+    void IPaletteHost.UngroupActiveTab() => this.UngroupActiveTab();
 }

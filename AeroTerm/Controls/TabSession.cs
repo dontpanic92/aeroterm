@@ -23,6 +23,7 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
 {
     private readonly ITabSessionContent content;
     private string title;
+    private string? groupId;
     private bool disposed;
 
     /// <summary>
@@ -109,6 +110,31 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     /// content. The same instance is used for the tab's entire lifetime.
     /// </summary>
     public Control Control => this.content.Host;
+
+    /// <summary>
+    /// Gets or sets the id of the <see cref="TabGroup"/> this tab is
+    /// assigned to, or <c>null</c> when the tab is not grouped. The
+    /// id refers to an entry in the application's
+    /// <see cref="TabGroupStore"/>; callers are responsible for
+    /// keeping it in sync. Setting the property fires
+    /// <see cref="PropertyChanged"/> so the tab strip can repaint the
+    /// group pill.
+    /// </summary>
+    public string? GroupId
+    {
+        get => this.groupId;
+        set
+        {
+            var normalized = string.IsNullOrEmpty(value) ? null : value;
+            if (this.groupId == normalized)
+            {
+                return;
+            }
+
+            this.groupId = normalized;
+            this.OnPropertyChanged();
+        }
+    }
 
     /// <summary>
     /// Gets the underlying <see cref="TerminalControl"/>, once the session

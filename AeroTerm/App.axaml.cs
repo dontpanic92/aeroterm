@@ -27,6 +27,7 @@ public class App : Application
     private static KeybindingSet keybindings = KeybindingSet.Defaults;
     private static ProfileStore? profileStore;
     private static ProfileStoreData profiles = new(new List<Profile> { ProfileStore.CreateSynthesizedDefault() }, null);
+    private static TabGroupStore? tabGroupStore;
     private static PaletteMruStore? paletteMru;
     private static QuakeModeService? quakeModeService;
     private static IGlobalHotkeySource? globalHotkeySource;
@@ -77,6 +78,20 @@ public class App : Application
             }
 
             return profileStore;
+        }
+    }
+
+    /// <summary>
+    /// Gets the process-wide tab-group store. Created lazily on first
+    /// access so tests can swap it via
+    /// <see cref="SetTabGroupStoreForTesting(TabGroupStore)"/>.
+    /// </summary>
+    public static TabGroupStore TabGroupStore
+    {
+        get
+        {
+            tabGroupStore ??= new TabGroupStore();
+            return tabGroupStore;
         }
     }
 
@@ -228,6 +243,15 @@ public class App : Application
     internal static void SetPaletteMruForTesting(PaletteMruStore? store)
     {
         paletteMru = store;
+    }
+
+    /// <summary>
+    /// Replaces the process-wide tab-group store (tests only).
+    /// </summary>
+    /// <param name="store">The replacement store, or <see langword="null"/> to reset.</param>
+    internal static void SetTabGroupStoreForTesting(TabGroupStore? store)
+    {
+        tabGroupStore = store;
     }
 
     /// <summary>

@@ -33,6 +33,13 @@ internal interface IPaletteHost
     /// transparency commands.</summary>
     AppSettings Settings { get; }
 
+    /// <summary>
+    /// Gets the live snapshot of tab-group definitions the active
+    /// window knows about. Palette commands use this to offer "Add
+    /// active tab to group …" entries.
+    /// </summary>
+    IReadOnlyList<TabGroup> TabGroups { get; }
+
     /// <summary>Opens a new tab using the application's default profile.</summary>
     void NewTab();
 
@@ -77,4 +84,25 @@ internal interface IPaletteHost
     /// changes without restarting.
     /// </summary>
     void ReloadKeybindings();
+
+    /// <summary>
+    /// Creates a fresh group (with a synthesized name) and assigns
+    /// the active tab to it. Used by the
+    /// <see cref="KeybindingAction.GroupNewFromActive"/> binding and
+    /// the equivalent palette entry.
+    /// </summary>
+    void CreateGroupFromActiveTab();
+
+    /// <summary>
+    /// Assigns the active tab to the group with the supplied id.
+    /// No-op when the id is unknown or there is no active tab.
+    /// </summary>
+    /// <param name="groupId">Target group id.</param>
+    void AssignActiveTabToGroup(string groupId);
+
+    /// <summary>
+    /// Removes the active tab from whichever group it currently
+    /// belongs to (if any).
+    /// </summary>
+    void UngroupActiveTab();
 }

@@ -348,6 +348,8 @@ internal partial class CommandPaletteWindow : Window
 
         public AppSettings Settings => AppSettings.Default;
 
+        public IReadOnlyList<TabGroup> TabGroups => Array.Empty<TabGroup>();
+
         public void NewTab()
         {
         }
@@ -397,6 +399,18 @@ internal partial class CommandPaletteWindow : Window
         }
 
         public void ReloadKeybindings()
+        {
+        }
+
+        public void CreateGroupFromActiveTab()
+        {
+        }
+
+        public void AssignActiveTabToGroup(string groupId)
+        {
+        }
+
+        public void UngroupActiveTab()
         {
         }
     }
