@@ -445,5 +445,13 @@ internal partial class CommandPaletteWindow : Window
         public void ToggleTabBarOrientation()
         {
         }
+
+        public void JumpToPreviousCommand()
+        {
+        }
+
+        public void JumpToNextCommand()
+        {
+        }
     }
 }

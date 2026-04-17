@@ -88,6 +88,12 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.ClosePane, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.W)));
             list.Add(new Keybinding(KeybindingAction.ToggleTabBarOrientation, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.B)));
 
+            // Shell integration: Cmd+Shift+Up / Cmd+Shift+Down jump between
+            // OSC 133 prompt marks. Kept on Shift to avoid colliding with
+            // the Cmd+Alt+Up/Down pane-focus chords above.
+            list.Add(new Keybinding(KeybindingAction.JumpToPreviousCommand, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.Up)));
+            list.Add(new Keybinding(KeybindingAction.JumpToNextCommand, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.Down)));
+
             // OpenSettings, NewWindow, CloseWindow: handled by the macOS
             // native menu / OS, so no chord defaults here — avoids
             // double-firing. Users may still bind them via the
@@ -129,6 +135,12 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.FocusPaneDown, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.Down)));
             list.Add(new Keybinding(KeybindingAction.ClosePane, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.W)));
             list.Add(new Keybinding(KeybindingAction.ToggleTabBarOrientation, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.B)));
+
+            // Shell integration: Ctrl+Shift+Up / Ctrl+Shift+Down jump between
+            // OSC 133 prompt marks. Shift variant keeps the chord free of the
+            // Ctrl+Alt pane-focus family.
+            list.Add(new Keybinding(KeybindingAction.JumpToPreviousCommand, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.Up)));
+            list.Add(new Keybinding(KeybindingAction.JumpToNextCommand, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.Down)));
         }
 
         return list;
@@ -175,6 +187,8 @@ public sealed class KeybindingSet
         KeybindingAction.FocusPaneDown => "Focus pane down",
         KeybindingAction.ClosePane => "Close pane",
         KeybindingAction.ToggleTabBarOrientation => "Toggle tab bar orientation",
+        KeybindingAction.JumpToPreviousCommand => "Jump to previous command",
+        KeybindingAction.JumpToNextCommand => "Jump to next command",
         _ => action.ToString(),
     };
 

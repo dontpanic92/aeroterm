@@ -316,6 +316,18 @@ public partial class MainWindow : Window
             return true;
         }
 
+        if (resolved?.Action == KeybindingAction.JumpToPreviousCommand)
+        {
+            this.tabView.ActiveTab?.Terminal?.JumpToPreviousCommand();
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.JumpToNextCommand)
+        {
+            this.tabView.ActiveTab?.Terminal?.JumpToNextCommand();
+            return true;
+        }
+
         var m = e.KeyModifiers;
 
         if (IsMac())

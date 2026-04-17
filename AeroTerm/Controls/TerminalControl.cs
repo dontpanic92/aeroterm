@@ -44,6 +44,7 @@ public class TerminalControl : Control, IDisposable
     private readonly TerminalSelection selection = new();
     private readonly SearchOverlay searchOverlay = new();
     private readonly DispatcherTimer searchRecomputeTimer;
+    private readonly PromptMarksRegistry promptMarks = new();
 
     private readonly TerminalClipboardBridge clipboard;
     private readonly TerminalPtyBridge ptyBridge;
@@ -97,6 +98,7 @@ public class TerminalControl : Control, IDisposable
             () => this.clipboard.ReadClipboardForParser(),
             text => this.clipboard.WriteClipboardFromParser(text));
         this.parser.BellRaised += (_, _) => this.BellRaised?.Invoke();
+        this.parser.PromptMarkRaised += this.OnPromptMarkRaised;
 
         this.ptyBridge = new TerminalPtyBridge(ptyFactory, new ReaderHost(this));
         this.ptyBridge.ProcessExited += () => this.ProcessExited?.Invoke();
@@ -333,6 +335,34 @@ public class TerminalControl : Control, IDisposable
     {
         get => this.viewportOffset;
         set => this.viewportOffset = value;
+    }
+
+    /// <summary>
+    /// Gets the prompt-mark registry populated by OSC 133 / OSC 633 sequences.
+    /// Exposed for tests and for the palette "jump" commands.
+    /// </summary>
+    internal PromptMarksRegistry PromptMarks => this.promptMarks;
+
+    /// <summary>
+    /// Scrolls the viewport to the nearest prior navigable prompt mark
+    /// (<see cref="PromptMarkKind.OutputStart"/> or
+    /// <see cref="PromptMarkKind.CommandStart"/>). No-op when no such mark
+    /// exists above the current viewport anchor.
+    /// </summary>
+    /// <returns><see langword="true"/> when the viewport moved.</returns>
+    public bool JumpToPreviousCommand()
+    {
+        return this.JumpToMark(previous: true);
+    }
+
+    /// <summary>
+    /// Scrolls the viewport to the nearest later navigable prompt mark.
+    /// Counterpart to <see cref="JumpToPreviousCommand"/>.
+    /// </summary>
+    /// <returns><see langword="true"/> when the viewport moved.</returns>
+    public bool JumpToNextCommand()
+    {
+        return this.JumpToMark(previous: false);
     }
 
     /// <summary>
@@ -1090,6 +1120,54 @@ public class TerminalControl : Control, IDisposable
         this.parser.Process(bytes);
         int after = this.buffer.ScrollbackCount;
         return after - before;
+    }
+
+    private void OnPromptMarkRaised(object? sender, PromptMarkEventArgs e)
+    {
+        // Capture the mark at the live cursor position. Using
+        // ScrollbackCount+CursorRow as the stable "absolute row" stays
+        // valid as long as the scrollback ring hasn't saturated; once it
+        // saturates, stale marks can drift — pruned opportunistically via
+        // PromptMarksRegistry.PruneBelow when we detect eviction.
+        int absRow = this.buffer.ScrollbackCount + this.buffer.CursorRow;
+        int col = this.buffer.CursorCol;
+        var mark = new PromptMark(e.Kind, absRow, col, e.ExitCode, e.CurrentDirectory);
+        this.promptMarks.Add(mark);
+    }
+
+    private bool JumpToMark(bool previous)
+    {
+        int scrollbackCount = this.buffer.ScrollbackCount;
+        int topAbs = scrollbackCount - this.viewportOffset;
+        PromptMark? target = previous
+            ? this.promptMarks.FindPrevious(topAbs)
+            : this.promptMarks.FindNext(topAbs);
+
+        if (target is null)
+        {
+            return false;
+        }
+
+        int newOffset;
+        if (target.AbsoluteRow >= scrollbackCount)
+        {
+            // Mark still on the live grid: anchor viewport to live.
+            newOffset = 0;
+        }
+        else
+        {
+            newOffset = scrollbackCount - target.AbsoluteRow;
+        }
+
+        int clamped = Math.Clamp(newOffset, 0, scrollbackCount);
+        if (clamped == this.viewportOffset)
+        {
+            return false;
+        }
+
+        this.viewportOffset = clamped;
+        Dispatcher.UIThread.Post(this.InvalidateVisual);
+        return true;
     }
 
     private void ReaderOnAfterParse(int scrollbackDelta)

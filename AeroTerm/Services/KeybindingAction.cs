@@ -113,4 +113,16 @@ public enum KeybindingAction
 
     /// <summary>Toggle the tab-strip orientation between horizontal and vertical.</summary>
     ToggleTabBarOrientation,
+
+    /// <summary>
+    /// Scroll the viewport to the nearest prior shell-integration prompt mark
+    /// (OSC 133 C / B). Requires shell integration to be enabled in the shell.
+    /// </summary>
+    JumpToPreviousCommand,
+
+    /// <summary>
+    /// Scroll the viewport to the nearest later shell-integration prompt mark
+    /// (OSC 133 C / B). Requires shell integration to be enabled in the shell.
+    /// </summary>
+    JumpToNextCommand,
 }

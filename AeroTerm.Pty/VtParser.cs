@@ -113,6 +113,13 @@ public class VtParser
     /// </summary>
     public event EventHandler<ShellIntegrationEventArgs>? ShellIntegrationReceived;
 
+    /// <summary>
+    /// Raised when an OSC 133 (or VS Code-compatible OSC 633) prompt mark is
+    /// recognised. The argument carries the parsed <see cref="PromptMarkKind"/>
+    /// plus the optional exit code / working directory pulled from the payload.
+    /// </summary>
+    public event EventHandler<PromptMarkEventArgs>? PromptMarkRaised;
+
     private enum VtState
     {
         Ground,
@@ -1444,6 +1451,10 @@ public class VtParser
                 case 133: // Shell integration prompt marks
                     this.HandleOscShellIntegration(payload);
                     break;
+
+                case 633: // VS Code shell integration (superset of OSC 133 A/B/C/D)
+                    this.HandleOscShellIntegration(payload);
+                    break;
             }
         }
     }
@@ -1630,6 +1641,56 @@ public class VtParser
 
     // OSC 133 ; kind [; payload] — shell integration prompt marks.
     //   A = prompt start, B = command start, C = command executed, D = command finished.
+    // OSC 633 ; kind [; payload] — VS Code-compatible variant. We accept the same
+    // A/B/C/D letters; richer 633 subcommands (E/P/…) are deliberately ignored.
+    // The optional payload may carry either a bare token (e.g. the exit code
+    // after D) or semicolon-separated key=value pairs (e.g. A;cwd=/home/me).
+
+    // Pulls out the fields modelled by PromptMarkEventArgs (exit code for D,
+    // cwd= for A) from the raw trailing payload. Accepts either a bare exit
+    // code (e.g. "D;0") or semicolon-separated key=value pairs (e.g.
+    // "A;cwd=/home/me;user=root"). Unknown keys are tolerated.
+    private void ExtractKnownPromptFields(
+        PromptMarkKind kind,
+        string? subPayload,
+        out int? exitCode,
+        out string? currentDirectory)
+    {
+        exitCode = null;
+        currentDirectory = null;
+        if (string.IsNullOrEmpty(subPayload))
+        {
+            return;
+        }
+
+        string[] parts = subPayload.Split(';');
+        for (int i = 0; i < parts.Length; i++)
+        {
+            string p = parts[i];
+            int eq = p.IndexOf('=');
+            if (eq > 0)
+            {
+                string key = p.Substring(0, eq);
+                string value = p.Substring(eq + 1);
+                if (string.Equals(key, "cwd", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    currentDirectory = value;
+                }
+                else if (string.Equals(key, "err", System.StringComparison.OrdinalIgnoreCase)
+                    && kind == PromptMarkKind.CommandEnd
+                    && int.TryParse(value, out int errParsed))
+                {
+                    exitCode = errParsed;
+                }
+            }
+            else if (i == 0 && kind == PromptMarkKind.CommandEnd
+                && int.TryParse(p, out int bareExit))
+            {
+                exitCode = bareExit;
+            }
+        }
+    }
+
     private void HandleOscShellIntegration(string payload)
     {
         if (payload.Length == 0)
@@ -1643,26 +1704,40 @@ public class VtParser
         {
             subPayload = payload.Substring(2);
         }
+        else if (payload.Length > 1)
+        {
+            // Malformed — unknown character immediately after the kind letter.
+            // Be forgiving: treat anything past the first char as payload.
+            subPayload = payload.Substring(1);
+        }
 
-        ShellIntegrationKind kind;
+        ShellIntegrationKind legacyKind;
+        PromptMarkKind kind;
         switch (kindChar)
         {
             case 'A':
-                kind = ShellIntegrationKind.PromptStart;
+                legacyKind = ShellIntegrationKind.PromptStart;
+                kind = PromptMarkKind.PromptStart;
                 break;
             case 'B':
-                kind = ShellIntegrationKind.CommandStart;
+                legacyKind = ShellIntegrationKind.CommandStart;
+                kind = PromptMarkKind.CommandStart;
                 break;
             case 'C':
-                kind = ShellIntegrationKind.CommandExecuted;
+                legacyKind = ShellIntegrationKind.CommandExecuted;
+                kind = PromptMarkKind.OutputStart;
                 break;
             case 'D':
-                kind = ShellIntegrationKind.CommandFinished;
+                legacyKind = ShellIntegrationKind.CommandFinished;
+                kind = PromptMarkKind.CommandEnd;
                 break;
             default:
                 return;
         }
 
-        this.ShellIntegrationReceived?.Invoke(this, new ShellIntegrationEventArgs(kind, subPayload));
+        this.ExtractKnownPromptFields(kind, subPayload, out int? exitCode, out string? cwd);
+
+        this.ShellIntegrationReceived?.Invoke(this, new ShellIntegrationEventArgs(legacyKind, subPayload));
+        this.PromptMarkRaised?.Invoke(this, new PromptMarkEventArgs(kind, exitCode, cwd, subPayload));
     }
 }

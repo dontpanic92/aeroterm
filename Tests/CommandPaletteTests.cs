@@ -230,6 +230,10 @@ public class CommandPaletteTests
 
         public int ToggleTabBarOrientationCalls { get; private set; }
 
+        public int JumpToPreviousCommandCalls { get; private set; }
+
+        public int JumpToNextCommandCalls { get; private set; }
+
         public List<string> TabTitlesList { get; set; } = new List<string>();
 
         public int NewTabCalls { get; private set; }
@@ -335,6 +339,16 @@ public class CommandPaletteTests
         public void ToggleTabBarOrientation()
         {
             this.ToggleTabBarOrientationCalls++;
+        }
+
+        public void JumpToPreviousCommand()
+        {
+            this.JumpToPreviousCommandCalls++;
+        }
+
+        public void JumpToNextCommand()
+        {
+            this.JumpToNextCommandCalls++;
         }
     }
 }

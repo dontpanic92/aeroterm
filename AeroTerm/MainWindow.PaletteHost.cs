@@ -161,4 +161,16 @@ public partial class MainWindow : IPaletteHost
 
     /// <inheritdoc />
     void IPaletteHost.ToggleTabBarOrientation() => this.ToggleTabBarOrientation();
+
+    /// <inheritdoc />
+    void IPaletteHost.JumpToPreviousCommand()
+    {
+        this.tabView.ActiveTab?.Terminal?.JumpToPreviousCommand();
+    }
+
+    /// <inheritdoc />
+    void IPaletteHost.JumpToNextCommand()
+    {
+        this.tabView.ActiveTab?.Terminal?.JumpToNextCommand();
+    }
 }

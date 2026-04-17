@@ -133,4 +133,17 @@ internal interface IPaletteHost
     /// <see cref="AppSettings.TabBarOrientation"/>.
     /// </summary>
     void ToggleTabBarOrientation();
+
+    /// <summary>
+    /// Scrolls the active terminal's viewport to the nearest prior
+    /// shell-integration prompt mark (OSC 133 B / C). No-op if no prior
+    /// mark exists or shell integration is not active.
+    /// </summary>
+    void JumpToPreviousCommand();
+
+    /// <summary>
+    /// Scrolls the active terminal's viewport to the nearest later
+    /// shell-integration prompt mark.
+    /// </summary>
+    void JumpToNextCommand();
 }

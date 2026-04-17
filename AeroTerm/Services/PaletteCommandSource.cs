@@ -361,6 +361,28 @@ public static class PaletteCommandSource
             }));
 
         list.Add(new PaletteCommand(
+            Id: "shell-integration.jump-prev",
+            Title: "Jump to previous command",
+            Subtitle: "Scroll to the nearest prior OSC 133 prompt mark.",
+            Category: "Shell integration",
+            Execute: () =>
+            {
+                host.JumpToPreviousCommand();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "shell-integration.jump-next",
+            Title: "Jump to next command",
+            Subtitle: "Scroll to the nearest later OSC 133 prompt mark.",
+            Category: "Shell integration",
+            Execute: () =>
+            {
+                host.JumpToNextCommand();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
             Id: "keybindings.reload",
             Title: "Reload keybindings",
             Subtitle: "Re-read keybindings.json from disk.",
