@@ -26,8 +26,17 @@ using System.Globalization;
 public static class UnicodeWidth
 {
     // Unicode 15.1.0 EastAsianWidth=W|F ranges, coalesced and sorted.
-    // Source: https://www.unicode.org/Public/15.1.0/ucd/EastAsianWidth.txt
-    // Generated from the canonical UCD file; see artifacts/EastAsianWidth-15.1.0.txt.
+    // Derived from Unicode 15.1 EastAsianWidth.txt, UnicodeData.txt, and UTS#51 rev 15.1
+    // emoji-data.txt (Unicode 15.1.0 released 2023-09-12). Static table; no build-time fetch.
+    //   Source:  https://www.unicode.org/Public/15.1.0/ucd/EastAsianWidth.txt
+    //            https://www.unicode.org/Public/15.1.0/ucd/UnicodeData.txt
+    //            https://www.unicode.org/Public/emoji/15.1/emoji-data.txt
+    // Notable Unicode 15.1 additions (delta vs 15.0) covered below:
+    //   * U+1FA89 Harp, U+1FA8F Shovel (Symbols and Pictographs Extended-A)
+    //   * U+2FFC..U+2FFF new Ideographic Description Characters (subsumed by 2FF0..303E)
+    //   * U+2EBF0..U+2EE5D CJK Unified Ideographs Extension I (subsumed by 20000..2FFFD)
+    //   * U+1F6DC Wireless, U+1FABD Wing, U+1FABF Goose, U+1FACE Moose, U+1FACF Donkey
+    //     and other 2023 emoji additions already included in the 1F6xx / 1FAxx ranges.
     private static readonly (int Start, int End)[] WideRanges = new (int, int)[]
     {
         (0x1100, 0x115F),
@@ -142,7 +151,8 @@ public static class UnicodeWidth
         (0x1F93C, 0x1F945),
         (0x1F947, 0x1F9FF),
         (0x1FA70, 0x1FA7C),
-        (0x1FA80, 0x1FA88),
+        (0x1FA80, 0x1FA89),
+        (0x1FA8F, 0x1FA8F),
         (0x1FA90, 0x1FABD),
         (0x1FABF, 0x1FAC5),
         (0x1FACE, 0x1FADB),
