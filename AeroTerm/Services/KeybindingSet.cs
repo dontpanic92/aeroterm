@@ -71,6 +71,8 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.Paste, new KeyChord(KeyModifiers.Meta, Key.V)));
             list.Add(new Keybinding(KeybindingAction.FindInScrollback, new KeyChord(KeyModifiers.Meta, Key.F)));
             list.Add(new Keybinding(KeybindingAction.OpenCommandPalette, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.P)));
+            list.Add(new Keybinding(KeybindingAction.MoveTabLeft, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.PageUp)));
+            list.Add(new Keybinding(KeybindingAction.MoveTabRight, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.PageDown)));
 
             // OpenSettings, NewWindow, CloseWindow: handled by the macOS
             // native menu / OS, so no chord defaults here — avoids
@@ -98,6 +100,8 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.FindInScrollback, new KeyChord(KeyModifiers.Control, Key.F)));
             list.Add(new Keybinding(KeybindingAction.OpenSettings, new KeyChord(KeyModifiers.Control, Key.OemComma)));
             list.Add(new Keybinding(KeybindingAction.OpenCommandPalette, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.P)));
+            list.Add(new Keybinding(KeybindingAction.MoveTabLeft, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.PageUp)));
+            list.Add(new Keybinding(KeybindingAction.MoveTabRight, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.PageDown)));
         }
 
         return list;
@@ -132,6 +136,8 @@ public sealed class KeybindingSet
         KeybindingAction.CloseWindow => "Close window",
         KeybindingAction.ToggleTransparency => "Toggle transparency (reserved)",
         KeybindingAction.OpenCommandPalette => "Open command palette",
+        KeybindingAction.MoveTabLeft => "Move tab left",
+        KeybindingAction.MoveTabRight => "Move tab right",
         _ => action.ToString(),
     };
 

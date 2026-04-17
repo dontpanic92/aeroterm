@@ -97,6 +97,12 @@ public partial class MainWindow : IPaletteHost
     void IPaletteHost.ActivateTabByIndex(int index) => this.tabView.ActivateByIndex(index);
 
     /// <inheritdoc />
+    void IPaletteHost.MoveActiveTabLeft() => this.tabView.MoveActiveTabLeft();
+
+    /// <inheritdoc />
+    void IPaletteHost.MoveActiveTabRight() => this.tabView.MoveActiveTabRight();
+
+    /// <inheritdoc />
     void IPaletteHost.OpenSettings() => this.OpenSettings();
 
     /// <inheritdoc />

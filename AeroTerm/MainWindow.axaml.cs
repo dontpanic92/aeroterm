@@ -39,8 +39,10 @@ public partial class MainWindow : Window
     private readonly BellService bellService;
     private readonly TabView tabView;
     private readonly TabStrip tabStrip;
+    private readonly Dictionary<TabSession, Action> tabUnwire = new();
     private bool isSettingsDialogOpen;
     private bool isCloseConfirmed;
+    private bool suppressInitialTab;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
@@ -82,10 +84,12 @@ public partial class MainWindow : Window
         this.tabStrip.DuplicateTabRequested += this.DuplicateTabFromStrip;
         this.tabStrip.NewTabWithProfileRequested += this.CreateAndActivateNewTabFromProfile;
         this.tabStrip.ManageProfilesRequested += () => _ = this.ShowSettingsDialogAsync();
+        this.tabStrip.TabReorderRequested += (from, to) => this.tabView.MoveTab(from, to);
+        this.tabStrip.TabDetachRequested += this.OnTabDetachRequested;
         this.tabStrip.Profiles = App.Profiles.Profiles;
         App.ProfilesChanged += this.OnProfilesChanged;
         this.tabStripHost.Child = this.tabStrip;
-        this.tabView.Tabs.CollectionChanged += (_, _) => this.UpdateTabStripVisibility();
+        this.tabView.Tabs.CollectionChanged += this.OnTabsCollectionChanged;
 
         this.effectsService.BackgroundBrushChanged += this.OnBackgroundBrushChanged;
         this.effectsService.BackgroundAlphaChanged += this.OnBackgroundAlphaChanged;
@@ -224,12 +228,25 @@ public partial class MainWindow : Window
 
     private bool HandleTabShortcut(KeyEventArgs e)
     {
-        // Command palette first — honours user overrides via App.Keybindings.
+        // Resolve via central keybindings first — honours user overrides
+        // and keeps the bindings visible in the command palette.
         var chord = new KeyChord(e.KeyModifiers, e.Key);
         var resolved = App.Keybindings.Resolve(chord);
         if (resolved?.Action == KeybindingAction.OpenCommandPalette)
         {
             this.OpenCommandPalette();
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.MoveTabLeft)
+        {
+            this.tabView.MoveActiveTabLeft();
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.MoveTabRight)
+        {
+            this.tabView.MoveActiveTabRight();
             return true;
         }
 
@@ -398,28 +415,102 @@ public partial class MainWindow : Window
             session = new TabSession(this.settings, profile, fallback: null);
         }
 
-        // Bell goes to the single window-level BellService regardless of tab.
-        if (session.Coordinator is { } coord)
-        {
-            coord.BellRaised += this.bellService.Handle;
-            coord.BackgroundColorChanged += color => this.OnTabBackgroundColorChanged(session, color);
-        }
-
-        session.ProcessExitedNormally += () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(session));
+        this.WireTabSession(session);
         return session;
     }
 
     private TabSession CreateTabSessionForProfile(Profile profile)
     {
         var session = new TabSession(this.settings, profile, fallback: null);
+        this.WireTabSession(session);
+        return session;
+    }
+
+    /// <summary>
+    /// Subscribes per-window plumbing (bell, bg-color-change, exit) to the
+    /// supplied tab and records compensating unsubscribe actions so
+    /// <see cref="UnwireTabSession"/> can undo the wiring when the tab
+    /// detaches into a different window.
+    /// </summary>
+    /// <param name="session">The session to wire into this window.</param>
+    private void WireTabSession(TabSession session)
+    {
+        var unwires = new List<Action>();
+
         if (session.Coordinator is { } coord)
         {
-            coord.BellRaised += this.bellService.Handle;
-            coord.BackgroundColorChanged += color => this.OnTabBackgroundColorChanged(session, color);
+            Action bellHandler = this.bellService.Handle;
+            coord.BellRaised += bellHandler;
+            unwires.Add(() => coord.BellRaised -= bellHandler);
+
+            Action<int> bgHandler = color => this.OnTabBackgroundColorChanged(session, color);
+            coord.BackgroundColorChanged += bgHandler;
+            unwires.Add(() => coord.BackgroundColorChanged -= bgHandler);
         }
 
-        session.ProcessExitedNormally += () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(session));
-        return session;
+        Action exitHandler = () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(session));
+        session.ProcessExitedNormally += exitHandler;
+        unwires.Add(() => session.ProcessExitedNormally -= exitHandler);
+
+        this.tabUnwire[session] = () =>
+        {
+            foreach (var u in unwires)
+            {
+                u();
+            }
+        };
+    }
+
+    private void UnwireTabSession(TabSession session)
+    {
+        if (this.tabUnwire.TryGetValue(session, out var unwire))
+        {
+            unwire();
+            this.tabUnwire.Remove(session);
+        }
+    }
+
+    private void AdoptTab(TabSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        this.WireTabSession(session);
+        this.tabView.AddTab(session);
+        this.tabView.ActivateTab(session);
+    }
+
+    private void OnTabDetachRequested(TabSession tab, PixelPoint screenPos)
+    {
+        if (this.tabView.Tabs.IndexOf(tab) < 0)
+        {
+            return;
+        }
+
+        // Spawn the new window FIRST (invisible) and hand off the tab
+        // before we remove it from our strip. This guarantees the session
+        // is never un-parented visually, and that we only close ourselves
+        // after the detached window is actually shown.
+        var newWindow = new MainWindow(this.settings);
+        this.UnwireTabSession(tab);
+        this.tabView.DetachTab(tab);
+
+        newWindow.suppressInitialTab = true;
+        newWindow.AdoptTab(tab);
+        try
+        {
+            newWindow.Position = screenPos;
+        }
+        catch
+        {
+            // Position may throw on platforms where the window is not yet shown;
+            // fall back to default placement and rely on the window manager.
+        }
+
+        newWindow.Show();
+
+        if (this.tabView.Tabs.Count == 0)
+        {
+            this.Close();
+        }
     }
 
     private void CreateAndActivateNewTab()
@@ -480,15 +571,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Wire the per-window bell / bg-color / exit plumbing the same way
-        // CreateTabSession does for fresh tabs.
-        if (dup.Coordinator is { } coord)
-        {
-            coord.BellRaised += this.bellService.Handle;
-            coord.BackgroundColorChanged += color => this.OnTabBackgroundColorChanged(dup, color);
-        }
-
-        dup.ProcessExitedNormally += () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(dup));
+        this.WireTabSession(dup);
 
         // Start AFTER insertion + activation so the session has real bounds.
         Dispatcher.UIThread.RunJobs();
@@ -560,6 +643,22 @@ public partial class MainWindow : Window
         this.titleText.IsVisible = !multi;
     }
 
+    private void OnTabsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems is not null)
+        {
+            foreach (TabSession removed in e.OldItems)
+            {
+                // CloseTab disposes the session; detach already unwired in
+                // OnTabDetachRequested. Either way, drop any per-window
+                // event hookups so they don't fire on a tab we no longer own.
+                this.UnwireTabSession(removed);
+            }
+        }
+
+        this.UpdateTabStripVisibility();
+    }
+
     private void OnLastTabClosed()
     {
         this.Close();
@@ -568,6 +667,20 @@ public partial class MainWindow : Window
     private async void OnWindowOpened(object? sender, EventArgs e)
     {
         this.effectsService.DeferMacOSNativeTransparency();
+
+        if (this.suppressInitialTab)
+        {
+            // Adopted tab path: the session is already inserted + started
+            // by the source window. Just defer focus until layout is done.
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                MacOSWindowMenu.RegisterWindow(this);
+            }
+
+            await Task.Delay(100);
+            this.tabView.ActiveTab?.FocusInput();
+            return;
+        }
 
         // Create the initial tab after the window has been measured so the
         // coordinator's PTY gets correct dimensions.

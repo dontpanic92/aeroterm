@@ -376,6 +376,14 @@ internal partial class CommandPaletteWindow : Window
         {
         }
 
+        public void MoveActiveTabLeft()
+        {
+        }
+
+        public void MoveActiveTabRight()
+        {
+        }
+
         public void OpenSettings()
         {
         }

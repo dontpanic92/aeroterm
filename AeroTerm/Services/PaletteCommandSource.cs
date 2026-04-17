@@ -106,6 +106,28 @@ public static class PaletteCommandSource
                 return ValueTask.CompletedTask;
             }));
 
+        list.Add(new PaletteCommand(
+            Id: "tab.move-left",
+            Title: "Move tab left",
+            Subtitle: null,
+            Category: "Tab",
+            Execute: () =>
+            {
+                host.MoveActiveTabLeft();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "tab.move-right",
+            Title: "Move tab right",
+            Subtitle: null,
+            Category: "Tab",
+            Execute: () =>
+            {
+                host.MoveActiveTabRight();
+                return ValueTask.CompletedTask;
+            }));
+
         for (int i = 0; i < host.TabTitles.Count; i++)
         {
             int index = i;

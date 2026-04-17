@@ -120,6 +120,25 @@ public class KeybindingsTests
 
         var nextTab = set.Resolve(new KeyChord(KeyModifiers.Control, Key.PageDown));
         Assert.That(nextTab?.Action, Is.EqualTo(KeybindingAction.NextTab));
+
+        var moveLeft = set.Resolve(new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.PageUp));
+        Assert.That(moveLeft?.Action, Is.EqualTo(KeybindingAction.MoveTabLeft));
+
+        var moveRight = set.Resolve(new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.PageDown));
+        Assert.That(moveRight?.Action, Is.EqualTo(KeybindingAction.MoveTabRight));
+    }
+
+    /// <summary>macOS defaults map Cmd+Shift+PageUp/PageDown to MoveTabLeft/MoveTabRight.</summary>
+    [Test]
+    public void BuildDefaults_Mac_HasCmdShiftPageUpDown_ForMoveTab()
+    {
+        var set = new KeybindingSet(KeybindingSet.BuildDefaults(isMacOS: true));
+
+        var moveLeft = set.Resolve(new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.PageUp));
+        Assert.That(moveLeft?.Action, Is.EqualTo(KeybindingAction.MoveTabLeft));
+
+        var moveRight = set.Resolve(new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.PageDown));
+        Assert.That(moveRight?.Action, Is.EqualTo(KeybindingAction.MoveTabRight));
     }
 
     /// <summary>Merge drops all defaults for any overridden action but keeps others intact.</summary>

@@ -65,6 +65,12 @@ internal interface IPaletteHost
     /// <summary>Closes this window.</summary>
     void CloseHostWindow();
 
+    /// <summary>Moves the active tab one slot to the left.</summary>
+    void MoveActiveTabLeft();
+
+    /// <summary>Moves the active tab one slot to the right.</summary>
+    void MoveActiveTabRight();
+
     /// <summary>
     /// Reloads keybindings from disk. Surfaced as a palette command so
     /// users editing <c>keybindings.json</c> externally can pick up

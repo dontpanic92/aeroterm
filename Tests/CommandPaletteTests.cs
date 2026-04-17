@@ -264,6 +264,14 @@ public class CommandPaletteTests
         {
         }
 
+        public void MoveActiveTabLeft()
+        {
+        }
+
+        public void MoveActiveTabRight()
+        {
+        }
+
         public void OpenSettings()
         {
         }

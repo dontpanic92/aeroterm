@@ -250,4 +250,158 @@ public class TabViewTests
 
         Assert.Throws<ArgumentException>(() => view.DuplicateTab(stranger));
     }
+
+    /// <summary>
+    /// <see cref="TabView.MoveTab"/> reorders tabs and preserves the active tab.
+    /// </summary>
+    [AvaloniaTest]
+    public void MoveTab_ChangesOrder_PreservesActive()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var b = new TabSession(new FakeTabContent("b"));
+        var c = new TabSession(new FakeTabContent("c"));
+        view.AddTab(a);
+        view.AddTab(b);
+        view.AddTab(c);
+        view.ActivateTab(b);
+
+        view.MoveTab(0, 2);
+
+        Assert.That(view.Tabs[0], Is.SameAs(b));
+        Assert.That(view.Tabs[1], Is.SameAs(c));
+        Assert.That(view.Tabs[2], Is.SameAs(a));
+        Assert.That(view.ActiveTab, Is.SameAs(b));
+    }
+
+    /// <summary>
+    /// <see cref="TabView.MoveTab"/> is a no-op when indices are equal or out of range.
+    /// </summary>
+    [AvaloniaTest]
+    public void MoveTab_OutOfRange_IsNoOp()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var b = new TabSession(new FakeTabContent("b"));
+        view.AddTab(a);
+        view.AddTab(b);
+
+        view.MoveTab(0, 0);
+        view.MoveTab(-1, 1);
+        view.MoveTab(0, 5);
+
+        Assert.That(view.Tabs[0], Is.SameAs(a));
+        Assert.That(view.Tabs[1], Is.SameAs(b));
+    }
+
+    /// <summary>
+    /// <see cref="TabView.MoveActiveTabLeft"/> / <see cref="TabView.MoveActiveTabRight"/> are
+    /// no-ops at the edges.
+    /// </summary>
+    [AvaloniaTest]
+    public void MoveActiveTab_AtEdges_IsNoOp()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var b = new TabSession(new FakeTabContent("b"));
+        view.AddTab(a);
+        view.AddTab(b);
+        view.ActivateTab(a);
+
+        view.MoveActiveTabLeft();
+        Assert.That(view.Tabs[0], Is.SameAs(a));
+
+        view.ActivateTab(b);
+        view.MoveActiveTabRight();
+        Assert.That(view.Tabs[1], Is.SameAs(b));
+    }
+
+    /// <summary>
+    /// <see cref="TabView.MoveActiveTabRight"/> swaps the active tab with its right neighbour.
+    /// </summary>
+    [AvaloniaTest]
+    public void MoveActiveTabRight_SwapsWithNeighbour()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var b = new TabSession(new FakeTabContent("b"));
+        var c = new TabSession(new FakeTabContent("c"));
+        view.AddTab(a);
+        view.AddTab(b);
+        view.AddTab(c);
+        view.ActivateTab(a);
+
+        view.MoveActiveTabRight();
+
+        Assert.That(view.Tabs[0], Is.SameAs(b));
+        Assert.That(view.Tabs[1], Is.SameAs(a));
+        Assert.That(view.ActiveTab, Is.SameAs(a));
+    }
+
+    /// <summary>
+    /// <see cref="TabView.DetachTab"/> removes a tab without disposing its content.
+    /// </summary>
+    [AvaloniaTest]
+    public void DetachTab_RemovesWithoutDispose()
+    {
+        var view = new TabView();
+        var fake = new FakeTabContent("a");
+        var tab = new TabSession(fake);
+        var other = new TabSession(new FakeTabContent("b"));
+        view.AddTab(tab);
+        view.AddTab(other);
+
+        view.DetachTab(tab);
+
+        Assert.That(view.Tabs, Does.Not.Contain(tab));
+        Assert.That(fake.DisposeCount, Is.EqualTo(0));
+        Assert.That(tab.IsDisposed, Is.False);
+    }
+
+    /// <summary>
+    /// Detaching the single remaining tab does not raise <see cref="TabView.LastTabClosed"/>;
+    /// it raises <see cref="TabView.TabDetached"/> instead so callers can orchestrate the move.
+    /// </summary>
+    [AvaloniaTest]
+    public void DetachTab_LastTab_DoesNotFireLastTabClosed()
+    {
+        var view = new TabView();
+        var tab = new TabSession(new FakeTabContent("a"));
+        view.AddTab(tab);
+
+        int lastClosed = 0;
+        int detached = 0;
+        view.LastTabClosed += () => lastClosed++;
+        view.TabDetached += t =>
+        {
+            if (ReferenceEquals(t, tab))
+            {
+                detached++;
+            }
+        };
+
+        view.DetachTab(tab);
+
+        Assert.That(lastClosed, Is.EqualTo(0));
+        Assert.That(detached, Is.EqualTo(1));
+        Assert.That(view.Tabs, Is.Empty);
+    }
+
+    /// <summary>
+    /// Detaching the active tab activates a neighbour (mirrors <see cref="TabView.CloseTab"/>).
+    /// </summary>
+    [AvaloniaTest]
+    public void DetachTab_ActivatesNeighbourWhenActiveRemoved()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var b = new TabSession(new FakeTabContent("b"));
+        view.AddTab(a);
+        view.AddTab(b);
+        view.ActivateTab(a);
+
+        view.DetachTab(a);
+
+        Assert.That(view.ActiveTab, Is.SameAs(b));
+    }
 }

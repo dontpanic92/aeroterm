@@ -77,4 +77,10 @@ public enum KeybindingAction
 
     /// <summary>Reserved. Not wired yet.</summary>
     OpenCommandPalette,
+
+    /// <summary>Move the active tab one slot to the left.</summary>
+    MoveTabLeft,
+
+    /// <summary>Move the active tab one slot to the right.</summary>
+    MoveTabRight,
 }

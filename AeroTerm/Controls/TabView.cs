@@ -54,6 +54,15 @@ public sealed class TabView : UserControl, INotifyPropertyChanged
     public event Action? LastTabClosed;
 
     /// <summary>
+    /// Raised when a tab is removed from this view via
+    /// <see cref="DetachTab"/>. Unlike <see cref="CloseTab"/>, the
+    /// <see cref="TabSession"/> is NOT disposed — ownership passes to the
+    /// subscriber, which typically re-parents it into another
+    /// <see cref="TabView"/> (new-window drag-to-detach flow).
+    /// </summary>
+    public event Action<TabSession>? TabDetached;
+
+    /// <summary>
     /// Gets the observable collection of tabs in display order.
     /// </summary>
     public ObservableCollection<TabSession> Tabs { get; }
@@ -128,6 +137,100 @@ public sealed class TabView : UserControl, INotifyPropertyChanged
             int next = Math.Min(index, this.Tabs.Count - 1);
             this.ActivateByIndex(next);
         }
+    }
+
+    /// <summary>
+    /// Reorders <see cref="Tabs"/> by moving the tab at
+    /// <paramref name="fromIndex"/> to <paramref name="toIndex"/>.
+    /// Out-of-range indices and a no-op self-move are silently ignored.
+    /// Preserves the active tab (identity-preserving).
+    /// </summary>
+    /// <param name="fromIndex">Source zero-based index.</param>
+    /// <param name="toIndex">Destination zero-based index.</param>
+    public void MoveTab(int fromIndex, int toIndex)
+    {
+        int count = this.Tabs.Count;
+        if (fromIndex < 0 || fromIndex >= count || toIndex < 0 || toIndex >= count || fromIndex == toIndex)
+        {
+            return;
+        }
+
+        this.Tabs.Move(fromIndex, toIndex);
+    }
+
+    /// <summary>
+    /// Moves the active tab one slot to the left. No-op if there is no
+    /// active tab or it is already the leftmost.
+    /// </summary>
+    public void MoveActiveTabLeft()
+    {
+        if (this.activeTab is null)
+        {
+            return;
+        }
+
+        int i = this.Tabs.IndexOf(this.activeTab);
+        if (i > 0)
+        {
+            this.MoveTab(i, i - 1);
+        }
+    }
+
+    /// <summary>
+    /// Moves the active tab one slot to the right. No-op if there is no
+    /// active tab or it is already the rightmost.
+    /// </summary>
+    public void MoveActiveTabRight()
+    {
+        if (this.activeTab is null)
+        {
+            return;
+        }
+
+        int i = this.Tabs.IndexOf(this.activeTab);
+        if (i >= 0 && i < this.Tabs.Count - 1)
+        {
+            this.MoveTab(i, i + 1);
+        }
+    }
+
+    /// <summary>
+    /// Removes <paramref name="tab"/> from this view WITHOUT disposing its
+    /// underlying session. Ownership transfers to the caller (typically the
+    /// drag-to-detach flow that re-parents the tab into a new window). The
+    /// <see cref="TabDetached"/> event fires but <see cref="LastTabClosed"/>
+    /// does NOT — detaching the last tab is a valid move and the host
+    /// window chooses whether to close itself after the new window is
+    /// visible. Returns <see langword="true"/> if the tab was removed.
+    /// </summary>
+    /// <param name="tab">The tab to detach. Must currently be in
+    /// <see cref="Tabs"/>.</param>
+    /// <returns><see langword="true"/> if detached; <see langword="false"/>
+    /// when the tab is not a member of this view.</returns>
+    public bool DetachTab(TabSession tab)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        int index = this.Tabs.IndexOf(tab);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        bool wasActive = ReferenceEquals(this.activeTab, tab);
+        this.Tabs.RemoveAt(index);
+
+        if (this.Tabs.Count == 0)
+        {
+            this.ActiveTab = null;
+        }
+        else if (wasActive)
+        {
+            int next = Math.Min(index, this.Tabs.Count - 1);
+            this.ActivateByIndex(next);
+        }
+
+        this.TabDetached?.Invoke(tab);
+        return true;
     }
 
     /// <summary>

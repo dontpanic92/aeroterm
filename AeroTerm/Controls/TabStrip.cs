@@ -15,8 +15,10 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 /// <summary>
 /// Horizontal tab strip for a <see cref="TabView"/>. Renders the active /
@@ -31,6 +33,8 @@ using Avalonia.Media;
 /// </summary>
 public sealed class TabStrip : UserControl
 {
+    private const double DragStartThreshold = 5.0;
+
     private static readonly IBrush ActiveTabBrush = Brushes.Transparent;
     private static readonly IBrush InactiveTabBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x2A, 0x2A, 0x2E));
     private static readonly IBrush InactiveHoverBrush = new SolidColorBrush(Color.FromArgb(0x60, 0x40, 0x40, 0x48));
@@ -43,8 +47,10 @@ public sealed class TabStrip : UserControl
     private readonly SplitButton newTabButton;
     private readonly MenuFlyout profileFlyout;
     private readonly Dictionary<TabSession, TabHeader> headers = new();
+    private readonly Rectangle dropIndicator;
     private TabView? tabView;
     private IReadOnlyList<Profile> profiles = new List<Profile>();
+    private DragState? drag;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TabStrip"/> class.
@@ -81,6 +87,16 @@ public sealed class TabStrip : UserControl
         this.newTabButton.Click += (_, _) => this.NewTabRequested?.Invoke();
         this.RebuildProfileFlyout();
 
+        this.dropIndicator = new Rectangle
+        {
+            Width = 3,
+            Margin = new Thickness(1, 4, 1, 4),
+            Fill = new SolidColorBrush(Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF)),
+            IsVisible = false,
+            IsHitTestVisible = false,
+            VerticalAlignment = VerticalAlignment.Stretch,
+        };
+
         var rootDock = new DockPanel
         {
             LastChildFill = false,
@@ -92,6 +108,13 @@ public sealed class TabStrip : UserControl
         rootDock.Children.Add(this.newTabButton);
 
         this.Content = rootDock;
+
+        // Drag handling — bubble so TabHeader still activates on press,
+        // then we see the event and track movement for potential drag.
+        this.AddHandler(PointerPressedEvent, this.OnStripPointerPressed, RoutingStrategies.Bubble);
+        this.AddHandler(PointerMovedEvent, this.OnStripPointerMoved, RoutingStrategies.Bubble);
+        this.AddHandler(PointerReleasedEvent, this.OnStripPointerReleased, RoutingStrategies.Bubble);
+        this.AddHandler(PointerCaptureLostEvent, this.OnStripPointerCaptureLost, RoutingStrategies.Bubble);
     }
 
     /// <summary>
@@ -114,6 +137,22 @@ public sealed class TabStrip : UserControl
     /// right-click context menu.
     /// </summary>
     public event Action<TabSession>? DuplicateTabRequested;
+
+    /// <summary>
+    /// Raised when the user completes a drag within the strip bounds that
+    /// would reorder a tab. Arguments are source and target indices into
+    /// <see cref="TabView.Tabs"/>. Subscribers typically call
+    /// <see cref="TabView.MoveTab"/>.
+    /// </summary>
+    public event Action<int, int>? TabReorderRequested;
+
+    /// <summary>
+    /// Raised when the user drops a dragged tab outside the hosting
+    /// window's bounds. Subscribers typically remove the tab from this
+    /// view via <see cref="TabView.DetachTab"/> and re-parent it into a
+    /// new window positioned near <c>screenPosition</c>.
+    /// </summary>
+    public event Action<TabSession, PixelPoint>? TabDetachRequested;
 
     /// <summary>
     /// Gets or sets the profile list populated into the "+" button's
@@ -169,6 +208,22 @@ public sealed class TabStrip : UserControl
         }
     }
 
+    private static TabHeader? FindHeaderFromSource(object? source)
+    {
+        var visual = source as Visual;
+        while (visual is not null)
+        {
+            if (visual is TabHeader th)
+            {
+                return th;
+            }
+
+            visual = visual.GetVisualParent();
+        }
+
+        return null;
+    }
+
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Reset)
@@ -184,6 +239,20 @@ public sealed class TabStrip : UserControl
                 foreach (var t in this.tabView.Tabs)
                 {
                     this.AddHeader(t);
+                }
+            }
+        }
+        else if (e.Action == NotifyCollectionChangedAction.Move)
+        {
+            // ObservableCollection.Move — reorder the existing header without
+            // creating / destroying any visuals so transitions stay alive.
+            if (e.OldItems is not null && e.OldItems.Count > 0 && e.OldItems[0] is TabSession moved)
+            {
+                if (this.headers.TryGetValue(moved, out var header))
+                {
+                    this.tabsPanel.Children.Remove(header);
+                    int insertIndex = Math.Clamp(e.NewStartingIndex, 0, this.tabsPanel.Children.Count);
+                    this.tabsPanel.Children.Insert(insertIndex, header);
                 }
             }
         }
@@ -252,6 +321,191 @@ public sealed class TabStrip : UserControl
         }
     }
 
+    private void OnStripPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var header = FindHeaderFromSource(e.Source);
+        if (header is null || this.tabView is null)
+        {
+            return;
+        }
+
+        int from = this.tabView.Tabs.IndexOf(header.Session);
+        if (from < 0)
+        {
+            return;
+        }
+
+        this.drag = new DragState(header.Session, from, e.GetPosition(this), e.Pointer);
+    }
+
+    private void OnStripPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (this.drag is null)
+        {
+            return;
+        }
+
+        var pt = e.GetPosition(this);
+        if (!this.drag.Moved)
+        {
+            var delta = pt - this.drag.Origin;
+            if (Math.Abs(delta.X) < DragStartThreshold && Math.Abs(delta.Y) < DragStartThreshold)
+            {
+                return;
+            }
+
+            this.drag.Moved = true;
+            this.EnsureDropIndicatorInserted();
+            e.Pointer.Capture(this);
+        }
+
+        this.UpdateDropIndicator(pt);
+    }
+
+    private void OnStripPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (this.drag is null)
+        {
+            return;
+        }
+
+        var snapshot = this.drag;
+        this.drag = null;
+        this.RemoveDropIndicator();
+
+        if (!snapshot.Moved)
+        {
+            return;
+        }
+
+        e.Pointer.Capture(null);
+
+        var strippt = e.GetPosition(this);
+        if (this.IsOutsideWindow(strippt))
+        {
+            var screen = this.PointToScreen(strippt);
+            this.TabDetachRequested?.Invoke(snapshot.Tab, screen);
+            return;
+        }
+
+        int to = this.ComputeDropIndex(strippt.X);
+
+        // StackPanel insert index is "before item N"; when we remove the
+        // source first, everything to its right shifts down by one, so we
+        // subtract one when dropping further right than the source.
+        if (to > snapshot.FromIndex)
+        {
+            to -= 1;
+        }
+
+        if (to != snapshot.FromIndex && this.tabView is not null)
+        {
+            int max = this.tabView.Tabs.Count - 1;
+            this.TabReorderRequested?.Invoke(snapshot.FromIndex, Math.Clamp(to, 0, max));
+        }
+    }
+
+    private void OnStripPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        if (this.drag is not null)
+        {
+            this.drag = null;
+            this.RemoveDropIndicator();
+        }
+    }
+
+    private bool IsOutsideWindow(Point stripPoint)
+    {
+        var window = TopLevel.GetTopLevel(this) as Window;
+        if (window is null)
+        {
+            return false;
+        }
+
+        // Convert the strip-local point to window-client coordinates.
+        var winPt = this.TranslatePoint(stripPoint, window) ?? stripPoint;
+        var bounds = new Rect(window.ClientSize);
+        return !bounds.Contains(winPt);
+    }
+
+    private int ComputeDropIndex(double stripX)
+    {
+        double panelX = stripX - this.tabsPanel.Bounds.X;
+        int headerCount = 0;
+        for (int i = 0; i < this.tabsPanel.Children.Count; i++)
+        {
+            var child = this.tabsPanel.Children[i];
+            if (ReferenceEquals(child, this.dropIndicator))
+            {
+                continue;
+            }
+
+            var b = child.Bounds;
+            if (panelX < b.X + (b.Width / 2.0))
+            {
+                return headerCount;
+            }
+
+            headerCount++;
+        }
+
+        return headerCount;
+    }
+
+    private void UpdateDropIndicator(Point stripPoint)
+    {
+        if (this.IsOutsideWindow(stripPoint))
+        {
+            this.dropIndicator.IsVisible = false;
+            return;
+        }
+
+        int target = this.ComputeDropIndex(stripPoint.X);
+        this.PositionDropIndicator(target);
+        this.dropIndicator.IsVisible = true;
+    }
+
+    private void EnsureDropIndicatorInserted()
+    {
+        if (!this.tabsPanel.Children.Contains(this.dropIndicator))
+        {
+            this.tabsPanel.Children.Add(this.dropIndicator);
+        }
+    }
+
+    private void PositionDropIndicator(int headerIndex)
+    {
+        // Translate "insertion before header index N" to a panel child index
+        // that skips the indicator itself if it's already inserted.
+        this.tabsPanel.Children.Remove(this.dropIndicator);
+        int insertAt = 0;
+        int headerCount = 0;
+        for (int i = 0; i < this.tabsPanel.Children.Count; i++)
+        {
+            if (headerCount == headerIndex)
+            {
+                insertAt = i;
+                break;
+            }
+
+            headerCount++;
+            insertAt = i + 1;
+        }
+
+        this.tabsPanel.Children.Insert(insertAt, this.dropIndicator);
+    }
+
+    private void RemoveDropIndicator()
+    {
+        this.tabsPanel.Children.Remove(this.dropIndicator);
+        this.dropIndicator.IsVisible = false;
+    }
+
     private void RebuildProfileFlyout()
     {
         this.profileFlyout.Items.Clear();
@@ -274,6 +528,33 @@ public sealed class TabStrip : UserControl
         var manage = new MenuItem { Header = "Manage profiles…" };
         manage.Click += (_, _) => this.ManageProfilesRequested?.Invoke();
         this.profileFlyout.Items.Add(manage);
+    }
+
+    /// <summary>
+    /// Captures the state of an in-progress tab-strip drag: the dragged
+    /// session, its original index, the press origin, and the captured
+    /// pointer. Only becomes visually observable once the pointer crosses
+    /// <see cref="DragStartThreshold"/>.
+    /// </summary>
+    private sealed class DragState
+    {
+        public DragState(TabSession tab, int fromIndex, Point origin, IPointer pointer)
+        {
+            this.Tab = tab;
+            this.FromIndex = fromIndex;
+            this.Origin = origin;
+            this.Pointer = pointer;
+        }
+
+        public TabSession Tab { get; }
+
+        public int FromIndex { get; }
+
+        public Point Origin { get; }
+
+        public IPointer Pointer { get; }
+
+        public bool Moved { get; set; }
     }
 
     /// <summary>
@@ -380,6 +661,9 @@ public sealed class TabStrip : UserControl
         public event Action<TabSession>? CloseRequested;
 
         public event Action<TabSession>? DuplicateRequested;
+
+        /// <summary>Gets the session this header represents.</summary>
+        public TabSession Session => this.tab;
 
         public void Detach()
         {
