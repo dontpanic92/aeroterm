@@ -15,6 +15,22 @@
     <Copyright>Copyright © 2025</Copyright>
   </PropertyGroup>
 
+  <!-- Shared NuGet package metadata. Applied only to projects that are packable
+       (i.e. do not opt out via <IsPackable>false</IsPackable>). Per-project
+       overrides (Description, PackageTags, PackageId) stay in each .csproj. -->
+  <PropertyGroup Condition="'$(IsPackable)' != 'false'">
+    <Authors>dontpanic92</Authors>
+    <Company>AeroTerm</Company>
+    <PackageLicenseExpression>GPL-2.0-or-later</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/dontpanic92/aeroterm</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dontpanic92/aeroterm.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556">
       <PrivateAssets>all</PrivateAssets>

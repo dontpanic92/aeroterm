@@ -6,15 +6,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Platforms>AnyCPU;x64;x86</Platforms>
 
-    <!-- NuGet package metadata -->
+    <!-- NuGet package metadata (shared metadata lives in Directory.Build.props). -->
     <PackageId>AeroTerm.WindowEffects</PackageId>
-    <Authors>AeroTerm Developers</Authors>
     <Description>Cross-platform window effects library for Avalonia applications. Provides blur, acrylic, mica, and transparency management with platform-specific interop for Windows (DWM) and macOS (NSWindow).</Description>
     <PackageTags>avalonia;window-effects;blur;acrylic;mica;transparency;dwm;nswindow</PackageTags>
-    <PackageLicenseExpression>GPL-2.0-only</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
     <PackageReference Include="Avalonia" Version="12.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.5" />
   </ItemGroup>
