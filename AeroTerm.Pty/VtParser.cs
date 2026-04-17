@@ -5,6 +5,7 @@
 
 namespace AeroTerm.Pty;
 
+using System.Collections.Generic;
 using System.Text;
 
 /// <summary>
@@ -51,6 +52,12 @@ public class VtParser
     private readonly List<int> subParameters = new();
     private readonly StringBuilder oscString = new();
 
+    // Pending grapheme cluster: code points accumulated until either a
+    // non-extending code point arrives or a control/escape action flushes
+    // them into the buffer.
+    private readonly List<int> pendingCluster = new();
+    private readonly StringBuilder pendingClusterText = new();
+
     private VtState state = VtState.Ground;
     private bool privateMarker;
     private bool greaterThanMarker;
@@ -67,6 +74,8 @@ public class VtParser
 
     // Last printed character for REP (CSI b) support
     private int lastPrintedCodePoint;
+    private string? lastPrintedCluster;
+    private int lastPrintedClusterWidth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VtParser"/> class.
@@ -178,6 +187,12 @@ public class VtParser
                     break;
             }
         }
+
+        // Flush any pending grapheme cluster so tests and downstream
+        // consumers observe the full text immediately. A cluster that
+        // happens to straddle two Process() calls may be split here;
+        // this is a pragmatic trade-off documented in the class summary.
+        this.FlushPendingCluster();
     }
 
     private static int PackRgb(int r, int g, int b)
@@ -287,8 +302,7 @@ public class VtParser
                 this.utf8BytesRemaining--;
                 if (this.utf8BytesRemaining == 0)
                 {
-                    this.lastPrintedCodePoint = this.utf8CodePoint;
-                    this.buffer.PutChar(this.utf8CodePoint);
+                    this.EmitCodePoint(this.utf8CodePoint);
                 }
 
                 return;
@@ -300,8 +314,7 @@ public class VtParser
 
         if (b >= 0x20 && b <= 0x7E)
         {
-            this.lastPrintedCodePoint = b;
-            this.buffer.PutChar(b);
+            this.EmitCodePoint(b);
         }
         else if (b >= 0xC0 && b <= 0xDF)
         {
@@ -324,8 +337,59 @@ public class VtParser
         }
     }
 
+    private void EmitCodePoint(int codePoint)
+    {
+        this.lastPrintedCodePoint = codePoint;
+
+        // Fast path: ASCII printable code point with no pending cluster.
+        // No extender can be composed with no base, so it's safe to start
+        // a new cluster directly. Combining marks arriving after an ASCII
+        // base are handled by the ShouldExtend check below on the next
+        // call.
+        if (this.pendingCluster.Count > 0 && !GraphemeCluster.ShouldExtend(this.pendingCluster, codePoint))
+        {
+            this.FlushPendingCluster();
+        }
+
+        this.pendingCluster.Add(codePoint);
+        this.pendingClusterText.Append(char.ConvertFromUtf32(codePoint));
+    }
+
+    private void FlushPendingCluster()
+    {
+        if (this.pendingCluster.Count == 0)
+        {
+            return;
+        }
+
+        if (this.pendingCluster.Count == 1)
+        {
+            // Route single-codepoint writes through PutChar so that DEC
+            // Special Graphics character-set translation still applies.
+            int cp = this.pendingCluster[0];
+            this.buffer.PutChar(cp);
+            this.lastPrintedCluster = null;
+            this.lastPrintedClusterWidth = 0;
+        }
+        else
+        {
+            string cluster = this.pendingClusterText.ToString();
+            int width = GraphemeCluster.ComputeWidth(this.pendingCluster);
+            this.buffer.PutCluster(cluster, width);
+            this.lastPrintedCluster = cluster;
+            this.lastPrintedClusterWidth = width;
+        }
+
+        this.pendingCluster.Clear();
+        this.pendingClusterText.Clear();
+    }
+
     private void ProcessControlChar(byte b)
     {
+        // Any control action terminates an in-progress grapheme cluster —
+        // the next printable will start a fresh one.
+        this.FlushPendingCluster();
+
         switch (b)
         {
             case 0x1B: // ESC
@@ -747,12 +811,21 @@ public class VtParser
                 this.buffer.InsertCharacters(this.GetParam(0, 1));
                 break;
             case 'b': // REP — repeat preceding graphic character
-                if (this.lastPrintedCodePoint != 0)
                 {
                     int count = this.GetParam(0, 1);
-                    for (int i = 0; i < count; i++)
+                    if (this.lastPrintedCluster != null && this.lastPrintedClusterWidth > 0)
                     {
-                        this.buffer.PutChar(this.lastPrintedCodePoint);
+                        for (int i = 0; i < count; i++)
+                        {
+                            this.buffer.PutCluster(this.lastPrintedCluster, this.lastPrintedClusterWidth);
+                        }
+                    }
+                    else if (this.lastPrintedCodePoint != 0)
+                    {
+                        for (int i = 0; i < count; i++)
+                        {
+                            this.buffer.PutChar(this.lastPrintedCodePoint);
+                        }
                     }
                 }
 

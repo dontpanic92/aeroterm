@@ -5,6 +5,8 @@
 
 namespace AeroTerm.Pty;
 
+using System.Collections.Generic;
+
 /// <summary>
 /// Maintains the terminal cell grid state that the VT parser modifies.
 /// </summary>
@@ -379,17 +381,48 @@ public class TerminalBuffer
     }
 
     /// <summary>
-    /// Write a character at the cursor position and advance the cursor.
+    /// Write a single code point at the cursor position and advance the cursor.
+    /// For grapheme clusters containing combining marks, ZWJ emoji sequences,
+    /// variation selectors, skin-tone modifiers or regional-indicator pairs,
+    /// prefer <see cref="PutCluster(string, int)"/> so the whole cluster is
+    /// preserved as one cell.
     /// </summary>
     /// <param name="codePoint">The Unicode code point to write.</param>
     public void PutChar(int codePoint)
     {
+        // Apply DEC Special Graphics character set translation.
+        codePoint = this.TranslateCharset(codePoint);
+        int width = UnicodeWidth.IsWideCharacter(codePoint) ? 2 : 1;
+        this.PutCluster(char.ConvertFromUtf32(codePoint), width);
+    }
+
+    /// <summary>
+    /// Write a grapheme cluster at the cursor position and advance the cursor
+    /// by <paramref name="width"/> cells. The entire cluster string is stored
+    /// in the main cell; when <paramref name="width"/> is 2, the following
+    /// cell is marked as a wide-character continuation (null character).
+    /// </summary>
+    /// <param name="cluster">The cluster text to write. Must be non-empty.</param>
+    /// <param name="width">Display width in terminal cells, 1 or 2.</param>
+    public void PutCluster(string cluster, int width)
+    {
+        if (string.IsNullOrEmpty(cluster))
+        {
+            return;
+        }
+
+        if (width < 1)
+        {
+            width = 1;
+        }
+        else if (width > 2)
+        {
+            width = 2;
+        }
+
         lock (this.screenLock)
         {
-            // Apply DEC Special Graphics character set translation.
-            codePoint = this.TranslateCharset(codePoint);
-
-            bool wide = UnicodeWidth.IsWideCharacter(codePoint);
+            bool wide = width == 2;
 
             // Resolve pending wrap: if the previous character filled the
             // last column with auto-wrap on, actually wrap now.
@@ -457,7 +490,7 @@ public class TerminalBuffer
             }
 
             this.cells[this.cursorRow, this.cursorCol].Set(
-                char.ConvertFromUtf32(codePoint),
+                cluster,
                 new CellStyle(
                     this.ResolveFg(),
                     this.ResolveBg(),
@@ -1843,8 +1876,24 @@ public class TerminalBuffer
             return 0;
         }
 
-        int codePoint = char.ConvertToUtf32(cell.Character, 0);
-        return UnicodeWidth.IsWideCharacter(codePoint) ? 2 : 1;
+        // Grapheme clusters may span multiple code points (emoji ZWJ
+        // sequences, regional-indicator flags, VS16-presented emoji, etc.).
+        // Decode every rune and defer to GraphemeCluster for width.
+        if (cell.Character.Length == 1 || (char.IsHighSurrogate(cell.Character[0]) && cell.Character.Length == 2))
+        {
+            int codePoint = char.ConvertToUtf32(cell.Character, 0);
+            return UnicodeWidth.IsWideCharacter(codePoint) ? 2 : 1;
+        }
+
+        var runes = new List<int>(cell.Character.Length);
+        for (int i = 0; i < cell.Character.Length;)
+        {
+            int cp = char.ConvertToUtf32(cell.Character, i);
+            runes.Add(cp);
+            i += char.IsHighSurrogate(cell.Character[i]) ? 2 : 1;
+        }
+
+        return GraphemeCluster.ComputeWidth(runes);
     }
 
     private int ResolveFg() => this.currentFg == -1 ? this.defaultFg : this.currentFg;
