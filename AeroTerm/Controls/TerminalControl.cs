@@ -7,6 +7,8 @@ namespace AeroTerm.Controls;
 
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
+using AeroTerm.Diagnostics;
 using AeroTerm.Pty;
 using AeroTerm.Services;
 using AeroTerm.Utilities;
@@ -20,6 +22,7 @@ using Avalonia.Platform;
 using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Avalonia.Threading;
+using Microsoft.Extensions.Logging;
 using SkiaSharp;
 
 /// <summary>
@@ -67,6 +70,8 @@ public class TerminalControl : Control, IDisposable
     private int activeMatchIndex = -1;
     private int searchSnapshotScrollbackCount;
     private int searchSnapshotRows;
+    private bool middleClickPastes = true;
+    private IPrimarySelectionService primarySelectionService = DefaultPrimarySelectionService.Instance;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -249,9 +254,32 @@ public class TerminalControl : Control, IDisposable
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether a middle-button click inside
+    /// the terminal should paste text. On Linux/X11 the source is the
+    /// PRIMARY selection (with a fallback to the regular clipboard); on
+    /// macOS and Windows the regular clipboard is always used.
+    /// </summary>
+    public bool MiddleClickPastes
+    {
+        get => this.middleClickPastes;
+        set => this.middleClickPastes = value;
+    }
+
+    /// <summary>
     /// Gets the currently resolved pointer cursor type for tests.
     /// </summary>
     internal StandardCursorType? ResolvedPointerCursorType => this.cursorState.ResolvedPointerCursorType;
+
+    /// <summary>
+    /// Gets or sets the PRIMARY-selection backend. Defaults to
+    /// <see cref="DefaultPrimarySelectionService.Instance"/>; tests can
+    /// substitute a fake.
+    /// </summary>
+    internal IPrimarySelectionService PrimarySelectionService
+    {
+        get => this.primarySelectionService;
+        set => this.primarySelectionService = value ?? DefaultPrimarySelectionService.Instance;
+    }
 
     /// <summary>
     /// Gets the OS-level process identifier of the running child shell,
@@ -578,10 +606,21 @@ public class TerminalControl : Control, IDisposable
 
         var point = e.GetCurrentPoint(this);
         bool isLeft = point.Properties.IsLeftButtonPressed;
+        bool isMiddle = point.Properties.IsMiddleButtonPressed;
         bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         bool mouseTrackingOff = this.buffer.MouseTrackingMode == MouseTrackingMode.None;
 
         this.UpdateHyperlinkModifier(e.KeyModifiers);
+
+        // Middle-click pastes (PRIMARY on Linux/X11, regular clipboard elsewhere).
+        // Only when mouse-tracking is off — apps that capture the mouse
+        // (vim, tmux, htop…) get the raw button report.
+        if (isMiddle && mouseTrackingOff && this.middleClickPastes)
+        {
+            this.PasteMiddleClick();
+            e.Handled = true;
+            return;
+        }
 
         // Pointer rows translate to live-grid rows once the viewport is
         // scrolled into scrollback; selection and hyperlink resolution are
@@ -696,6 +735,13 @@ public class TerminalControl : Control, IDisposable
             {
                 this.selection.Clear();
                 this.InvalidateVisual();
+            }
+            else
+            {
+                // A completed drag that actually selected text should be
+                // published to the X11 PRIMARY selection so middle-click
+                // paste works across applications. No-op on other platforms.
+                this.PublishSelectionToPrimary();
             }
 
             e.Handled = true;
@@ -966,6 +1012,37 @@ public class TerminalControl : Control, IDisposable
         });
     }
 
+    private void PublishSelectionToPrimary()
+    {
+        var screen = this.buffer.GetScreen();
+        if (screen is null || this.selection.IsEmpty)
+        {
+            return;
+        }
+
+        string text = this.selection.CopyText(screen.Cells);
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var service = this.primarySelectionService;
+
+        // Fire-and-forget; PRIMARY writes are best-effort and must never
+        // block the UI thread or surface an exception to the caller.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await MiddleClickPaster.TryWritePrimaryAsync(service, text).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.For<TerminalControl>().LogDebug(ex, "PRIMARY selection write failed.");
+            }
+        });
+    }
+
     private void PasteFromClipboard()
     {
         Dispatcher.UIThread.Post(async () =>
@@ -987,6 +1064,46 @@ public class TerminalControl : Control, IDisposable
             catch (InvalidOperationException)
             {
                 // Clipboard unavailable on some platforms in some hosting modes.
+            }
+        });
+    }
+
+    private void PasteMiddleClick()
+    {
+        var service = this.primarySelectionService;
+        var topLevel = TopLevel.GetTopLevel(this);
+        var clipboard = topLevel?.Clipboard;
+
+        Func<Task<string?>> clipboardFallback = async () =>
+        {
+            if (clipboard is null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return await clipboard.TryGetTextAsync().ConfigureAwait(false);
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
+        };
+
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try
+            {
+                await MiddleClickPaster.TryPasteAsync(
+                    this.middleClickPastes,
+                    service,
+                    clipboardFallback,
+                    text => this.inputHandler.HandlePaste(text)).ConfigureAwait(true);
+            }
+            catch (InvalidOperationException)
+            {
+                // Clipboard/PRIMARY transiently unavailable — ignore.
             }
         });
     }

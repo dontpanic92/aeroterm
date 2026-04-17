@@ -126,6 +126,7 @@ internal sealed class TerminalSessionCoordinator : IDisposable
         this.terminalControl = new TerminalControl();
         this.terminalControl.EnableLigature = this.settings.EnableLigature;
         this.terminalControl.ScrollbackLimit = this.settings.ScrollbackLines;
+        this.terminalControl.MiddleClickPastes = this.settings.MiddleClickPastes;
         this.ApplyFontSettings();
 
         var scheme = ColorSchemePresets.FindByName(this.settings.ColorSchemeName) ?? ColorSchemePresets.Default;
@@ -170,6 +171,17 @@ internal sealed class TerminalSessionCoordinator : IDisposable
                     if (this.terminalControl is not null)
                     {
                         this.terminalControl.ScrollbackLimit = this.settings.ScrollbackLines;
+                    }
+                });
+            }
+
+            if (e.PropertyName is nameof(AppSettings.MiddleClickPastes))
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (this.terminalControl is not null)
+                    {
+                        this.terminalControl.MiddleClickPastes = this.settings.MiddleClickPastes;
                     }
                 });
             }

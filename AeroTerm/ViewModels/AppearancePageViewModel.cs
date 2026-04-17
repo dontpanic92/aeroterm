@@ -35,6 +35,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private BellAction bellAction;
     private int scrollbackLines;
     private bool confirmOnClose;
+    private bool middleClickPastes;
     private bool quakeModeEnabled;
     private string quakeHotkey = string.Empty;
 
@@ -64,6 +65,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         this.bellAction = settings.BellAction;
         this.scrollbackLines = settings.ScrollbackLines;
         this.confirmOnClose = settings.ConfirmOnClose;
+        this.middleClickPastes = settings.MiddleClickPastes;
         this.quakeModeEnabled = settings.QuakeModeEnabled;
         this.quakeHotkey = settings.QuakeHotkey;
 
@@ -92,6 +94,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         "Scrollback lines",
         "Ligature preview",
         "Confirm on close",
+        "Middle-click paste",
         "Quake mode",
         "Quake hotkey",
     };
@@ -379,6 +382,24 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             if (this.SetField(ref this.confirmOnClose, value))
             {
                 this.settings.ConfirmOnClose = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether middle-click inside the
+    /// terminal pastes text. On Linux/X11 the source is the PRIMARY
+    /// selection, with a fallback to the regular clipboard; on macOS and
+    /// Windows the regular clipboard is always used.
+    /// </summary>
+    public bool MiddleClickPastes
+    {
+        get => this.middleClickPastes;
+        set
+        {
+            if (this.SetField(ref this.middleClickPastes, value))
+            {
+                this.settings.MiddleClickPastes = value;
             }
         }
     }

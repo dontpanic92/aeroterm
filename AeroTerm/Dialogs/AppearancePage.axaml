@@ -192,6 +192,10 @@
                           IsChecked="{Binding ConfirmOnClose, Mode=TwoWay}"
                           Content="Confirm before closing a window with multiple tabs" />
 
+                <CheckBox dialogs:SettingsSearch.Label="Middle-click paste"
+                          IsChecked="{Binding MiddleClickPastes, Mode=TwoWay}"
+                          Content="Middle-click pastes (PRIMARY selection on Linux/X11, clipboard elsewhere)" />
+
                 <CheckBox dialogs:SettingsSearch.Label="Quake mode"
                           IsChecked="{Binding QuakeModeEnabled, Mode=TwoWay}"
                           Content="Enable Quake-style dropdown terminal (global hotkey)" />

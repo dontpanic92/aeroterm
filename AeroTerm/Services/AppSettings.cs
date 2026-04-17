@@ -50,6 +50,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private bool confirmOnClose = true;
     private bool quakeModeEnabled;
     private string quakeHotkey = DefaultQuakeHotkey();
+    private bool middleClickPastes = true;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -308,6 +309,20 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether a middle mouse-button click
+    /// inside the terminal pastes text. On Linux/X11 the source is the
+    /// PRIMARY selection (last mouse-selected text) with a fallback to
+    /// the regular clipboard; on macOS and Windows the regular clipboard
+    /// is always used. Defaults to <c>true</c> to match traditional
+    /// xterm / GNOME Terminal behaviour.
+    /// </summary>
+    public bool MiddleClickPastes
+    {
+        get => this.middleClickPastes;
+        set => this.SetField(ref this.middleClickPastes, value);
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
@@ -359,6 +374,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.ConfirmOnClose = fresh.ConfirmOnClose;
         this.QuakeModeEnabled = fresh.QuakeModeEnabled;
         this.QuakeHotkey = fresh.QuakeHotkey;
+        this.MiddleClickPastes = fresh.MiddleClickPastes;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }
