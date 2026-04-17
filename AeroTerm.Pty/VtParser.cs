@@ -1042,16 +1042,24 @@ public class VtParser
                     int sub4 = (i < this.subParameters.Count) ? this.subParameters[i] : -1;
                     switch (sub4)
                     {
-                        case 0: // 4:0 — underline/undercurl off
+                        case 0: // 4:0 — underline/undercurl/double off
                             this.buffer.SetUnderline(false);
                             this.buffer.SetUndercurl(false);
+                            this.buffer.SetDoubleUnderline(false);
+                            break;
+                        case 2: // 4:2 — double underline
+                            this.buffer.SetUnderline(false);
+                            this.buffer.SetUndercurl(false);
+                            this.buffer.SetDoubleUnderline(true);
                             break;
                         case 3: // 4:3 — curly underline (undercurl)
                             this.buffer.SetUnderline(false);
+                            this.buffer.SetDoubleUnderline(false);
                             this.buffer.SetUndercurl(true);
                             break;
-                        default: // bare 4, 4:1, 4:2, 4:4, 4:5 — single underline
+                        default: // bare 4, 4:1, 4:4, 4:5 — single underline
                             this.buffer.SetUndercurl(false);
+                            this.buffer.SetDoubleUnderline(false);
                             this.buffer.SetUnderline(true);
                             break;
                     }
@@ -1070,8 +1078,10 @@ public class VtParser
                 case 9:
                     this.buffer.SetStrikethrough(true);
                     break;
-                case 21: // Double underline — treat as underline
-                    this.buffer.SetUnderline(true);
+                case 21: // Double underline (SGR 21)
+                    this.buffer.SetUnderline(false);
+                    this.buffer.SetUndercurl(false);
+                    this.buffer.SetDoubleUnderline(true);
                     break;
                 case 22:
                     this.buffer.SetBold(false);
@@ -1083,6 +1093,7 @@ public class VtParser
                 case 24:
                     this.buffer.SetUnderline(false);
                     this.buffer.SetUndercurl(false);
+                    this.buffer.SetDoubleUnderline(false);
                     break;
                 case 27:
                     this.buffer.SetReverse(false);

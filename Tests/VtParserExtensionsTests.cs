@@ -138,4 +138,39 @@ public class VtParserExtensionsTests
                 ShellIntegrationKind.CommandFinished,
             }));
     }
+
+    /// <summary>
+    /// SGR 21 should set DoubleUnderline on cells and SGR 24 should clear it.
+    /// </summary>
+    [Test]
+    public void Process_Sgr21_SetsDoubleUnderline()
+    {
+        var buffer = new TerminalBuffer(4, 1);
+        var parser = new VtParser(buffer, _ => { });
+
+        parser.Process(Encoding.ASCII.GetBytes("\x1b[21mA\x1b[24mB"));
+
+        var screen = buffer.GetScreen();
+        Assert.That(screen!.Cells[0, 0].DoubleUnderline, Is.True);
+        Assert.That(screen.Cells[0, 0].Underline, Is.False);
+        Assert.That(screen.Cells[0, 1].DoubleUnderline, Is.False);
+        Assert.That(screen.Cells[0, 1].Underline, Is.False);
+    }
+
+    /// <summary>
+    /// SGR 4:2 should set DoubleUnderline (and not the plain underline flag).
+    /// </summary>
+    [Test]
+    public void Process_Sgr4Sub2_SetsDoubleUnderline()
+    {
+        var buffer = new TerminalBuffer(2, 1);
+        var parser = new VtParser(buffer, _ => { });
+
+        parser.Process(Encoding.ASCII.GetBytes("\x1b[4:2mX"));
+
+        var screen = buffer.GetScreen();
+        Assert.That(screen!.Cells[0, 0].DoubleUnderline, Is.True);
+        Assert.That(screen.Cells[0, 0].Underline, Is.False);
+        Assert.That(screen.Cells[0, 0].Undercurl, Is.False);
+    }
 }

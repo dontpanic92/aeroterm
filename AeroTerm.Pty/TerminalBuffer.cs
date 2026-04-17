@@ -30,6 +30,7 @@ public class TerminalBuffer
     private bool savedItalic;
     private bool savedUnderline;
     private bool savedUndercurl;
+    private bool savedDoubleUnderline;
     private bool savedReverse;
     private bool savedDim;
     private bool savedStrikethrough;
@@ -51,6 +52,7 @@ public class TerminalBuffer
     private bool italic;
     private bool underline;
     private bool undercurl;
+    private bool doubleUnderline;
     private bool reverse;
     private bool dim;
     private bool strikethrough;
@@ -821,6 +823,7 @@ public class TerminalBuffer
             this.savedItalic = this.italic;
             this.savedUnderline = this.underline;
             this.savedUndercurl = this.undercurl;
+            this.savedDoubleUnderline = this.doubleUnderline;
             this.savedReverse = this.reverse;
             this.savedDim = this.dim;
             this.savedStrikethrough = this.strikethrough;
@@ -850,6 +853,7 @@ public class TerminalBuffer
             this.italic = this.savedItalic;
             this.underline = this.savedUnderline;
             this.undercurl = this.savedUndercurl;
+            this.doubleUnderline = this.savedDoubleUnderline;
             this.reverse = this.savedReverse;
             this.dim = this.savedDim;
             this.strikethrough = this.savedStrikethrough;
@@ -982,6 +986,7 @@ public class TerminalBuffer
         this.italic = false;
         this.underline = false;
         this.undercurl = false;
+        this.doubleUnderline = false;
         this.reverse = false;
         this.dim = false;
         this.strikethrough = false;
@@ -1013,6 +1018,15 @@ public class TerminalBuffer
     /// </summary>
     /// <param name="on">True to enable undercurl.</param>
     public void SetUndercurl(bool on) => this.undercurl = on;
+
+    /// <summary>
+    /// Set double-underline attribute. Distinct from
+    /// <see cref="SetUnderline(bool)"/>; enabling one does not affect the
+    /// other but renderers typically show only the "stronger" style when
+    /// both are set.
+    /// </summary>
+    /// <param name="on">True to enable double underline.</param>
+    public void SetDoubleUnderline(bool on) => this.doubleUnderline = on;
 
     /// <summary>
     /// Set reverse attribute.
@@ -1521,6 +1535,7 @@ public class TerminalBuffer
         cell.Hidden = this.hidden;
         cell.Blink = this.blink;
         cell.Overline = this.overline;
+        cell.DoubleUnderline = this.doubleUnderline;
         cell.HyperlinkUri = this.currentHyperlinkUri;
         cell.HyperlinkId = this.currentHyperlinkId;
     }

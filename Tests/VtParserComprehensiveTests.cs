@@ -876,7 +876,7 @@ public class VtParserComprehensiveTests
         parser.Process(Encoding.UTF8.GetBytes("\x1B[21mA"));
 
         var screen = buffer.GetScreen();
-        Assert.That(screen!.Cells[0, 0].Underline, Is.True);
+        Assert.That(screen!.Cells[0, 0].DoubleUnderline, Is.True);
     }
 
     /// <summary>

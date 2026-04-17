@@ -35,6 +35,7 @@ public class TerminalControl : Control, IDisposable
     private readonly TerminalRenderer renderer;
     private readonly CursorStateManager cursorState;
     private readonly TerminalDrawOperation drawOperation;
+    private readonly IPtyConnectionFactory ptyFactory;
 
     private TextLayoutParameters textParam;
     private IPtyConnection? ptyConnection;
@@ -52,7 +53,20 @@ public class TerminalControl : Control, IDisposable
     /// <param name="cols">Initial column count.</param>
     /// <param name="rows">Initial row count.</param>
     public TerminalControl(int cols = 80, int rows = 24)
+        : this(DefaultPtyConnectionFactory.Instance, cols, rows)
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TerminalControl"/> class.
+    /// </summary>
+    /// <param name="ptyFactory">Factory that produces the PTY connection once
+    /// <see cref="StartProcess"/> is called. Tests can pass a fake.</param>
+    /// <param name="cols">Initial column count.</param>
+    /// <param name="rows">Initial row count.</param>
+    public TerminalControl(IPtyConnectionFactory ptyFactory, int cols = 80, int rows = 24)
+    {
+        this.ptyFactory = ptyFactory ?? throw new ArgumentNullException(nameof(ptyFactory));
         this.buffer = new TerminalBuffer(cols, rows);
         this.parser = new VtParser(
             this.buffer,
@@ -187,7 +201,7 @@ public class TerminalControl : Control, IDisposable
         int rows = (int)this.DesiredRowCount;
         this.lastPtyCols = cols;
         this.lastPtyRows = rows;
-        this.ptyConnection = PtyConnectionFactory.Create(app, args, env, cwd, rows, cols);
+        this.ptyConnection = this.ptyFactory.Create(app, args, env, cwd, rows, cols);
         this.ptyConnection.ProcessExited += this.OnProcessExited;
 
         this.readerThread = new Thread(this.ReaderThreadProc)

@@ -97,6 +97,12 @@ public struct Cell
     public bool Undercurl { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether the text has a double underline
+    /// (SGR 21 or SGR 4:2). Rendered distinctly from a single underline.
+    /// </summary>
+    public bool DoubleUnderline { get; internal set; }
+
+    /// <summary>
     /// Gets a value indicating whether the text is dim (faint).
     /// </summary>
     public bool Dim { get; internal set; }
