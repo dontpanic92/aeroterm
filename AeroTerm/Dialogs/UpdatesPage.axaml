@@ -1,12 +1,14 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:AeroTerm.ViewModels"
+             xmlns:dialogs="using:AeroTerm.Dialogs"
              x:Class="AeroTerm.Dialogs.UpdatesPage"
              x:CompileBindings="True"
              x:DataType="vm:UpdatesPageViewModel">
     <StackPanel Spacing="12">
         <!-- Current version -->
-        <StackPanel Orientation="Horizontal" Spacing="6">
+        <StackPanel dialogs:SettingsSearch.Label="Current version"
+                    Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Current version:" FontWeight="SemiBold" VerticalAlignment="Center" />
             <TextBlock Text="{Binding VersionText}" VerticalAlignment="Center" />
         </StackPanel>
@@ -20,7 +22,8 @@
         </Border>
 
         <!-- Channel selector -->
-        <StackPanel Orientation="Horizontal" Spacing="6"
+        <StackPanel dialogs:SettingsSearch.Label="Channel Stable CI"
+                    Orientation="Horizontal" Spacing="6"
                     IsEnabled="{Binding SupportsAutoUpdate}">
             <TextBlock Text="Channel:" FontWeight="SemiBold" VerticalAlignment="Center" />
             <ComboBox SelectedIndex="{Binding SelectedChannelIndex}" Width="140">
@@ -30,15 +33,18 @@
         </StackPanel>
 
         <!-- Auto-check toggle -->
-        <CheckBox IsChecked="{Binding AutoCheckForUpdates}"
+        <CheckBox dialogs:SettingsSearch.Label="Check for updates automatically"
+                  IsChecked="{Binding AutoCheckForUpdates}"
                   Content="Check for updates automatically at startup" />
 
         <!-- Last checked -->
-        <TextBlock Text="{Binding LastCheckedText, StringFormat='Last checked: {0}'}"
+        <TextBlock dialogs:SettingsSearch.Label="Last checked"
+                   Text="{Binding LastCheckedText, StringFormat='Last checked: {0}'}"
                    Foreground="Gray" FontSize="12" />
 
         <!-- Update status panel -->
-        <Border BorderBrush="LightGray" BorderThickness="1" CornerRadius="4"
+        <Border dialogs:SettingsSearch.Label="Update status download restart skip release notes"
+                BorderBrush="LightGray" BorderThickness="1" CornerRadius="4"
                 Padding="12" Margin="0,4,0,0">
             <StackPanel Spacing="8">
                 <!-- Status text -->
@@ -88,7 +94,8 @@
         </Border>
 
         <!-- Check button -->
-        <Button Content="Check for Updates"
+        <Button dialogs:SettingsSearch.Label="Check for Updates"
+                Content="Check for Updates"
                 Click="CheckForUpdates_Click"
                 IsEnabled="{Binding SupportsAutoUpdate}"
                 HorizontalAlignment="Left" />

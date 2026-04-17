@@ -5,6 +5,7 @@
 
 namespace AeroTerm.ViewModels;
 
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -61,6 +62,21 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
 
     /// <inheritdoc/>
     public override string DisplayName => "Appearance";
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<string> SearchableLabels { get; } = new[]
+    {
+        "Window Transparency",
+        "Blur",
+        "Acrylic",
+        "Mica",
+        "Background Opacity",
+        "Font Ligature",
+        "Font Size",
+        "Font Priority",
+        "Color Scheme",
+        "Bell",
+    };
 
     /// <summary>
     /// Gets or sets a value indicating whether font ligature is enabled.

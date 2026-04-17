@@ -81,6 +81,14 @@ public partial class SettingsWindow : Window
         this.Close();
     }
 
+    private void ClearSearch_Click(object? sender, RoutedEventArgs e)
+    {
+        if (this.DataContext is SettingsViewModel vm)
+        {
+            vm.SearchQuery = string.Empty;
+        }
+    }
+
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
         // Always capture current size so the next open remembers it,

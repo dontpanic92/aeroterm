@@ -59,6 +59,22 @@ internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPrope
     /// <inheritdoc/>
     public override string DisplayName => "Updates";
 
+    /// <inheritdoc/>
+    public override System.Collections.Generic.IReadOnlyList<string> SearchableLabels { get; } = new[]
+    {
+        "Current version",
+        "Channel",
+        "Stable",
+        "CI",
+        "Check for updates automatically",
+        "Last checked",
+        "Update status",
+        "Download",
+        "Restart to Update",
+        "Skip This Version",
+        "Release Notes",
+    };
+
     /// <summary>
     /// Gets the current version text.
     /// </summary>

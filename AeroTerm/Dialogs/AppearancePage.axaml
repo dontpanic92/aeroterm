@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:AeroTerm.ViewModels"
              xmlns:models="using:AeroTerm.Models"
+             xmlns:dialogs="using:AeroTerm.Dialogs"
              x:Class="AeroTerm.Dialogs.AppearancePage"
              x:CompileBindings="True"
              x:DataType="vm:AppearancePageViewModel">
@@ -9,25 +10,31 @@
         <!-- Window Effects -->
         <GroupBox Header="Window" Padding="8,8">
             <StackPanel>
-                <CheckBox IsChecked="{Binding EnableBlurBehind, Mode=TwoWay}" Content="Enable Window Transparency" Margin="0,0,0,5" />
+                <CheckBox dialogs:SettingsSearch.Label="Window Transparency"
+                          IsChecked="{Binding EnableBlurBehind, Mode=TwoWay}" Content="Enable Window Transparency" Margin="0,0,0,5" />
 
-                <RadioButton Content="Transparent" GroupName="BlurKind" Margin="20,0,0,3"
+                <RadioButton dialogs:SettingsSearch.Label="Transparent Blur"
+                             Content="Transparent" GroupName="BlurKind" Margin="20,0,0,3"
                              IsEnabled="{Binding IsTransparentEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Transparent}, Mode=TwoWay}" />
 
-                <RadioButton Content="Blur (Gaussian)" GroupName="BlurKind" Margin="20,0,0,3"
+                <RadioButton dialogs:SettingsSearch.Label="Gaussian Blur"
+                             Content="Blur (Gaussian)" GroupName="BlurKind" Margin="20,0,0,3"
                              IsEnabled="{Binding IsGaussianEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Gaussian}, Mode=TwoWay}" />
 
-                <RadioButton Content="Acrylic Blur" GroupName="BlurKind" Margin="20,0,0,3"
+                <RadioButton dialogs:SettingsSearch.Label="Acrylic Blur"
+                             Content="Acrylic Blur" GroupName="BlurKind" Margin="20,0,0,3"
                              IsEnabled="{Binding IsAcrylicEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Acrylic}, Mode=TwoWay}" />
 
-                <RadioButton Content="Mica (Windows only)" GroupName="BlurKind" Margin="20,0,0,5"
+                <RadioButton dialogs:SettingsSearch.Label="Mica"
+                             Content="Mica (Windows only)" GroupName="BlurKind" Margin="20,0,0,5"
                              IsEnabled="{Binding IsMicaEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Mica}, Mode=TwoWay}" />
 
-                <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
+                <StackPanel dialogs:SettingsSearch.Label="Background Opacity"
+                            Orientation="Horizontal" Margin="20,0,0,0">
                     <TextBlock Text="Background Opacity" VerticalAlignment="Center" />
                     <Slider Value="{Binding BackgroundOpacity, Mode=TwoWay}" Width="200" Minimum="0.01" Maximum="1"
                             TickFrequency="0.01" IsSnapToTickEnabled="True" Margin="10,0"
@@ -40,9 +47,11 @@
         <!-- Font -->
         <GroupBox Header="Font" Padding="8,8">
             <StackPanel Spacing="5">
-                <CheckBox IsChecked="{Binding EnableLigature, Mode=TwoWay}" Content="Enable Font Ligature" />
+                <CheckBox dialogs:SettingsSearch.Label="Font Ligature"
+                          IsChecked="{Binding EnableLigature, Mode=TwoWay}" Content="Enable Font Ligature" />
 
-                <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel dialogs:SettingsSearch.Label="Font Size"
+                            Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="Font Size" VerticalAlignment="Center" />
                     <NumericUpDown Value="{Binding FontSize, Mode=TwoWay}"
                                    Minimum="6" Maximum="72" Increment="0.5"
@@ -52,7 +61,7 @@
                 <TextBlock Text="Fonts are searched top to bottom. Drag items to reorder priority."
                            FontSize="11" Foreground="Gray" Margin="0,3,0,3" TextWrapping="Wrap" />
 
-                <Grid>
+                <Grid dialogs:SettingsSearch.Label="Font Priority">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -77,7 +86,8 @@
 
         <!-- Color Scheme -->
         <GroupBox Header="Color Scheme" Padding="8,8">
-            <StackPanel Spacing="8">
+            <StackPanel dialogs:SettingsSearch.Label="Color Scheme"
+                        Spacing="8">
                 <ComboBox ItemsSource="{Binding ColorSchemes}"
                           SelectedItem="{Binding SelectedColorScheme, Mode=TwoWay}"
                           Width="250" HorizontalAlignment="Left">
@@ -110,7 +120,8 @@
 
         <!-- Bell -->
         <GroupBox Header="Bell" Padding="8,8">
-            <StackPanel Spacing="5">
+            <StackPanel dialogs:SettingsSearch.Label="Bell"
+                        Spacing="5">
                 <TextBlock Text="Action when the terminal sends BEL (Ctrl+G)"
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
                 <ComboBox ItemsSource="{Binding BellActions}"
