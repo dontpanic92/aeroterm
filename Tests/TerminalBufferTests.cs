@@ -461,6 +461,59 @@ public class TerminalBufferTests
     }
 
     /// <summary>
+    /// Growing the scrollback limit preserves existing entries and simply
+    /// extends the retention window for subsequent scrolls.
+    /// </summary>
+    [Test]
+    public void Scrollback_GrowLimit_PreservesExistingLines()
+    {
+        var buffer = new TerminalBuffer(1, 2) { ScrollbackLimit = 3 };
+        for (int i = 0; i < 3; i++)
+        {
+            buffer.SetCursorPosition(0, 0);
+            buffer.PutChar((char)('A' + i));
+            buffer.SetCursorPosition(1, 0);
+            buffer.LineFeed();
+        }
+
+        Assume.That(buffer.ScrollbackCount, Is.EqualTo(3));
+
+        buffer.ScrollbackLimit = 10;
+
+        Assert.That(buffer.ScrollbackLimit, Is.EqualTo(10));
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(3));
+        Assert.That(buffer.GetScrollbackLine(0)[0].Character, Is.EqualTo("A"));
+        Assert.That(buffer.GetScrollbackLine(1)[0].Character, Is.EqualTo("B"));
+        Assert.That(buffer.GetScrollbackLine(2)[0].Character, Is.EqualTo("C"));
+
+        // Two more scrolls fit inside the new, larger window.
+        for (int i = 0; i < 2; i++)
+        {
+            buffer.SetCursorPosition(0, 0);
+            buffer.PutChar((char)('D' + i));
+            buffer.SetCursorPosition(1, 0);
+            buffer.LineFeed();
+        }
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(5));
+        Assert.That(buffer.GetScrollbackLine(4)[0].Character, Is.EqualTo("E"));
+    }
+
+    /// <summary>
+    /// Values passed to <see cref="TerminalBuffer.ScrollbackLimit"/> that
+    /// exceed <see cref="TerminalBuffer.MaxScrollbackLimit"/> are clamped.
+    /// </summary>
+    [Test]
+    public void Scrollback_LimitAboveMaximum_IsClampedToMax()
+    {
+        var buffer = new TerminalBuffer(1, 1);
+
+        buffer.ScrollbackLimit = TerminalBuffer.MaxScrollbackLimit + 42;
+
+        Assert.That(buffer.ScrollbackLimit, Is.EqualTo(TerminalBuffer.MaxScrollbackLimit));
+    }
+
+    /// <summary>
     /// <see cref="TerminalBuffer.GetScrollbackLine"/> must return a
     /// defensive copy; mutating it must not affect future reads.
     /// </summary>

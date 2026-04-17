@@ -15,12 +15,17 @@ public class TerminalBuffer
     /// <summary>
     /// Default maximum number of lines retained in the scrollback ring.
     /// </summary>
-    public const int DefaultScrollbackLimit = 1000;
+    public const int DefaultScrollbackLimit = 10_000;
 
     /// <summary>
     /// Maximum value accepted for <see cref="ScrollbackLimit"/>.
     /// </summary>
-    public const int MaxScrollbackLimit = 100_000;
+    /// <remarks>
+    /// At ~80 bytes per <see cref="Cell"/> and an 80-column screen this cap
+    /// bounds worst-case scrollback memory at roughly 6.1 GiB per buffer;
+    /// realistic terminals with modest column counts stay well under a GiB.
+    /// </remarks>
+    public const int MaxScrollbackLimit = 1_000_000;
 
     private static readonly int[] DefaultPalette = CreateDefaultPalette();
 

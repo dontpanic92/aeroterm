@@ -46,7 +46,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private int settingsWindowWidth = 680;
     private int settingsWindowHeight = 480;
     private BellAction bellAction = BellAction.Visual;
-    private int scrollbackLines = 1000;
+    private int scrollbackLines = 10_000;
     private bool confirmOnClose = true;
     private bool quakeModeEnabled;
     private string quakeHotkey = DefaultQuakeHotkey();
@@ -265,13 +265,13 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
 
     /// <summary>
     /// Gets or sets the number of lines retained in the terminal's
-    /// scrollback ring. Clamped to the range <c>[0, 100000]</c> on load and
-    /// set. A value of <c>0</c> disables scrollback entirely.
+    /// scrollback ring. Clamped to the range <c>[0, 1_000_000]</c> on load
+    /// and set. A value of <c>0</c> disables scrollback entirely.
     /// </summary>
     public int ScrollbackLines
     {
         get => this.scrollbackLines;
-        set => this.SetField(ref this.scrollbackLines, Math.Clamp(value, 0, 100_000));
+        set => this.SetField(ref this.scrollbackLines, Math.Clamp(value, 0, 1_000_000));
     }
 
     /// <summary>

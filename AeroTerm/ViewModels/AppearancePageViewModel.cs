@@ -357,20 +357,28 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
 
     /// <summary>
     /// Gets or sets the number of lines retained in the terminal's scrollback
-    /// ring. Range is <c>0..100000</c>; <c>0</c> disables scrollback.
+    /// ring. Range is <c>0..1_000_000</c>; <c>0</c> disables scrollback.
     /// </summary>
     public int ScrollbackLines
     {
         get => this.scrollbackLines;
         set
         {
-            int clamped = Math.Clamp(value, 0, 100_000);
+            int clamped = Math.Clamp(value, 0, 1_000_000);
             if (this.SetField(ref this.scrollbackLines, clamped))
             {
                 this.settings.ScrollbackLines = clamped;
+                this.OnPropertyChanged(nameof(this.ScrollbackDisabledWarningVisible));
             }
         }
     }
+
+    /// <summary>
+    /// Gets a value indicating whether the "scrollback disabled" warning
+    /// should be shown next to the scrollback input. Bound to <c>Visible</c>
+    /// via a boolean-to-visibility converter in the page.
+    /// </summary>
+    public bool ScrollbackDisabledWarningVisible => this.scrollbackLines == 0;
 
     /// <summary>
     /// Gets or sets a value indicating whether the application should prompt

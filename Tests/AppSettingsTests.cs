@@ -176,4 +176,67 @@ public class AppSettingsTests
         Assert.That(loaded, Is.Not.Null);
         Assert.That(loaded!.BellAction, Is.EqualTo(BellAction.Visual));
     }
+
+    /// <summary>
+    /// Brand-new <see cref="AppSettings"/> instances default
+    /// <see cref="AppSettings.ScrollbackLines"/> to <c>10000</c>.
+    /// </summary>
+    [Test]
+    public void ScrollbackLines_DefaultsToTenThousand()
+    {
+        var settings = new AppSettings();
+        Assert.That(settings.ScrollbackLines, Is.EqualTo(10_000));
+    }
+
+    /// <summary>
+    /// <see cref="AppSettings.ScrollbackLines"/> survives a JSON round-trip
+    /// across a representative set of values (zero, default, and the new
+    /// 1,000,000-line maximum).
+    /// </summary>
+    /// <param name="value">Scrollback line count under test.</param>
+    [Test]
+    public void ScrollbackLines_RoundTripsThroughJson(
+        [Values(0, 100, 10_000, 500_000, 1_000_000)] int value)
+    {
+        var ctx = AppSettingsJsonContext.Default.AppSettings;
+
+        var settings = new AppSettings { ScrollbackLines = value };
+        string json = JsonSerializer.Serialize(settings, ctx);
+        var loaded = JsonSerializer.Deserialize(json, ctx);
+
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.ScrollbackLines, Is.EqualTo(value));
+    }
+
+    /// <summary>
+    /// Values outside <c>[0, 1_000_000]</c> are clamped to the valid range
+    /// rather than stored as-is.
+    /// </summary>
+    [Test]
+    public void ScrollbackLines_OutOfRangeValuesAreClamped()
+    {
+        var settings = new AppSettings { ScrollbackLines = -50 };
+        Assert.That(settings.ScrollbackLines, Is.EqualTo(0));
+
+        settings.ScrollbackLines = 5_000_000;
+        Assert.That(settings.ScrollbackLines, Is.EqualTo(1_000_000));
+    }
+
+    /// <summary>
+    /// Setting <see cref="AppSettings.ScrollbackLines"/> to a new value
+    /// raises <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/>
+    /// — this is the contract <see cref="TerminalSessionCoordinator"/>
+    /// relies on to live-update the terminal buffer.
+    /// </summary>
+    [Test]
+    public void ScrollbackLines_Set_RaisesPropertyChanged()
+    {
+        var settings = new AppSettings { ScrollbackLines = 1000 };
+        string? last = null;
+        settings.PropertyChanged += (_, e) => last = e.PropertyName;
+
+        settings.ScrollbackLines = 2000;
+
+        Assert.That(last, Is.EqualTo(nameof(AppSettings.ScrollbackLines)));
+    }
 }
