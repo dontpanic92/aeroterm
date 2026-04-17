@@ -196,6 +196,38 @@ public sealed class TabView : UserControl, INotifyPropertyChanged
         this.ActiveTab = this.Tabs[prev];
     }
 
+    /// <summary>
+    /// Duplicates <paramref name="source"/>: inserts a new, cloned
+    /// <see cref="TabSession"/> immediately after <paramref name="source"/>
+    /// in <see cref="Tabs"/> and activates it. The returned session is
+    /// <see cref="TabSession.Duplicate"/>d from the source and has NOT been
+    /// started yet — callers are responsible for calling
+    /// <see cref="TabSession.Start"/> and <see cref="TabSession.FocusInput"/>
+    /// after a layout pass.
+    /// </summary>
+    /// <param name="source">Tab to clone. Must currently be in <see cref="Tabs"/>.</param>
+    /// <returns>The newly-inserted duplicate.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="source"/> is not a member of <see cref="Tabs"/>.</exception>
+    public TabSession DuplicateTab(TabSession source)
+    {
+        if (source is null)
+        {
+            throw new ArgumentNullException(nameof(source));
+        }
+
+        int sourceIndex = this.Tabs.IndexOf(source);
+        if (sourceIndex < 0)
+        {
+            throw new ArgumentException("Source tab is not a member of this TabView.", nameof(source));
+        }
+
+        var dup = source.Duplicate();
+        this.Tabs.Insert(sourceIndex + 1, dup);
+        this.ActiveTab = dup;
+        return dup;
+    }
+
     private void OnTabsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.NewItems is not null)

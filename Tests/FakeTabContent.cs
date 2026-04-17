@@ -83,4 +83,10 @@ internal sealed class FakeTabContent : ITabSessionContent
     {
         this.DisposeCount++;
     }
+
+    /// <inheritdoc />
+    public ITabSessionContent Duplicate()
+    {
+        return new FakeTabContent(this.Title);
+    }
 }

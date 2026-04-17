@@ -47,6 +47,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private int settingsWindowHeight = 480;
     private BellAction bellAction = BellAction.Visual;
     private int scrollbackLines = 1000;
+    private bool confirmOnClose = true;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -270,6 +271,18 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the application should prompt
+    /// the user before closing a window that still contains more than one
+    /// open tab. Single-tab windows always close immediately. Defaults to
+    /// <c>true</c> (safer).
+    /// </summary>
+    public bool ConfirmOnClose
+    {
+        get => this.confirmOnClose;
+        set => this.SetField(ref this.confirmOnClose, value);
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
@@ -318,6 +331,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.SettingsWindowHeight = fresh.SettingsWindowHeight;
         this.BellAction = fresh.BellAction;
         this.ScrollbackLines = fresh.ScrollbackLines;
+        this.ConfirmOnClose = fresh.ConfirmOnClose;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }

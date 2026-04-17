@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     private readonly TabView tabView;
     private readonly TabStrip tabStrip;
     private bool isSettingsDialogOpen;
+    private bool isCloseConfirmed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
@@ -76,6 +77,7 @@ public partial class MainWindow : Window
 
         this.tabStrip = new TabStrip { View = this.tabView };
         this.tabStrip.NewTabRequested += this.CreateAndActivateNewTab;
+        this.tabStrip.DuplicateTabRequested += this.DuplicateTabFromStrip;
         this.tabStripHost.Child = this.tabStrip;
         this.tabView.Tabs.CollectionChanged += (_, _) => this.UpdateTabStripVisibility();
 
@@ -113,6 +115,18 @@ public partial class MainWindow : Window
     /// <inheritdoc />
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        // Multi-tab confirm-on-close, unless the user already answered
+        // "yes" on an earlier pass through this handler (guard flag reset
+        // just before we re-invoke Close()).
+        if (!this.isCloseConfirmed
+            && this.settings.ConfirmOnClose
+            && this.tabView.Tabs.Count > 1)
+        {
+            e.Cancel = true;
+            _ = this.ShowCloseConfirmAndRetryAsync(this.tabView.Tabs.Count);
+            return;
+        }
+
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             MacOSWindowMenu.UnregisterWindow(this);
@@ -165,6 +179,27 @@ public partial class MainWindow : Window
         return false;
     }
 
+    private async Task ShowCloseConfirmAndRetryAsync(int tabCount)
+    {
+        bool confirmed;
+        try
+        {
+            var dlg = new Dialogs.ConfirmCloseDialog(tabCount);
+            confirmed = await dlg.ShowConfirmAsync(this);
+        }
+        catch (Exception ex)
+        {
+            this.log.LogWarning(ex, "Confirm-close dialog failed; proceeding with close.");
+            confirmed = true;
+        }
+
+        if (confirmed)
+        {
+            this.isCloseConfirmed = true;
+            this.Close();
+        }
+    }
+
     private void OnTunnelKeyDown(object? sender, KeyEventArgs e)
     {
         if (this.HandleTabShortcut(e))
@@ -179,6 +214,13 @@ public partial class MainWindow : Window
 
         if (IsMac())
         {
+            // Cmd+Shift+D — duplicate active tab.
+            if (e.Key == Key.D && m == (KeyModifiers.Meta | KeyModifiers.Shift))
+            {
+                this.DuplicateActiveTab();
+                return true;
+            }
+
             // Cmd+T — new tab.
             if (e.Key == Key.T && m == KeyModifiers.Meta)
             {
@@ -222,6 +264,13 @@ public partial class MainWindow : Window
         }
         else
         {
+            // Ctrl+Shift+D — duplicate active tab.
+            if (e.Key == Key.D && m == (KeyModifiers.Control | KeyModifiers.Shift))
+            {
+                this.DuplicateActiveTab();
+                return true;
+            }
+
             // Ctrl+Shift+T — new tab (Ctrl+T is widely used by shells).
             if (e.Key == Key.T && m == (KeyModifiers.Control | KeyModifiers.Shift))
             {
@@ -337,6 +386,48 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.RunJobs();
         session.Start();
         session.FocusInput();
+    }
+
+    private void DuplicateActiveTab()
+    {
+        if (this.tabView.ActiveTab is { } active)
+        {
+            this.DuplicateTab(active);
+        }
+    }
+
+    private void DuplicateTabFromStrip(TabSession source)
+    {
+        this.DuplicateTab(source);
+    }
+
+    private void DuplicateTab(TabSession source)
+    {
+        TabSession dup;
+        try
+        {
+            dup = this.tabView.DuplicateTab(source);
+        }
+        catch (ArgumentException)
+        {
+            // Source is stale (e.g. already closed); nothing to duplicate.
+            return;
+        }
+
+        // Wire the per-window bell / bg-color / exit plumbing the same way
+        // CreateTabSession does for fresh tabs.
+        if (dup.Coordinator is { } coord)
+        {
+            coord.BellRaised += this.bellService.Handle;
+            coord.BackgroundColorChanged += color => this.OnTabBackgroundColorChanged(dup, color);
+        }
+
+        dup.ProcessExitedNormally += () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(dup));
+
+        // Start AFTER insertion + activation so the session has real bounds.
+        Dispatcher.UIThread.RunJobs();
+        dup.Start();
+        dup.FocusInput();
     }
 
     private void OnTabProcessExited(TabSession session)

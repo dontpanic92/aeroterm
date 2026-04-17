@@ -21,6 +21,7 @@ internal sealed class TerminalSessionCoordinator : IDisposable
 {
     private readonly AppSettings settings;
     private readonly ILogger log;
+    private readonly LaunchSpec? launchOverride;
     private TerminalControl? terminalControl;
     private System.ComponentModel.PropertyChangedEventHandler? settingsHandler;
     private bool disposed;
@@ -30,9 +31,23 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     /// </summary>
     /// <param name="settings">Application settings.</param>
     public TerminalSessionCoordinator(AppSettings settings)
+        : this(settings, launchOverride: null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TerminalSessionCoordinator"/> class
+    /// with an explicit launch specification that overrides the defaults normally
+    /// derived from the environment (used by "duplicate tab").
+    /// </summary>
+    /// <param name="settings">Application settings.</param>
+    /// <param name="launchOverride">Launch spec that takes precedence over the
+    /// default shell / cwd / env detection when non-null.</param>
+    internal TerminalSessionCoordinator(AppSettings settings, LaunchSpec? launchOverride)
     {
         this.settings = settings;
         this.log = AppLogger.For<TerminalSessionCoordinator>();
+        this.launchOverride = launchOverride;
     }
 
     /// <summary>
@@ -68,6 +83,14 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     public TerminalControl? Control => this.terminalControl;
 
     /// <summary>
+    /// Gets the <see cref="LaunchSpec"/> that was actually used to start the
+    /// child shell. <c>null</c> until <see cref="Initialize"/> has run.
+    /// Consumed by the "duplicate tab" feature so a sibling session can be
+    /// spawned with the same cwd / command / args / env as the source.
+    /// </summary>
+    internal LaunchSpec? LastLaunchSpec { get; private set; }
+
+    /// <summary>
     /// Detects the default shell, creates the <see cref="TerminalControl"/>,
     /// wires events, and starts the shell process.
     /// The control is added to the visual tree before the process starts so
@@ -77,11 +100,27 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     /// </summary>
     public void Initialize()
     {
-        string shell = DetectShell();
-        string[] args = GetShellArgs(shell);
-        string cwd = GetWorkingDirectory();
-        var env = GetEnvironment();
+        string shell;
+        string[] args;
+        string cwd;
+        IDictionary<string, string> env;
 
+        if (this.launchOverride is { } spec)
+        {
+            shell = spec.Command;
+            args = spec.Args.ToArray();
+            cwd = spec.Cwd;
+            env = new Dictionary<string, string>(spec.Env);
+        }
+        else
+        {
+            shell = DetectShell();
+            args = GetShellArgs(shell);
+            cwd = GetWorkingDirectory();
+            env = GetEnvironment();
+        }
+
+        this.LastLaunchSpec = new LaunchSpec(cwd, shell, args, env);
         this.log.LogInformation("Starting shell: {Shell}", shell);
 
         this.terminalControl = new TerminalControl();
@@ -179,6 +218,24 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     /// <inheritdoc />
     public void Dispose() => this.Shutdown();
 
+    /// <summary>
+    /// Attempts to read the live working directory of the running child
+    /// shell. Falls back to the launch cwd when the live lookup is not
+    /// supported on the current platform.
+    /// </summary>
+    /// <returns>The current working directory, or <c>null</c> if nothing
+    /// sensible can be determined (e.g. before <see cref="Initialize"/>).</returns>
+    internal string? TryGetCurrentWorkingDirectory()
+    {
+        string? live = this.TryReadLiveCwd();
+        if (!string.IsNullOrEmpty(live))
+        {
+            return live;
+        }
+
+        return this.LastLaunchSpec?.Cwd;
+    }
+
     private static string DetectShell()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -223,6 +280,58 @@ internal sealed class TerminalSessionCoordinator : IDisposable
         return env;
     }
 
+    private static string? ReadMacOsCwdViaLsof(int pid)
+    {
+        // `lsof -a -p <pid> -d cwd -Fn` prints machine-parseable records;
+        // the `n<path>` line after a `pPID` line holds the cwd. Shelling
+        // out keeps us free of the private proc_pidinfo ABI surface.
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "/usr/sbin/lsof",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        psi.ArgumentList.Add("-a");
+        psi.ArgumentList.Add("-p");
+        psi.ArgumentList.Add(pid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        psi.ArgumentList.Add("-d");
+        psi.ArgumentList.Add("cwd");
+        psi.ArgumentList.Add("-Fn");
+
+        using var proc = System.Diagnostics.Process.Start(psi);
+        if (proc is null)
+        {
+            return null;
+        }
+
+        string stdout = proc.StandardOutput.ReadToEnd();
+        if (!proc.WaitForExit(1500))
+        {
+            try
+            {
+                proc.Kill(entireProcessTree: false);
+            }
+            catch
+            {
+                // Best-effort cleanup.
+            }
+
+            return null;
+        }
+
+        foreach (var rawLine in stdout.Split('\n'))
+        {
+            if (rawLine.Length > 1 && rawLine[0] == 'n')
+            {
+                return rawLine.Substring(1).TrimEnd('\r');
+            }
+        }
+
+        return null;
+    }
+
     private void ApplyFontSettings()
     {
         if (this.terminalControl is null)
@@ -244,5 +353,47 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     private void OnProcessExited()
     {
         Dispatcher.UIThread.Post(() => this.ProcessExitedNormally?.Invoke());
+    }
+
+    /// <summary>
+    /// Platform-specific best-effort lookup of the child shell's live cwd.
+    /// Returns <c>null</c> on failure; callers fall back to the launch cwd.
+    /// Linux reads the <c>/proc/&lt;pid&gt;/cwd</c> symlink; macOS shells out
+    /// to <c>lsof</c>; Windows has no reliable userland mechanism without
+    /// elevated permissions, so we always return <c>null</c> there.
+    /// </summary>
+    private string? TryReadLiveCwd()
+    {
+        int? pid = this.terminalControl?.ChildPid;
+        if (pid is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                string link = $"/proc/{pid.Value}/cwd";
+                var info = new FileInfo(link);
+                var target = info.ResolveLinkTarget(returnFinalTarget: true);
+                return target?.FullName;
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return ReadMacOsCwdViaLsof(pid.Value);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Diagnostics.Tracing.EventSourceException)
+        {
+            this.log.LogDebug(ex, "Failed to resolve live cwd for pid {Pid}.", pid.Value);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            this.log.LogDebug(ex, "Failed to resolve live cwd for pid {Pid}.", pid.Value);
+        }
+
+        return null;
     }
 }

@@ -94,6 +94,12 @@ public sealed class TabStrip : UserControl
     public event Action? NewTabRequested;
 
     /// <summary>
+    /// Raised when the user invokes "Duplicate tab" from a header's
+    /// right-click context menu.
+    /// </summary>
+    public event Action<TabSession>? DuplicateTabRequested;
+
+    /// <summary>
     /// Gets or sets the <see cref="TabView"/> this strip renders. Setting
     /// this wires collection / active-tab change notifications.
     /// </summary>
@@ -187,6 +193,7 @@ public sealed class TabStrip : UserControl
         var header = new TabHeader(tab);
         header.ActivateRequested += t => this.tabView?.ActivateTab(t);
         header.CloseRequested += t => this.tabView?.CloseTab(t);
+        header.DuplicateRequested += t => this.DuplicateTabRequested?.Invoke(t);
         this.headers[tab] = header;
         if (index < 0 || index >= this.tabsPanel.Children.Count)
         {
@@ -308,12 +315,15 @@ public sealed class TabStrip : UserControl
             this.PointerPressed += this.OnPointerPressed;
             this.PointerEntered += this.OnPointerEntered;
             this.PointerExited += this.OnPointerExited;
+            this.AttachContextMenu();
             tab.PropertyChanged += this.OnTabPropertyChanged;
         }
 
         public event Action<TabSession>? ActivateRequested;
 
         public event Action<TabSession>? CloseRequested;
+
+        public event Action<TabSession>? DuplicateRequested;
 
         public void Detach()
         {
@@ -379,6 +389,20 @@ public sealed class TabStrip : UserControl
                 AutomationProperties.SetName(this, this.tab.Title);
                 AutomationProperties.SetName(this.closeButton, $"Close tab: {this.tab.Title}");
             }
+        }
+
+        private void AttachContextMenu()
+        {
+            var duplicateItem = new MenuItem { Header = "Duplicate tab" };
+            duplicateItem.Click += (_, _) => this.DuplicateRequested?.Invoke(this.tab);
+
+            var closeItem = new MenuItem { Header = "Close tab" };
+            closeItem.Click += (_, _) => this.CloseRequested?.Invoke(this.tab);
+
+            var menu = new ContextMenu();
+            menu.Items.Add(duplicateItem);
+            menu.Items.Add(closeItem);
+            this.ContextMenu = menu;
         }
     }
 }

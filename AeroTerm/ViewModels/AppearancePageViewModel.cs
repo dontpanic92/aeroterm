@@ -34,6 +34,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private ColorScheme selectedColorScheme;
     private BellAction bellAction;
     private int scrollbackLines;
+    private bool confirmOnClose;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AppearancePageViewModel"/> class.
@@ -60,6 +61,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
 
         this.bellAction = settings.BellAction;
         this.scrollbackLines = settings.ScrollbackLines;
+        this.confirmOnClose = settings.ConfirmOnClose;
 
         this.FontItems.CollectionChanged += this.OnFontItemsChanged;
     }
@@ -85,6 +87,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         "Bell",
         "Scrollback lines",
         "Ligature preview",
+        "Confirm on close",
     };
 
     /// <summary>
@@ -353,6 +356,23 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             if (this.SetField(ref this.scrollbackLines, clamped))
             {
                 this.settings.ScrollbackLines = clamped;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the application should prompt
+    /// the user before closing a window that still contains more than one
+    /// open tab.
+    /// </summary>
+    public bool ConfirmOnClose
+    {
+        get => this.confirmOnClose;
+        set
+        {
+            if (this.SetField(ref this.confirmOnClose, value))
+            {
+                this.settings.ConfirmOnClose = value;
             }
         }
     }

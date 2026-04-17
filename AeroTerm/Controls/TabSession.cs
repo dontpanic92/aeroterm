@@ -32,7 +32,7 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     /// <param name="settings">Application settings that drive the shell's
     /// font / color scheme / scrollback configuration.</param>
     public TabSession(AppSettings settings)
-        : this(new CoordinatorTabContent(new TerminalSessionCoordinator(settings)))
+        : this(CoordinatorTabContent.FromCoordinator(new TerminalSessionCoordinator(settings), settings))
     {
     }
 
@@ -121,6 +121,24 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     /// Moves keyboard focus to the terminal so typing goes to the right PTY.
     /// </summary>
     public void FocusInput() => this.content.FocusInput();
+
+    /// <summary>
+    /// Creates a new <see cref="TabSession"/> that mirrors this one's launch
+    /// configuration (shell, args, env, cwd). The returned session is not
+    /// yet started — callers must add it to a <see cref="TabView"/>, force a
+    /// layout pass, then invoke <see cref="Start"/>.
+    /// </summary>
+    /// <returns>The newly-constructed sibling session.</returns>
+    public TabSession Duplicate()
+    {
+        if (this.disposed)
+        {
+            throw new ObjectDisposedException(nameof(TabSession));
+        }
+
+        var dupContent = this.content.Duplicate();
+        return new TabSession(dupContent);
+    }
 
     /// <inheritdoc />
     public void Dispose()

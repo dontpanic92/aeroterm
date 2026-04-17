@@ -173,5 +173,13 @@
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
             </StackPanel>
         </GroupBox>
+        <!-- General: settings that don't have a dedicated page yet. -->
+        <GroupBox Header="General" Padding="8,8">
+            <StackPanel Spacing="5">
+                <CheckBox dialogs:SettingsSearch.Label="Confirm on close"
+                          IsChecked="{Binding ConfirmOnClose, Mode=TwoWay}"
+                          Content="Confirm before closing a window with multiple tabs" />
+            </StackPanel>
+        </GroupBox>
     </StackPanel>
 </UserControl>

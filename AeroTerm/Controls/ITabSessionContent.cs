@@ -55,4 +55,14 @@ internal interface ITabSessionContent : IDisposable
     /// Moves keyboard focus to the underlying input surface.
     /// </summary>
     void FocusInput();
+
+    /// <summary>
+    /// Creates a new, independent <see cref="ITabSessionContent"/> configured
+    /// to launch a sibling session based on this one — typically reusing the
+    /// same shell / args / env snapshot and a best-effort live working
+    /// directory. The caller is responsible for hosting and starting the
+    /// returned content. The resulting content is NOT yet started.
+    /// </summary>
+    /// <returns>A fresh content instance to wrap in a new <see cref="TabSession"/>.</returns>
+    ITabSessionContent Duplicate();
 }

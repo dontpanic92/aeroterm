@@ -18,6 +18,7 @@ using Avalonia.Controls;
 internal sealed class CoordinatorTabContent : ITabSessionContent
 {
     private readonly TerminalSessionCoordinator coordinator;
+    private readonly AppSettings? settings;
     private readonly Grid host = new();
     private TerminalControl? terminal;
     private string title = "AeroTerm";
@@ -30,8 +31,14 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     /// <param name="coordinator">The coordinator this content wraps. Ownership
     /// transfers — <see cref="Dispose"/> will shut it down.</param>
     public CoordinatorTabContent(TerminalSessionCoordinator coordinator)
+        : this(coordinator, settings: null)
+    {
+    }
+
+    private CoordinatorTabContent(TerminalSessionCoordinator coordinator, AppSettings? settings)
     {
         this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+        this.settings = settings;
         this.coordinator.TerminalReady += this.OnTerminalReady;
         this.coordinator.TitleChanged += this.OnCoordinatorTitleChanged;
         this.coordinator.ProcessExitedNormally += this.OnCoordinatorProcessExited;
@@ -71,6 +78,31 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     public void FocusInput() => this.terminal?.Focus();
 
     /// <inheritdoc />
+    public ITabSessionContent Duplicate()
+    {
+        if (this.settings is null)
+        {
+            throw new InvalidOperationException(
+                "This CoordinatorTabContent was not constructed with an AppSettings reference and cannot be duplicated. " +
+                "Use the AppSettings-aware factory to enable duplication.");
+        }
+
+        // Build a spec from the source coordinator: same command / args / env
+        // snapshot as the source at launch; live cwd if available, else the
+        // source's launch cwd.
+        var sourceSpec = this.coordinator.LastLaunchSpec;
+        LaunchSpec? dupSpec = null;
+        if (sourceSpec is not null)
+        {
+            string cwd = this.coordinator.TryGetCurrentWorkingDirectory() ?? sourceSpec.Cwd;
+            dupSpec = sourceSpec.WithCwd(cwd);
+        }
+
+        var newCoord = new TerminalSessionCoordinator(this.settings, dupSpec);
+        return FromCoordinator(newCoord, this.settings);
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         if (this.disposed)
@@ -83,6 +115,19 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.coordinator.TitleChanged -= this.OnCoordinatorTitleChanged;
         this.coordinator.ProcessExitedNormally -= this.OnCoordinatorProcessExited;
         this.coordinator.Shutdown();
+    }
+
+    /// <summary>
+    /// Factory that constructs a <see cref="CoordinatorTabContent"/> tied to
+    /// <paramref name="settings"/> so it can later spawn duplicates via
+    /// <see cref="Duplicate"/>.
+    /// </summary>
+    /// <param name="coordinator">Coordinator to wrap (ownership transfers).</param>
+    /// <param name="settings">Application settings used by duplicates.</param>
+    /// <returns>A newly-constructed content adapter.</returns>
+    internal static CoordinatorTabContent FromCoordinator(TerminalSessionCoordinator coordinator, AppSettings settings)
+    {
+        return new CoordinatorTabContent(coordinator, settings);
     }
 
     private void OnTerminalReady(TerminalControl control)

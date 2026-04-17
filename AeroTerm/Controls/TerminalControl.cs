@@ -253,6 +253,13 @@ public class TerminalControl : Control, IDisposable
     internal StandardCursorType? ResolvedPointerCursorType => this.cursorState.ResolvedPointerCursorType;
 
     /// <summary>
+    /// Gets the OS-level process identifier of the running child shell,
+    /// or <c>null</c> if no process has been started (or the underlying
+    /// PTY has since been released).
+    /// </summary>
+    internal int? ChildPid => this.ptyConnection?.Pid;
+
+    /// <summary>
     /// Starts a child process connected via a PTY.
     /// </summary>
     /// <param name="app">Absolute path to the executable.</param>

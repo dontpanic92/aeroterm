@@ -193,4 +193,61 @@ public class TabViewTests
         Assert.That(latest, Is.EqualTo("updated"));
         Assert.That(t.Title, Is.EqualTo("updated"));
     }
+
+    /// <summary>
+    /// <see cref="TabView.DuplicateTab"/> inserts the new tab immediately
+    /// after the source tab, not at the end of the collection.
+    /// </summary>
+    [AvaloniaTest]
+    public void DuplicateTab_InsertsImmediatelyAfterSource()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var b = new TabSession(new FakeTabContent("b"));
+        var c = new TabSession(new FakeTabContent("c"));
+        view.AddTab(a);
+        view.AddTab(b);
+        view.AddTab(c);
+
+        var dup = view.DuplicateTab(b);
+
+        Assert.That(view.Tabs.Count, Is.EqualTo(4));
+        Assert.That(view.Tabs[0], Is.SameAs(a));
+        Assert.That(view.Tabs[1], Is.SameAs(b));
+        Assert.That(view.Tabs[2], Is.SameAs(dup));
+        Assert.That(view.Tabs[3], Is.SameAs(c));
+    }
+
+    /// <summary>
+    /// <see cref="TabView.DuplicateTab"/> activates the newly-inserted duplicate.
+    /// </summary>
+    [AvaloniaTest]
+    public void DuplicateTab_ActivatesTheNewDuplicate()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var b = new TabSession(new FakeTabContent("b"));
+        view.AddTab(a);
+        view.AddTab(b);
+        view.ActivateTab(a);
+
+        var dup = view.DuplicateTab(a);
+
+        Assert.That(view.ActiveTab, Is.SameAs(dup));
+    }
+
+    /// <summary>
+    /// <see cref="TabView.DuplicateTab"/> throws <see cref="ArgumentException"/>
+    /// when the source tab is not a member of <see cref="TabView.Tabs"/>.
+    /// </summary>
+    [AvaloniaTest]
+    public void DuplicateTab_InvalidSource_ThrowsArgumentException()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var stranger = new TabSession(new FakeTabContent("x"));
+        view.AddTab(a);
+
+        Assert.Throws<ArgumentException>(() => view.DuplicateTab(stranger));
+    }
 }
