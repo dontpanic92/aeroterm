@@ -86,6 +86,7 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.FocusPaneUp, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.Up)));
             list.Add(new Keybinding(KeybindingAction.FocusPaneDown, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.Down)));
             list.Add(new Keybinding(KeybindingAction.ClosePane, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.W)));
+            list.Add(new Keybinding(KeybindingAction.ToggleTabBarOrientation, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.B)));
 
             // OpenSettings, NewWindow, CloseWindow: handled by the macOS
             // native menu / OS, so no chord defaults here — avoids
@@ -127,6 +128,7 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.FocusPaneUp, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.Up)));
             list.Add(new Keybinding(KeybindingAction.FocusPaneDown, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.Down)));
             list.Add(new Keybinding(KeybindingAction.ClosePane, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.W)));
+            list.Add(new Keybinding(KeybindingAction.ToggleTabBarOrientation, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.B)));
         }
 
         return list;
@@ -172,6 +174,7 @@ public sealed class KeybindingSet
         KeybindingAction.FocusPaneUp => "Focus pane up",
         KeybindingAction.FocusPaneDown => "Focus pane down",
         KeybindingAction.ClosePane => "Close pane",
+        KeybindingAction.ToggleTabBarOrientation => "Toggle tab bar orientation",
         _ => action.ToString(),
     };
 

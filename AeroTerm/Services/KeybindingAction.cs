@@ -110,4 +110,7 @@ public enum KeybindingAction
 
     /// <summary>Close the active pane (falls back to closing the tab when it is the last pane).</summary>
     ClosePane,
+
+    /// <summary>Toggle the tab-strip orientation between horizontal and vertical.</summary>
+    ToggleTabBarOrientation,
 }

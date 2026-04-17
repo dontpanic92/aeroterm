@@ -185,6 +185,23 @@
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
             </StackPanel>
         </GroupBox>
+        <!-- Tab Bar -->
+        <GroupBox Header="Tab Bar" Padding="8,8">
+            <StackPanel Spacing="5">
+                <StackPanel dialogs:SettingsSearch.Label="Tab bar orientation"
+                            Orientation="Horizontal" Spacing="8">
+                    <TextBlock Name="TabBarOrientationLabel"
+                               Text="Tab bar orientation" VerticalAlignment="Center" />
+                    <ComboBox ItemsSource="{Binding TabBarOrientations}"
+                              AutomationProperties.LabeledBy="{Binding #TabBarOrientationLabel}"
+                              SelectedItem="{Binding TabBarOrientation, Mode=TwoWay}"
+                              Width="160" HorizontalAlignment="Left" />
+                </StackPanel>
+                <TextBlock Text="Horizontal renders tabs as a strip above the terminal. Vertical renders them as a narrow rail on the left side."
+                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
+            </StackPanel>
+        </GroupBox>
+
         <!-- General: settings that don't have a dedicated page yet. -->
         <GroupBox Header="General" Padding="8,8">
             <StackPanel Spacing="5">

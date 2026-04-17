@@ -36,6 +36,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private int scrollbackLines;
     private bool confirmOnClose;
     private bool middleClickPastes;
+    private TabBarOrientation tabBarOrientation;
     private bool quakeModeEnabled;
     private string quakeHotkey = string.Empty;
 
@@ -66,6 +67,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         this.scrollbackLines = settings.ScrollbackLines;
         this.confirmOnClose = settings.ConfirmOnClose;
         this.middleClickPastes = settings.MiddleClickPastes;
+        this.tabBarOrientation = settings.TabBarOrientation;
         this.quakeModeEnabled = settings.QuakeModeEnabled;
         this.quakeHotkey = settings.QuakeHotkey;
 
@@ -400,6 +402,34 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             if (this.SetField(ref this.middleClickPastes, value))
             {
                 this.settings.MiddleClickPastes = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the fixed list of tab-bar orientation choices surfaced in the
+    /// settings UI. Order determines the display order in the UI combo.
+    /// </summary>
+    public IReadOnlyList<TabBarOrientation> TabBarOrientations { get; } = new[]
+    {
+        TabBarOrientation.Horizontal,
+        TabBarOrientation.Vertical,
+    };
+
+    /// <summary>
+    /// Gets or sets the tab-bar orientation. Setting this writes straight
+    /// through to <see cref="AppSettings.TabBarOrientation"/>, which
+    /// raises a property change that <c>MainWindow</c> listens for to
+    /// re-dock the tab strip live.
+    /// </summary>
+    public TabBarOrientation TabBarOrientation
+    {
+        get => this.tabBarOrientation;
+        set
+        {
+            if (this.SetField(ref this.tabBarOrientation, value))
+            {
+                this.settings.TabBarOrientation = value;
             }
         }
     }

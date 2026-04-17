@@ -75,4 +75,60 @@ public class AppSettingsTests
         Assert.That(loaded, Is.Not.Null);
         Assert.That(loaded!.ConfirmOnClose, Is.True);
     }
+
+    /// <summary>
+    /// Brand-new <see cref="AppSettings"/> instances default
+    /// <see cref="AppSettings.TabBarOrientation"/> to
+    /// <see cref="TabBarOrientation.Horizontal"/> (the preserved
+    /// pre-session-28 behaviour).
+    /// </summary>
+    [Test]
+    public void TabBarOrientation_DefaultsToHorizontal()
+    {
+        var settings = new AppSettings();
+        Assert.That(settings.TabBarOrientation, Is.EqualTo(TabBarOrientation.Horizontal));
+    }
+
+    /// <summary>
+    /// <see cref="AppSettings.TabBarOrientation"/> survives a save /
+    /// reload round-trip through the source-generated JSON context for
+    /// both variants.
+    /// </summary>
+    [Test]
+    public void TabBarOrientation_RoundTripsThroughJson()
+    {
+        var ctx = AppSettingsJsonContext.Default.AppSettings;
+
+        var a = new AppSettings { TabBarOrientation = TabBarOrientation.Vertical };
+        string jsonA = JsonSerializer.Serialize(a, ctx);
+        var loadedA = JsonSerializer.Deserialize(jsonA, ctx);
+        Assert.That(loadedA, Is.Not.Null);
+        Assert.That(loadedA!.TabBarOrientation, Is.EqualTo(TabBarOrientation.Vertical));
+
+        var b = new AppSettings { TabBarOrientation = TabBarOrientation.Horizontal };
+        string jsonB = JsonSerializer.Serialize(b, ctx);
+        var loadedB = JsonSerializer.Deserialize(jsonB, ctx);
+        Assert.That(loadedB, Is.Not.Null);
+        Assert.That(loadedB!.TabBarOrientation, Is.EqualTo(TabBarOrientation.Horizontal));
+    }
+
+    /// <summary>
+    /// Legacy settings files written before
+    /// <see cref="AppSettings.TabBarOrientation"/> existed deserialize
+    /// cleanly and default the property to
+    /// <see cref="TabBarOrientation.Horizontal"/>.
+    /// </summary>
+    [Test]
+    public void TabBarOrientation_MissingFromLegacyJson_DefaultsToHorizontal()
+    {
+        const string LegacyJson =
+            "{\n" +
+            "  \"EnableBlurBehind\": true,\n" +
+            "  \"FontSize\": 11\n" +
+            "}";
+
+        var loaded = JsonSerializer.Deserialize(LegacyJson, AppSettingsJsonContext.Default.AppSettings);
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.TabBarOrientation, Is.EqualTo(TabBarOrientation.Horizontal));
+    }
 }

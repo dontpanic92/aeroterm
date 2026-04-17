@@ -51,6 +51,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private bool quakeModeEnabled;
     private string quakeHotkey = DefaultQuakeHotkey();
     private bool middleClickPastes = true;
+    private TabBarOrientation tabBarOrientation = TabBarOrientation.Horizontal;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -323,6 +324,18 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets the orientation of the tab strip. Defaults to
+    /// <see cref="TabBarOrientation.Horizontal"/> (a classic top-docked
+    /// tab bar). Setting <see cref="TabBarOrientation.Vertical"/> swaps
+    /// the strip for a narrow left-edge rail with tabs stacked vertically.
+    /// </summary>
+    public TabBarOrientation TabBarOrientation
+    {
+        get => this.tabBarOrientation;
+        set => this.SetField(ref this.tabBarOrientation, value);
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
@@ -375,6 +388,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.QuakeModeEnabled = fresh.QuakeModeEnabled;
         this.QuakeHotkey = fresh.QuakeHotkey;
         this.MiddleClickPastes = fresh.MiddleClickPastes;
+        this.TabBarOrientation = fresh.TabBarOrientation;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }

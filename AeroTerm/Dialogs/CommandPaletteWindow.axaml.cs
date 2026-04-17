@@ -441,5 +441,9 @@ internal partial class CommandPaletteWindow : Window
         public void CloseActivePane()
         {
         }
+
+        public void ToggleTabBarOrientation()
+        {
+        }
     }
 }

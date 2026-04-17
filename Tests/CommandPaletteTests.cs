@@ -228,6 +228,8 @@ public class CommandPaletteTests
     {
         public AppSettings FakeSettings { get; } = new AppSettings();
 
+        public int ToggleTabBarOrientationCalls { get; private set; }
+
         public List<string> TabTitlesList { get; set; } = new List<string>();
 
         public int NewTabCalls { get; private set; }
@@ -328,6 +330,11 @@ public class CommandPaletteTests
 
         public void CloseActivePane()
         {
+        }
+
+        public void ToggleTabBarOrientation()
+        {
+            this.ToggleTabBarOrientationCalls++;
         }
     }
 }

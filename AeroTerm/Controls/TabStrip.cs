@@ -43,6 +43,12 @@ public sealed class TabStrip : UserControl
 
     private const double DragStartThreshold = 5.0;
 
+    /// <summary>
+    /// Horizontal rail width in vertical-orientation mode. Narrow enough
+    /// to feel like a rail, wide enough to show a sensible title slice.
+    /// </summary>
+    private const double VerticalRailWidth = 180;
+
     private static readonly IBrush ActiveTabBrush = Brushes.Transparent;
     private static readonly IBrush InactiveTabBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x2A, 0x2A, 0x2E));
     private static readonly IBrush InactiveHoverBrush = new SolidColorBrush(Color.FromArgb(0x60, 0x40, 0x40, 0x48));
@@ -50,23 +56,25 @@ public sealed class TabStrip : UserControl
     private static readonly IBrush MutedForeground = new SolidColorBrush(Color.FromArgb(0x90, 0xFF, 0xFF, 0xFF));
     private static readonly IBrush DividerBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
     private static readonly IBrush CloseHoverBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
+    private static readonly IBrush ActiveAccentBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF));
 
     private readonly StackPanel tabsPanel;
     private readonly SplitButton newTabButton;
     private readonly MenuFlyout profileFlyout;
     private readonly Dictionary<TabSession, TabHeader> headers = new();
     private readonly Rectangle dropIndicator;
+    private readonly DockPanel rootDock;
     private TabView? tabView;
     private IReadOnlyList<Profile> profiles = new List<Profile>();
     private TabGroupStore? groupStore;
     private DragState? drag;
+    private Orientation orientation = Orientation.Horizontal;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TabStrip"/> class.
     /// </summary>
     public TabStrip()
     {
-        this.Height = 28;
         this.Focusable = false;
         this.tabsPanel = new StackPanel
         {
@@ -100,23 +108,22 @@ public sealed class TabStrip : UserControl
         {
             Width = 3,
             Margin = new Thickness(1, 4, 1, 4),
-            Fill = new SolidColorBrush(Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF)),
+            Fill = ActiveAccentBrush,
             IsVisible = false,
             IsHitTestVisible = false,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
 
-        var rootDock = new DockPanel
+        this.rootDock = new DockPanel
         {
             LastChildFill = false,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
-        DockPanel.SetDock(this.tabsPanel, Dock.Left);
-        DockPanel.SetDock(this.newTabButton, Dock.Left);
-        rootDock.Children.Add(this.tabsPanel);
-        rootDock.Children.Add(this.newTabButton);
+        this.rootDock.Children.Add(this.tabsPanel);
+        this.rootDock.Children.Add(this.newTabButton);
 
-        this.Content = rootDock;
+        this.Content = this.rootDock;
+        this.ApplyOrientation();
 
         // Drag handling — bubble so TabHeader still activates on press,
         // then we see the event and track movement for potential drag.
@@ -258,6 +265,37 @@ public sealed class TabStrip : UserControl
         }
     }
 
+    /// <summary>
+    /// Gets or sets the orientation of the tab strip. When set to
+    /// <see cref="Avalonia.Layout.Orientation.Horizontal"/> (default) the
+    /// strip renders as a classic left-to-right band; when set to
+    /// <see cref="Avalonia.Layout.Orientation.Vertical"/> it becomes a
+    /// narrow rail with tabs stacked top-to-bottom, the new-tab button at
+    /// the top, and the active-tab accent moved to the leading edge.
+    /// Setting this rebuilds the internal layout and all tab headers in
+    /// place (the <see cref="TabView"/> binding is preserved).
+    /// </summary>
+    public Orientation Orientation
+    {
+        get => this.orientation;
+        set
+        {
+            if (this.orientation == value)
+            {
+                return;
+            }
+
+            this.orientation = value;
+            this.ApplyOrientation();
+            foreach (var header in this.headers.Values)
+            {
+                header.ApplyOrientation();
+            }
+
+            this.UpdateStates();
+        }
+    }
+
     private static TabHeader? FindHeaderFromSource(object? source)
     {
         var visual = source as Visual;
@@ -272,6 +310,74 @@ public sealed class TabStrip : UserControl
         }
 
         return null;
+    }
+
+    private void ApplyOrientation()
+    {
+        bool vertical = this.orientation == Orientation.Vertical;
+
+        if (vertical)
+        {
+            this.Width = VerticalRailWidth;
+            this.Height = double.NaN;
+            this.tabsPanel.Orientation = Orientation.Vertical;
+            DockPanel.SetDock(this.tabsPanel, Dock.Top);
+            DockPanel.SetDock(this.newTabButton, Dock.Top);
+            this.newTabButton.Width = VerticalRailWidth - 8;
+            this.newTabButton.Height = 28;
+            this.newTabButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+
+            // Docks are applied in child order, so we ensure newTabButton
+            // sits above tabsPanel in the rail by making it the first child.
+            this.EnsureNewTabButtonFirst();
+
+            this.dropIndicator.Width = double.NaN;
+            this.dropIndicator.Height = 3;
+            this.dropIndicator.Margin = new Thickness(4, 1, 4, 1);
+            this.dropIndicator.HorizontalAlignment = HorizontalAlignment.Stretch;
+            this.dropIndicator.VerticalAlignment = VerticalAlignment.Top;
+        }
+        else
+        {
+            this.Width = double.NaN;
+            this.Height = 28;
+            this.tabsPanel.Orientation = Orientation.Horizontal;
+            DockPanel.SetDock(this.tabsPanel, Dock.Left);
+            DockPanel.SetDock(this.newTabButton, Dock.Left);
+            this.newTabButton.Width = 48;
+            this.newTabButton.Height = 28;
+            this.newTabButton.HorizontalAlignment = HorizontalAlignment.Left;
+
+            this.EnsureTabsPanelFirst();
+
+            this.dropIndicator.Width = 3;
+            this.dropIndicator.Height = double.NaN;
+            this.dropIndicator.Margin = new Thickness(1, 4, 1, 4);
+            this.dropIndicator.HorizontalAlignment = HorizontalAlignment.Left;
+            this.dropIndicator.VerticalAlignment = VerticalAlignment.Stretch;
+        }
+    }
+
+    private void EnsureTabsPanelFirst()
+    {
+        int tabsIdx = this.rootDock.Children.IndexOf(this.tabsPanel);
+        int btnIdx = this.rootDock.Children.IndexOf(this.newTabButton);
+        if (tabsIdx > btnIdx)
+        {
+            this.rootDock.Children.Remove(this.tabsPanel);
+            this.rootDock.Children.Insert(0, this.tabsPanel);
+        }
+    }
+
+    private void EnsureNewTabButtonFirst()
+    {
+        int tabsIdx = this.rootDock.Children.IndexOf(this.tabsPanel);
+        int btnIdx = this.rootDock.Children.IndexOf(this.newTabButton);
+        if (btnIdx > tabsIdx)
+        {
+            this.rootDock.Children.Remove(this.newTabButton);
+            this.rootDock.Children.Insert(0, this.newTabButton);
+        }
     }
 
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -444,7 +550,7 @@ public sealed class TabStrip : UserControl
             return;
         }
 
-        int to = this.ComputeDropIndex(strippt.X);
+        int to = this.ComputeDropIndex(strippt);
 
         // StackPanel insert index is "before item N"; when we remove the
         // source first, everything to its right shifts down by one, so we
@@ -484,9 +590,12 @@ public sealed class TabStrip : UserControl
         return !bounds.Contains(winPt);
     }
 
-    private int ComputeDropIndex(double stripX)
+    private int ComputeDropIndex(Point stripPoint)
     {
-        double panelX = stripX - this.tabsPanel.Bounds.X;
+        bool vertical = this.orientation == Orientation.Vertical;
+        double panelCoord = vertical
+            ? stripPoint.Y - this.tabsPanel.Bounds.Y
+            : stripPoint.X - this.tabsPanel.Bounds.X;
         int headerCount = 0;
         for (int i = 0; i < this.tabsPanel.Children.Count; i++)
         {
@@ -497,7 +606,8 @@ public sealed class TabStrip : UserControl
             }
 
             var b = child.Bounds;
-            if (panelX < b.X + (b.Width / 2.0))
+            double mid = vertical ? b.Y + (b.Height / 2.0) : b.X + (b.Width / 2.0);
+            if (panelCoord < mid)
             {
                 return headerCount;
             }
@@ -516,7 +626,7 @@ public sealed class TabStrip : UserControl
             return;
         }
 
-        int target = this.ComputeDropIndex(stripPoint.X);
+        int target = this.ComputeDropIndex(stripPoint);
         this.PositionDropIndicator(target);
         this.dropIndicator.IsVisible = true;
     }
@@ -634,6 +744,8 @@ public sealed class TabStrip : UserControl
         private readonly Button closeButton;
         private readonly Rectangle divider;
         private readonly Rectangle groupPill;
+        private readonly Rectangle activeIndicator;
+        private readonly Grid layoutGrid;
         private bool isActive;
         private bool hasMultipleTabs;
 
@@ -641,9 +753,6 @@ public sealed class TabStrip : UserControl
         {
             this.tab = tab;
             this.owner = owner;
-            this.Width = 160;
-            this.Height = 28;
-            this.CornerRadius = new CornerRadius(6, 6, 0, 0);
             this.Background = InactiveTabBrush;
             this.Transitions = new Transitions
             {
@@ -655,12 +764,26 @@ public sealed class TabStrip : UserControl
             };
             this.Cursor = new Cursor(StandardCursorType.Hand);
 
-            var grid = new Grid
+            this.layoutGrid = new Grid
             {
-                ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"),
+                ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"),
                 RowDefinitions = new RowDefinitions("Auto,*"),
                 VerticalAlignment = VerticalAlignment.Stretch,
             };
+
+            // Active-tab accent bar. Position and geometry depend on the
+            // owning strip's orientation; ApplyOrientation() re-anchors it.
+            this.activeIndicator = new Rectangle
+            {
+                Fill = ActiveAccentBrush,
+                IsHitTestVisible = false,
+                IsVisible = false,
+            };
+            Grid.SetRow(this.activeIndicator, 0);
+            Grid.SetRowSpan(this.activeIndicator, 2);
+            Grid.SetColumn(this.activeIndicator, 0);
+            Grid.SetColumnSpan(this.activeIndicator, 4);
+            this.layoutGrid.Children.Add(this.activeIndicator);
 
             this.groupPill = new Rectangle
             {
@@ -675,8 +798,8 @@ public sealed class TabStrip : UserControl
             };
             Grid.SetRow(this.groupPill, 0);
             Grid.SetColumn(this.groupPill, 0);
-            Grid.SetColumnSpan(this.groupPill, 3);
-            grid.Children.Add(this.groupPill);
+            Grid.SetColumnSpan(this.groupPill, 4);
+            this.layoutGrid.Children.Add(this.groupPill);
 
             this.titleBlock = new TextBlock
             {
@@ -688,8 +811,8 @@ public sealed class TabStrip : UserControl
                 Text = tab.Title,
             };
             Grid.SetRow(this.titleBlock, 1);
-            Grid.SetColumn(this.titleBlock, 0);
-            grid.Children.Add(this.titleBlock);
+            Grid.SetColumn(this.titleBlock, 1);
+            this.layoutGrid.Children.Add(this.titleBlock);
 
             this.closeButton = new Button
             {
@@ -718,8 +841,8 @@ public sealed class TabStrip : UserControl
                 this.CloseRequested?.Invoke(this.tab);
             };
             Grid.SetRow(this.closeButton, 1);
-            Grid.SetColumn(this.closeButton, 1);
-            grid.Children.Add(this.closeButton);
+            Grid.SetColumn(this.closeButton, 2);
+            this.layoutGrid.Children.Add(this.closeButton);
 
             this.divider = new Rectangle
             {
@@ -730,10 +853,11 @@ public sealed class TabStrip : UserControl
                 IsVisible = false,
             };
             Grid.SetRow(this.divider, 1);
-            Grid.SetColumn(this.divider, 2);
-            grid.Children.Add(this.divider);
+            Grid.SetColumn(this.divider, 3);
+            this.layoutGrid.Children.Add(this.divider);
 
-            this.Child = grid;
+            this.Child = this.layoutGrid;
+            this.ApplyOrientation();
 
             AutomationProperties.SetName(this, tab.Title);
 
@@ -773,8 +897,66 @@ public sealed class TabStrip : UserControl
             this.isActive = active;
             this.hasMultipleTabs = tabCount > 1;
             this.Background = active ? ActiveTabBrush : InactiveTabBrush;
-            this.divider.IsVisible = active && this.hasMultipleTabs;
+            this.divider.IsVisible = active && this.hasMultipleTabs && this.owner.orientation == Orientation.Horizontal;
             this.closeButton.IsVisible = this.hasMultipleTabs && (active || this.IsPointerOver);
+            this.activeIndicator.IsVisible = active;
+        }
+
+        /// <summary>
+        /// Applies the current owner <see cref="TabStrip.Orientation"/>
+        /// to this header: swaps size / corner-radius, repositions the
+        /// group pill + active accent indicator, and refreshes the
+        /// divider visibility rule. Called from the ctor and whenever
+        /// the owning strip's orientation changes.
+        /// </summary>
+        public void ApplyOrientation()
+        {
+            bool vertical = this.owner.orientation == Orientation.Vertical;
+            if (vertical)
+            {
+                this.Width = double.NaN;
+                this.Height = 40;
+                this.HorizontalAlignment = HorizontalAlignment.Stretch;
+                this.CornerRadius = new CornerRadius(0, 6, 6, 0);
+                this.Margin = new Thickness(0, 1, 0, 1);
+
+                // Group pill — keep it as a short coloured strip at the
+                // top of the header content so the same visual idea
+                // applies, but anchored above the title cell.
+                this.groupPill.HorizontalAlignment = HorizontalAlignment.Stretch;
+                this.groupPill.VerticalAlignment = VerticalAlignment.Top;
+                this.groupPill.Height = 3;
+                this.groupPill.Width = double.NaN;
+                this.groupPill.Margin = new Thickness(10, 2, 10, 0);
+
+                // Active accent: 3px left-edge bar, full height.
+                this.activeIndicator.HorizontalAlignment = HorizontalAlignment.Left;
+                this.activeIndicator.VerticalAlignment = VerticalAlignment.Stretch;
+                this.activeIndicator.Width = 3;
+                this.activeIndicator.Height = double.NaN;
+                this.activeIndicator.Margin = new Thickness(0, 4, 0, 4);
+            }
+            else
+            {
+                this.Width = 160;
+                this.Height = 28;
+                this.HorizontalAlignment = HorizontalAlignment.Left;
+                this.CornerRadius = new CornerRadius(6, 6, 0, 0);
+                this.Margin = new Thickness(0);
+
+                this.groupPill.HorizontalAlignment = HorizontalAlignment.Stretch;
+                this.groupPill.VerticalAlignment = VerticalAlignment.Top;
+                this.groupPill.Height = 3;
+                this.groupPill.Width = double.NaN;
+                this.groupPill.Margin = new Thickness(6, 0, 6, 0);
+
+                // Active accent: 2px bottom bar, full width.
+                this.activeIndicator.HorizontalAlignment = HorizontalAlignment.Stretch;
+                this.activeIndicator.VerticalAlignment = VerticalAlignment.Bottom;
+                this.activeIndicator.Width = double.NaN;
+                this.activeIndicator.Height = 2;
+                this.activeIndicator.Margin = new Thickness(6, 0, 6, 0);
+            }
         }
 
         /// <summary>

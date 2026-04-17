@@ -350,6 +350,17 @@ public static class PaletteCommandSource
             }));
 
         list.Add(new PaletteCommand(
+            Id: "window.toggle-tab-bar-orientation",
+            Title: "Toggle tab bar orientation",
+            Subtitle: "Switch between a horizontal tab strip and a vertical left rail.",
+            Category: "Window",
+            Execute: () =>
+            {
+                host.ToggleTabBarOrientation();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
             Id: "keybindings.reload",
             Title: "Reload keybindings",
             Subtitle: "Re-read keybindings.json from disk.",

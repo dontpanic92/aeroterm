@@ -94,6 +94,7 @@ public partial class MainWindow : Window
         this.tabStrip.GroupStore = App.TabGroupStore;
         App.ProfilesChanged += this.OnProfilesChanged;
         this.tabStripHost.Child = this.tabStrip;
+        this.ApplyTabBarOrientation();
         this.tabView.Tabs.CollectionChanged += this.OnTabsCollectionChanged;
 
         this.effectsService.BackgroundBrushChanged += this.OnBackgroundBrushChanged;
@@ -306,6 +307,12 @@ public partial class MainWindow : Window
         if (resolved?.Action == KeybindingAction.ClosePane)
         {
             this.CloseActivePane();
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.ToggleTabBarOrientation)
+        {
+            this.ToggleTabBarOrientation();
             return true;
         }
 
@@ -956,6 +963,24 @@ public partial class MainWindow : Window
         {
             Dispatcher.UIThread.Post(() => this.UpdateTitleBarForeground(this.settings.ForegroundColor));
         }
+        else if (e.PropertyName == nameof(AppSettings.TabBarOrientation))
+        {
+            Dispatcher.UIThread.Post(this.ApplyTabBarOrientation);
+        }
+    }
+
+    private void ToggleTabBarOrientation()
+    {
+        this.settings.TabBarOrientation = this.settings.TabBarOrientation == TabBarOrientation.Vertical
+            ? TabBarOrientation.Horizontal
+            : TabBarOrientation.Vertical;
+    }
+
+    private void ApplyTabBarOrientation()
+    {
+        bool vertical = this.settings.TabBarOrientation == TabBarOrientation.Vertical;
+        this.tabStrip.Orientation = vertical ? Avalonia.Layout.Orientation.Vertical : Avalonia.Layout.Orientation.Horizontal;
+        DockPanel.SetDock(this.tabStripHost, vertical ? Dock.Left : Dock.Top);
     }
 
     private void UpdateTitleBarForeground(int rgb)

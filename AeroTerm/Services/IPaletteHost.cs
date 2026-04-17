@@ -126,4 +126,11 @@ internal interface IPaletteHost
 
     /// <summary>Closes the active pane (falls back to tab close when it was the last pane).</summary>
     void CloseActivePane();
+
+    /// <summary>
+    /// Flips the tab-strip orientation between horizontal (top-docked)
+    /// and vertical (left-rail) modes. Persists via
+    /// <see cref="AppSettings.TabBarOrientation"/>.
+    /// </summary>
+    void ToggleTabBarOrientation();
 }

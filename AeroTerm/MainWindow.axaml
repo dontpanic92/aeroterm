@@ -142,10 +142,15 @@
                     Click="CloseButton_Click" />
         </Grid>
 
-        <!-- Tab Strip (visible when more than one tab) -->
-        <Border DockPanel.Dock="Top" Name="TabStripHost" Background="Transparent" IsVisible="False" />
-
-        <!-- Terminal Content -->
-        <Border Name="TerminalBorder" Background="Transparent" />
+        <!--
+            Content area. A nested DockPanel hosts the tab strip (which docks
+            either Top or Left based on AppSettings.TabBarOrientation) and
+            the terminal border, which fills the remainder. This lets us flip
+            the tab rail at runtime without touching the title bar chrome.
+        -->
+        <DockPanel Name="ContentDock" LastChildFill="True">
+            <Border Name="TabStripHost" Background="Transparent" IsVisible="False" />
+            <Border Name="TerminalBorder" Background="Transparent" />
+        </DockPanel>
     </DockPanel>
 </Window>

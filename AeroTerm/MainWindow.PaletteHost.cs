@@ -158,4 +158,7 @@ public partial class MainWindow : IPaletteHost
 
     /// <inheritdoc />
     void IPaletteHost.CloseActivePane() => this.CloseActivePane();
+
+    /// <inheritdoc />
+    void IPaletteHost.ToggleTabBarOrientation() => this.ToggleTabBarOrientation();
 }
