@@ -46,6 +46,7 @@ public class TerminalControl : Control, IDisposable
     private int redrawQueued;
     private int lastPtyCols;
     private int lastPtyRows;
+    private long synchronizedOutputSinceTicks;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -496,6 +497,27 @@ public class TerminalControl : Control, IDisposable
                 this.inputHandler.ApplicationCursorKeys = this.buffer.ApplicationCursorKeys;
                 this.inputHandler.BracketedPasteEnabled = this.buffer.BracketedPasteEnabled;
                 this.inputHandler.MouseTrackingMode = this.buffer.MouseTrackingMode;
+
+                // DECSET 2026 — synchronized output. Defer repaints while enabled
+                // so the app can stage a full frame atomically. A 150 ms safety
+                // timer mirrors the de-facto industry default (kitty / WezTerm)
+                // and guards against a runaway app that never disables the mode.
+                if (this.buffer.SynchronizedOutput)
+                {
+                    if (this.synchronizedOutputSinceTicks == 0)
+                    {
+                        this.synchronizedOutputSinceTicks = Environment.TickCount64;
+                    }
+
+                    if (Environment.TickCount64 - this.synchronizedOutputSinceTicks < 150)
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    this.synchronizedOutputSinceTicks = 0;
+                }
 
                 // Queue a redraw on the UI thread, coalescing rapid updates.
                 if (Interlocked.Exchange(ref this.redrawQueued, 1) == 0)
