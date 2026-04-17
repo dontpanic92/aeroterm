@@ -5,6 +5,7 @@
 
 namespace AeroTerm.ViewModels;
 
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -30,6 +31,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private int selectedFontIndex = -1;
     private ColorScheme selectedColorScheme;
     private BellAction bellAction;
+    private int scrollbackLines;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AppearancePageViewModel"/> class.
@@ -55,6 +57,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             ?? ColorSchemePresets.Default;
 
         this.bellAction = settings.BellAction;
+        this.scrollbackLines = settings.ScrollbackLines;
     }
 
     /// <inheritdoc/>
@@ -76,6 +79,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         "Font Priority",
         "Color Scheme",
         "Bell",
+        "Scrollback lines",
     };
 
     /// <summary>
@@ -282,6 +286,23 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             if (this.SetField(ref this.bellAction, value))
             {
                 this.settings.BellAction = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the number of lines retained in the terminal's scrollback
+    /// ring. Range is <c>0..100000</c>; <c>0</c> disables scrollback.
+    /// </summary>
+    public int ScrollbackLines
+    {
+        get => this.scrollbackLines;
+        set
+        {
+            int clamped = Math.Clamp(value, 0, 100_000);
+            if (this.SetField(ref this.scrollbackLines, clamped))
+            {
+                this.settings.ScrollbackLines = clamped;
             }
         }
     }

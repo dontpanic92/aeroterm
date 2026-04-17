@@ -271,6 +271,252 @@ public class TerminalBufferTests
         Assert.That(buffer.PendingWrap, Is.False);
     }
 
+    /// <summary>
+    /// A fresh buffer should have no scrollback retained.
+    /// </summary>
+    [Test]
+    public void Scrollback_IsEmpty_OnConstruction()
+    {
+        var buffer = new TerminalBuffer(4, 3);
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(0));
+        Assert.That(buffer.ScrollbackLimit, Is.EqualTo(TerminalBuffer.DefaultScrollbackLimit));
+    }
+
+    /// <summary>
+    /// A line-feed that scrolls the full region should capture the evicted
+    /// top row into the scrollback ring.
+    /// </summary>
+    [Test]
+    public void Scrollback_LineFeedAtBottom_CapturesTopRow()
+    {
+        var buffer = new TerminalBuffer(3, 2);
+        FillRow(buffer, 0, 'A');
+        buffer.SetCursorPosition(1, 0);
+        buffer.PutChar('B');
+
+        // Cursor at bottom row; LineFeed scrolls row 0 off the top.
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(1));
+        var row = buffer.GetScrollbackLine(0);
+        Assert.That(row.Length, Is.EqualTo(3));
+        Assert.That(row[0].Character, Is.EqualTo("A"));
+        Assert.That(row[1].Character, Is.EqualTo("A"));
+        Assert.That(row[2].Character, Is.EqualTo("A"));
+    }
+
+    /// <summary>
+    /// An explicit multi-line <see cref="TerminalBuffer.ScrollUp"/> on the
+    /// full region captures each evicted row in chronological order.
+    /// </summary>
+    [Test]
+    public void Scrollback_ScrollUpFullRegion_CapturesLinesInOrder()
+    {
+        var buffer = new TerminalBuffer(3, 3);
+        FillRow(buffer, 0, 'A');
+        FillRow(buffer, 1, 'B');
+        FillRow(buffer, 2, 'C');
+
+        buffer.ScrollUp(2);
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(2));
+        Assert.That(buffer.GetScrollbackLine(0)[0].Character, Is.EqualTo("A"));
+        Assert.That(buffer.GetScrollbackLine(1)[0].Character, Is.EqualTo("B"));
+    }
+
+    /// <summary>
+    /// Scrolling inside a constrained DEC scroll region must not push rows
+    /// into scrollback — they belong to a pager/TUI and are internal state.
+    /// </summary>
+    [Test]
+    public void Scrollback_ScrollUpInsideRegion_DoesNotCapture()
+    {
+        var buffer = new TerminalBuffer(3, 3);
+        FillRow(buffer, 0, 'A');
+        FillRow(buffer, 1, 'B');
+        FillRow(buffer, 2, 'C');
+        buffer.SetScrollRegion(1, 2);
+
+        buffer.ScrollUp(1);
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(0));
+    }
+
+    /// <summary>
+    /// The alternate screen buffer never contributes scrollback; switching
+    /// away and back preserves the primary scrollback untouched.
+    /// </summary>
+    [Test]
+    public void Scrollback_AltBuffer_DoesNotCaptureAndPreservesPrimary()
+    {
+        var buffer = new TerminalBuffer(3, 2);
+        FillRow(buffer, 0, 'A');
+        buffer.SetCursorPosition(1, 0);
+        buffer.PutChar('B');
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+        Assume.That(buffer.ScrollbackCount, Is.EqualTo(1));
+
+        buffer.SwitchToAlternateBuffer();
+        buffer.SetCursorPosition(0, 0);
+        buffer.PutChar('X');
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+        buffer.LineFeed();
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(1));
+        Assert.That(buffer.GetScrollbackLine(0)[0].Character, Is.EqualTo("A"));
+
+        buffer.SwitchToMainBuffer();
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(1));
+        Assert.That(buffer.GetScrollbackLine(0)[0].Character, Is.EqualTo("A"));
+    }
+
+    /// <summary>
+    /// Exceeding the scrollback limit evicts the oldest lines (FIFO).
+    /// </summary>
+    [Test]
+    public void Scrollback_ExceedsLimit_EvictsOldest()
+    {
+        var buffer = new TerminalBuffer(1, 2) { ScrollbackLimit = 3 };
+        for (int i = 0; i < 5; i++)
+        {
+            buffer.SetCursorPosition(0, 0);
+            buffer.PutChar((char)('0' + i));
+            buffer.SetCursorPosition(1, 0);
+            buffer.LineFeed();
+        }
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(3));
+
+        // The five captured lines were '0','1','2','3','4'; oldest two are
+        // evicted, leaving '2','3','4' in oldest-first order.
+        Assert.That(buffer.GetScrollbackLine(0)[0].Character, Is.EqualTo("2"));
+        Assert.That(buffer.GetScrollbackLine(1)[0].Character, Is.EqualTo("3"));
+        Assert.That(buffer.GetScrollbackLine(2)[0].Character, Is.EqualTo("4"));
+    }
+
+    /// <summary>
+    /// Shrinking the limit drops the oldest lines and keeps the newest ones.
+    /// </summary>
+    [Test]
+    public void Scrollback_ShrinkLimit_KeepsNewest()
+    {
+        var buffer = new TerminalBuffer(1, 2);
+        for (int i = 0; i < 5; i++)
+        {
+            buffer.SetCursorPosition(0, 0);
+            buffer.PutChar((char)('A' + i));
+            buffer.SetCursorPosition(1, 0);
+            buffer.LineFeed();
+        }
+
+        Assume.That(buffer.ScrollbackCount, Is.EqualTo(5));
+
+        buffer.ScrollbackLimit = 2;
+
+        Assert.That(buffer.ScrollbackLimit, Is.EqualTo(2));
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(2));
+        Assert.That(buffer.GetScrollbackLine(0)[0].Character, Is.EqualTo("D"));
+        Assert.That(buffer.GetScrollbackLine(1)[0].Character, Is.EqualTo("E"));
+    }
+
+    /// <summary>
+    /// Setting the limit to 0 disables capture and clears existing entries.
+    /// </summary>
+    [Test]
+    public void Scrollback_LimitZero_DisablesAndClears()
+    {
+        var buffer = new TerminalBuffer(1, 2);
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+        Assume.That(buffer.ScrollbackCount, Is.EqualTo(1));
+
+        buffer.ScrollbackLimit = 0;
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(0));
+
+        // Further scrolls must not capture.
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(0));
+    }
+
+    /// <summary>
+    /// <see cref="TerminalBuffer.ClearScrollback"/> drops the ring but keeps capacity.
+    /// </summary>
+    [Test]
+    public void Scrollback_Clear_EmptiesRingAndKeepsLimit()
+    {
+        var buffer = new TerminalBuffer(1, 2);
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+
+        buffer.ClearScrollback();
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(0));
+        Assert.That(buffer.ScrollbackLimit, Is.EqualTo(TerminalBuffer.DefaultScrollbackLimit));
+    }
+
+    /// <summary>
+    /// <see cref="TerminalBuffer.GetScrollbackLine"/> must return a
+    /// defensive copy; mutating it must not affect future reads.
+    /// </summary>
+    [Test]
+    public void Scrollback_GetLine_ReturnsDefensiveCopy()
+    {
+        var buffer = new TerminalBuffer(2, 2);
+        FillRow(buffer, 0, 'A');
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+
+        var row = buffer.GetScrollbackLine(0);
+        row[0] = default;
+
+        var fresh = buffer.GetScrollbackLine(0);
+        Assert.That(fresh[0].Character, Is.EqualTo("A"));
+    }
+
+    /// <summary>
+    /// <see cref="TerminalBuffer.GetScrollbackLine"/> rejects negative and
+    /// out-of-range indices.
+    /// </summary>
+    /// <param name="invalid">An invalid index that should throw.</param>
+    [TestCase(-1)]
+    [TestCase(5)]
+    public void Scrollback_GetLine_ThrowsOnInvalidIndex(int invalid)
+    {
+        var buffer = new TerminalBuffer(1, 2);
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+        Assume.That(buffer.ScrollbackCount, Is.EqualTo(1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => buffer.GetScrollbackLine(invalid));
+    }
+
+    /// <summary>
+    /// Scrollback rows preserve their capture-time column count; resizing
+    /// the live grid does not mutate or reflow stored rows.
+    /// </summary>
+    [Test]
+    public void Scrollback_ResizeLiveGrid_DoesNotMutateHistory()
+    {
+        var buffer = new TerminalBuffer(3, 2);
+        FillRow(buffer, 0, 'A');
+        buffer.SetCursorPosition(1, 0);
+        buffer.LineFeed();
+        Assume.That(buffer.ScrollbackCount, Is.EqualTo(1));
+
+        buffer.Resize(8, 4);
+
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(1));
+        var row = buffer.GetScrollbackLine(0);
+        Assert.That(row.Length, Is.EqualTo(3));
+        Assert.That(row[0].Character, Is.EqualTo("A"));
+    }
+
     private static void FillRow(TerminalBuffer buffer, int row, char value)
     {
         buffer.SetCursorPosition(row, 0);

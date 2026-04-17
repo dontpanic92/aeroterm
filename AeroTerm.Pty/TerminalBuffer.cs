@@ -10,6 +10,16 @@ namespace AeroTerm.Pty;
 /// </summary>
 public class TerminalBuffer
 {
+    /// <summary>
+    /// Default maximum number of lines retained in the scrollback ring.
+    /// </summary>
+    public const int DefaultScrollbackLimit = 1000;
+
+    /// <summary>
+    /// Maximum value accepted for <see cref="ScrollbackLimit"/>.
+    /// </summary>
+    public const int MaxScrollbackLimit = 100_000;
+
     private static readonly int[] DefaultPalette = CreateDefaultPalette();
 
     private readonly object screenLock = new();
@@ -85,6 +95,15 @@ public class TerminalBuffer
 
     private Dictionary<int, int> bgHistogram = new(16);
     private bool bgHistogramValid;
+
+    // Scrollback ring: bounded circular buffer of rows evicted from the top
+    // of the primary screen during full-region scroll-ups. Lines are stored
+    // as jagged rows preserving their original column count (no reflow on
+    // resize).
+    private Cell[]?[] scrollbackRing = new Cell[]?[DefaultScrollbackLimit];
+    private int scrollbackHead;
+    private int scrollbackCount;
+    private int scrollbackLimit = DefaultScrollbackLimit;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalBuffer"/> class.
@@ -223,6 +242,89 @@ public class TerminalBuffer
     /// Gets the current cursor color used for OSC 12 queries.
     /// </summary>
     public int CursorColor => this.cursorColor >= 0 ? this.cursorColor : this.defaultFg;
+
+    /// <summary>
+    /// Gets or sets the maximum number of lines retained in the primary-buffer
+    /// scrollback ring. Clamped to the range <c>[0, <see cref="MaxScrollbackLimit"/>]</c>.
+    /// A value of 0 disables scrollback capture and clears any existing entries.
+    /// Shrinking drops the oldest lines and preserves the most recent ones.
+    /// </summary>
+    public int ScrollbackLimit
+    {
+        get
+        {
+            lock (this.screenLock)
+            {
+                return this.scrollbackLimit;
+            }
+        }
+
+        set
+        {
+            int clamped = Math.Clamp(value, 0, MaxScrollbackLimit);
+            lock (this.screenLock)
+            {
+                if (clamped == this.scrollbackLimit)
+                {
+                    return;
+                }
+
+                if (clamped == 0)
+                {
+                    this.scrollbackRing = Array.Empty<Cell[]?>();
+                    this.scrollbackHead = 0;
+                    this.scrollbackCount = 0;
+                    this.scrollbackLimit = 0;
+                    return;
+                }
+
+                // Reallocate, preserving the newest lines (drop oldest if shrinking).
+                int keep = Math.Min(this.scrollbackCount, clamped);
+                int skip = this.scrollbackCount - keep;
+                var newRing = new Cell[]?[clamped];
+                for (int i = 0; i < keep; i++)
+                {
+                    int src = (this.scrollbackHead + skip + i) % Math.Max(this.scrollbackLimit, 1);
+                    newRing[i] = this.scrollbackRing[src];
+                }
+
+                this.scrollbackRing = newRing;
+                this.scrollbackHead = 0;
+                this.scrollbackCount = keep;
+                this.scrollbackLimit = clamped;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of lines currently retained in the scrollback ring.
+    /// </summary>
+    public int ScrollbackCount
+    {
+        get
+        {
+            lock (this.screenLock)
+            {
+                return this.scrollbackCount;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the alternate screen buffer is
+    /// currently active. The alternate buffer never contributes to
+    /// scrollback.
+    /// </summary>
+    public bool IsUsingAltBuffer
+    {
+        get
+        {
+            lock (this.screenLock)
+            {
+                return this.usingAltBuffer;
+            }
+        }
+    }
 
     /// <summary>
     /// Resize the terminal buffer.
@@ -764,6 +866,46 @@ public class TerminalBuffer
             {
                 this.ClearRow(i);
             }
+        }
+    }
+
+    /// <summary>
+    /// Returns a defensive copy of a stored scrollback line. Index <c>0</c>
+    /// is the oldest retained line; <c><see cref="ScrollbackCount"/> - 1</c>
+    /// is the most recently evicted line. Rows preserve their capture-time
+    /// column count and are not reflowed when the live grid is resized.
+    /// </summary>
+    /// <param name="index">Zero-based line index (0 = oldest).</param>
+    /// <returns>A copy of the requested scrollback row.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="index"/>
+    /// is negative or greater than or equal to <see cref="ScrollbackCount"/>.</exception>
+    public Cell[] GetScrollbackLine(int index)
+    {
+        lock (this.screenLock)
+        {
+            if (index < 0 || index >= this.scrollbackCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            int slot = (this.scrollbackHead + index) % this.scrollbackLimit;
+            var source = this.scrollbackRing[slot] ?? Array.Empty<Cell>();
+            var copy = new Cell[source.Length];
+            Array.Copy(source, copy, source.Length);
+            return copy;
+        }
+    }
+
+    /// <summary>
+    /// Drops all scrollback entries. Capacity (<see cref="ScrollbackLimit"/>) is preserved.
+    /// </summary>
+    public void ClearScrollback()
+    {
+        lock (this.screenLock)
+        {
+            Array.Clear(this.scrollbackRing, 0, this.scrollbackRing.Length);
+            this.scrollbackHead = 0;
+            this.scrollbackCount = 0;
         }
     }
 
@@ -1773,6 +1915,8 @@ public class TerminalBuffer
 
     private void ScrollUpInternal(int n)
     {
+        this.CaptureScrollbackOnScrollUp(n);
+
         for (int i = this.scrollTop; i <= this.scrollBottom - n; i++)
         {
             for (int j = 0; j < this.Cols; j++)
@@ -1804,6 +1948,55 @@ public class TerminalBuffer
         for (int i = this.scrollTop; i < Math.Min(this.scrollTop + n, this.scrollBottom + 1); i++)
         {
             this.ClearRow(i);
+        }
+    }
+
+    private void CaptureScrollbackOnScrollUp(int n)
+    {
+        // Only capture when operating on the primary (main) buffer's full
+        // scroll region. Lines evicted from a constrained DEC scroll region
+        // (top > 0 or bottom < Rows-1) are pager/TUI internals and must not
+        // enter scrollback. The alt buffer never contributes scrollback.
+        if (this.usingAltBuffer
+            || this.scrollbackLimit <= 0
+            || this.scrollTop != 0
+            || this.scrollBottom != this.Rows - 1
+            || n <= 0)
+        {
+            return;
+        }
+
+        int captureCount = Math.Min(n, this.Rows);
+        for (int i = 0; i < captureCount; i++)
+        {
+            var row = new Cell[this.Cols];
+            for (int j = 0; j < this.Cols; j++)
+            {
+                row[j] = this.cells[i, j];
+            }
+
+            this.AppendScrollbackRow(row);
+        }
+    }
+
+    private void AppendScrollbackRow(Cell[] row)
+    {
+        if (this.scrollbackLimit <= 0)
+        {
+            return;
+        }
+
+        if (this.scrollbackCount < this.scrollbackLimit)
+        {
+            int tail = (this.scrollbackHead + this.scrollbackCount) % this.scrollbackLimit;
+            this.scrollbackRing[tail] = row;
+            this.scrollbackCount++;
+        }
+        else
+        {
+            // Ring is full: overwrite the oldest slot and advance head.
+            this.scrollbackRing[this.scrollbackHead] = row;
+            this.scrollbackHead = (this.scrollbackHead + 1) % this.scrollbackLimit;
         }
     }
 }

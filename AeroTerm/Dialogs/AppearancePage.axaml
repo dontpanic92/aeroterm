@@ -129,5 +129,20 @@
                           Width="200" HorizontalAlignment="Left" />
             </StackPanel>
         </GroupBox>
+
+        <!-- Scrollback -->
+        <GroupBox Header="Scrollback" Padding="8,8">
+            <StackPanel Spacing="5">
+                <StackPanel dialogs:SettingsSearch.Label="Scrollback lines"
+                            Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="Scrollback lines" VerticalAlignment="Center" />
+                    <NumericUpDown Value="{Binding ScrollbackLines, Mode=TwoWay}"
+                                   Minimum="0" Maximum="100000" Increment="100"
+                                   FormatString="F0" Width="140" />
+                </StackPanel>
+                <TextBlock Text="Number of lines retained off-screen. Set to 0 to disable scrollback."
+                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
+            </StackPanel>
+        </GroupBox>
     </StackPanel>
 </UserControl>

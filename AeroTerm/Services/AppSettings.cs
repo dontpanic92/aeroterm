@@ -46,6 +46,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private int settingsWindowWidth = 680;
     private int settingsWindowHeight = 480;
     private BellAction bellAction = BellAction.Visual;
+    private int scrollbackLines = 1000;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -258,6 +259,17 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets the number of lines retained in the terminal's
+    /// scrollback ring. Clamped to the range <c>[0, 100000]</c> on load and
+    /// set. A value of <c>0</c> disables scrollback entirely.
+    /// </summary>
+    public int ScrollbackLines
+    {
+        get => this.scrollbackLines;
+        set => this.SetField(ref this.scrollbackLines, Math.Clamp(value, 0, 100_000));
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
@@ -305,6 +317,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.SettingsWindowWidth = fresh.SettingsWindowWidth;
         this.SettingsWindowHeight = fresh.SettingsWindowHeight;
         this.BellAction = fresh.BellAction;
+        this.ScrollbackLines = fresh.ScrollbackLines;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }

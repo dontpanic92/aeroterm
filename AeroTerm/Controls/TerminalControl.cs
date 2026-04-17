@@ -57,6 +57,7 @@ public class TerminalControl : Control, IDisposable
     private bool hyperlinkModifierDown;
     private Cursor? handCursor;
     private HyperlinkRun? currentHyperlinkRun;
+    private int viewportOffset;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -144,6 +145,27 @@ public class TerminalControl : Control, IDisposable
     /// Gets or sets the alpha channel used for the default background.
     /// </summary>
     public byte BackgroundAlpha { get; set; } = byte.MaxValue;
+
+    /// <summary>
+    /// Gets or sets the scrollback capacity (lines retained when content
+    /// scrolls off the top of the primary buffer). Forwards to
+    /// <see cref="TerminalBuffer.ScrollbackLimit"/> with the same clamping
+    /// semantics. Setting a smaller value drops the oldest lines; 0 disables
+    /// scrollback entirely.
+    /// </summary>
+    public int ScrollbackLimit
+    {
+        get => this.buffer.ScrollbackLimit;
+        set
+        {
+            this.buffer.ScrollbackLimit = value;
+            if (this.viewportOffset > this.buffer.ScrollbackCount)
+            {
+                this.viewportOffset = this.buffer.ScrollbackCount;
+                this.InvalidateVisual();
+            }
+        }
+    }
 
     /// <summary>
     /// Gets the current primary font family name.
@@ -393,6 +415,7 @@ public class TerminalControl : Control, IDisposable
         base.OnTextInput(e);
         if (e.Text is not null)
         {
+            this.SnapToBottom();
             if (!this.selection.IsEmpty)
             {
                 this.selection.Clear();
@@ -433,8 +456,10 @@ public class TerminalControl : Control, IDisposable
 
         if (this.inputHandler.HandleKeyDown(e))
         {
-            // A keystroke went to the shell: the selection coordinates are
-            // about to become stale as the shell repaints.
+            // A keystroke went to the shell: snap the viewport back to the
+            // live grid (matching xterm) and invalidate the selection whose
+            // coordinates are about to become stale.
+            this.SnapToBottom();
             if (!this.selection.IsEmpty)
             {
                 this.selection.Clear();
@@ -465,39 +490,58 @@ public class TerminalControl : Control, IDisposable
 
         this.UpdateHyperlinkModifier(e.KeyModifiers);
 
+        // Pointer rows translate to live-grid rows once the viewport is
+        // scrolled into scrollback; selection and hyperlink resolution are
+        // both visible-grid-only features and must skip scrollback-only rows.
+        int gridRows = (int)this.DesiredRowCount;
+        int historyRows = Math.Min(this.viewportOffset, gridRows);
+
         // Modifier+left-click on a hyperlink opens it; short-circuit before
         // selection logic so the click doesn't begin a drag selection.
         if (isLeft && IsHyperlinkModifier(e.KeyModifiers))
         {
             var (hr, hc) = this.PixelToGridPosition(point.Position);
-            var hcells = this.buffer.GetScreen()?.Cells;
-            var run = HyperlinkBehavior.GetRunAt(hcells, hr, hc);
-            if (run is { } activatedRun)
+            int hLive = hr - historyRows;
+            if (hLive >= 0)
             {
-                HyperlinkBehavior.Activate(activatedRun.Uri);
-                e.Handled = true;
-                return;
+                var hcells = this.buffer.GetScreen()?.Cells;
+                var run = HyperlinkBehavior.GetRunAt(hcells, hLive, hc);
+                if (run is { } activatedRun)
+                {
+                    HyperlinkBehavior.Activate(activatedRun.Uri);
+                    e.Handled = true;
+                    return;
+                }
             }
         }
 
         if (isLeft && (mouseTrackingOff || shift))
         {
             var (row, col) = this.PixelToGridPosition(point.Position);
+            int liveRow = row - historyRows;
+            if (liveRow < 0)
+            {
+                // Click landed on a scrollback-only row; selection is a
+                // visible-grid-only feature today, so do nothing.
+                e.Handled = true;
+                return;
+            }
+
             var cells = this.buffer.GetScreen()?.Cells;
             if (cells is not null)
             {
                 int clicks = Math.Max(1, e.ClickCount);
                 if (clicks == 2)
                 {
-                    this.selection.BeginWord(row, col, cells);
+                    this.selection.BeginWord(liveRow, col, cells);
                 }
                 else if (clicks >= 3)
                 {
-                    this.selection.BeginLine(row, cells);
+                    this.selection.BeginLine(liveRow, cells);
                 }
                 else
                 {
-                    this.selection.BeginCharacter(row, col, cells);
+                    this.selection.BeginCharacter(liveRow, col, cells);
                 }
 
                 this.pointerDragSelecting = true;
@@ -526,10 +570,13 @@ public class TerminalControl : Control, IDisposable
 
         if (this.pointerDragSelecting)
         {
+            int gridRows = (int)this.DesiredRowCount;
+            int historyRows = Math.Min(this.viewportOffset, gridRows);
+            int liveRow = Math.Max(0, row - historyRows);
             var cells = this.buffer.GetScreen()?.Cells;
             if (cells is not null)
             {
-                this.selection.ExtendTo(row, col, cells);
+                this.selection.ExtendTo(liveRow, col, cells);
                 this.InvalidateVisual();
             }
 
@@ -571,7 +618,53 @@ public class TerminalControl : Control, IDisposable
     {
         base.OnPointerWheelChanged(e);
         var (row, col) = this.PixelToGridPosition(e.GetCurrentPoint(this).Position);
-        e.Handled = this.inputHandler.HandlePointerWheel(e, row + 1, col + 1);
+        if (this.inputHandler.HandlePointerWheel(e, row + 1, col + 1))
+        {
+            e.Handled = true;
+            return;
+        }
+
+        // Mouse tracking is off and the PTY did not consume the event —
+        // use the wheel to navigate the scrollback viewport instead.
+        // Disabled while the alt buffer is active (pagers manage their own
+        // scrolling via arrow keys / page keys).
+        if (this.buffer.IsUsingAltBuffer)
+        {
+            return;
+        }
+
+        int scrollbackCount = this.buffer.ScrollbackCount;
+        if (scrollbackCount == 0 && this.viewportOffset == 0)
+        {
+            return;
+        }
+
+        // One wheel notch moves three lines. `e.Delta.Y` is positive when
+        // scrolling up (toward older content).
+        int lines = (int)Math.Round(e.Delta.Y * 3.0);
+        if (lines == 0)
+        {
+            return;
+        }
+
+        int before = this.viewportOffset;
+        int target = Math.Clamp(this.viewportOffset + lines, 0, scrollbackCount);
+        if (target == before)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        this.viewportOffset = target;
+
+        // Entering scrollback invalidates the visible-grid-anchored selection.
+        if (!this.selection.IsEmpty)
+        {
+            this.selection.Clear();
+        }
+
+        this.InvalidateVisual();
+        e.Handled = true;
     }
 
     /// <inheritdoc />
@@ -689,8 +782,19 @@ public class TerminalControl : Control, IDisposable
         HyperlinkRun? newRun = null;
         if (this.pointerInside && this.hyperlinkModifierDown)
         {
-            var cells = this.buffer.GetScreen()?.Cells;
-            newRun = HyperlinkBehavior.GetRunAt(cells, this.pointerRow, this.pointerCol);
+            // When the viewport is scrolled into scrollback, the top rows
+            // on-screen aren't part of the live grid. Translate the pointer
+            // row back into live-grid coordinates; skip cleanly if the row
+            // is scrollback-only (hyperlink resolution over history is not
+            // supported yet).
+            int rows = (int)this.DesiredRowCount;
+            int historyRows = Math.Min(this.viewportOffset, rows);
+            int liveRow = this.pointerRow - historyRows;
+            if (liveRow >= 0)
+            {
+                var cells = this.buffer.GetScreen()?.Cells;
+                newRun = HyperlinkBehavior.GetRunAt(cells, liveRow, this.pointerCol);
+            }
         }
 
         bool runChanged = !Nullable.Equals(this.currentHyperlinkRun, newRun);
@@ -802,7 +906,28 @@ public class TerminalControl : Control, IDisposable
                     break;
                 }
 
+                int scrollbackBefore = this.buffer.ScrollbackCount;
                 this.parser.Process(buf.AsSpan(0, read));
+                int scrollbackAfter = this.buffer.ScrollbackCount;
+
+                // Anchor the viewport in history while the user is scrolled up:
+                // new lines captured into scrollback shift the visible window
+                // away from the most recent output by the same amount. When
+                // the ring was already full, `scrollbackAfter - scrollbackBefore`
+                // is zero even though older lines were evicted — in that case
+                // the on-screen content still advances by the overflow, so we
+                // account for it via a best-effort estimate using the raw
+                // capture count (newestLine - oldNewestLine).
+                if (this.viewportOffset > 0 && scrollbackAfter >= scrollbackBefore)
+                {
+                    int delta = scrollbackAfter - scrollbackBefore;
+                    if (delta > 0)
+                    {
+                        int newOffset = Math.Min(this.viewportOffset + delta, this.buffer.ScrollbackLimit);
+                        newOffset = Math.Min(newOffset, scrollbackAfter);
+                        this.viewportOffset = newOffset;
+                    }
+                }
 
                 // Clear any active selection as soon as the shell writes to
                 // the screen: with no scrollback, coordinates reference the
@@ -945,6 +1070,15 @@ public class TerminalControl : Control, IDisposable
         this.cursorState.UpdateCursorBlink(this.currentModeInfo, resetCursorBlink: true);
     }
 
+    private void SnapToBottom()
+    {
+        if (this.viewportOffset != 0)
+        {
+            this.viewportOffset = 0;
+            this.InvalidateVisual();
+        }
+    }
+
     private void RenderWithSkia(SKCanvas canvas)
     {
         if (this.isDisposed)
@@ -982,18 +1116,93 @@ public class TerminalControl : Control, IDisposable
         }
 
         bool drawCursor = this.cursorState.ShouldDrawCursor(this.currentModeInfo);
+        TerminalSelection? selectionForRender = this.selection;
+        HyperlinkRun? hyperlinkForRender = this.currentHyperlinkRun;
+        Pty.Screen renderScreen = screen;
+
+        if (this.viewportOffset > 0)
+        {
+            renderScreen = this.ComposeScrollbackScreen(screen, this.viewportOffset);
+
+            // Hide the cursor and any hyperlink overlay while viewing history;
+            // selection is visible-grid-only and is cleared on entering
+            // scrollback, so we deliberately omit the selection overlay here.
+            drawCursor = false;
+            hyperlinkForRender = null;
+            selectionForRender = null;
+        }
 
         this.renderer.Render(
             canvas,
-            screen,
+            renderScreen,
             this.textParam,
             this.currentModeInfo,
             this.EnableLigature,
             this.BackgroundAlpha,
             drawCursor,
-            this.selection,
+            selectionForRender,
             this.selectionColor,
-            this.currentHyperlinkRun);
+            hyperlinkForRender);
+    }
+
+    private Pty.Screen ComposeScrollbackScreen(Pty.Screen live, int viewportOffset)
+    {
+        int rows = live.Cells.GetLength(0);
+        int cols = live.Cells.GetLength(1);
+        int historyRows = Math.Min(viewportOffset, rows);
+        int scrollbackCount = this.buffer.ScrollbackCount;
+
+        // Oldest scrollback row shown at the top of the viewport.
+        int scrollbackStart = Math.Max(0, scrollbackCount - viewportOffset);
+
+        var composed = new Cell[rows, cols];
+        var defaultStyle = new CellStyle(live.ForegroundColor, live.BackgroundColor, 0, false, false, false, false, false);
+
+        for (int i = 0; i < historyRows; i++)
+        {
+            int sbIndex = scrollbackStart + i;
+            if (sbIndex < 0 || sbIndex >= scrollbackCount)
+            {
+                // Out-of-range (e.g. scrollback shrank mid-render) — fill blank.
+                for (int j = 0; j < cols; j++)
+                {
+                    composed[i, j].Clear(live.ForegroundColor, live.BackgroundColor, 0);
+                }
+
+                continue;
+            }
+
+            var sbRow = this.buffer.GetScrollbackLine(sbIndex);
+            int copyCols = Math.Min(cols, sbRow.Length);
+            for (int j = 0; j < copyCols; j++)
+            {
+                composed[i, j] = sbRow[j];
+            }
+
+            for (int j = copyCols; j < cols; j++)
+            {
+                composed[i, j].Set(" ", defaultStyle);
+            }
+        }
+
+        int liveRowsToShow = rows - historyRows;
+        for (int i = 0; i < liveRowsToShow; i++)
+        {
+            for (int j = 0; j < cols; j++)
+            {
+                composed[historyRows + i, j] = live.Cells[i, j];
+            }
+        }
+
+        return new Pty.Screen
+        {
+            Cells = composed,
+            CursorPosition = live.CursorPosition,
+            ForegroundColor = live.ForegroundColor,
+            BackgroundColor = live.BackgroundColor,
+            AllDirty = true,
+            DirtyRows = null,
+        };
     }
 
     private void RebuildFontChain(List<string> fontNames)

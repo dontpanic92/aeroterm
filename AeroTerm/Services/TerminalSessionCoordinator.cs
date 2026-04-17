@@ -84,6 +84,7 @@ internal sealed class TerminalSessionCoordinator
 
         this.terminalControl = new TerminalControl();
         this.terminalControl.EnableLigature = this.settings.EnableLigature;
+        this.terminalControl.ScrollbackLimit = this.settings.ScrollbackLines;
         this.ApplyFontSettings();
 
         var scheme = ColorSchemePresets.FindByName(this.settings.ColorSchemeName) ?? ColorSchemePresets.Default;
@@ -117,6 +118,17 @@ internal sealed class TerminalSessionCoordinator
                     {
                         this.terminalControl.EnableLigature = this.settings.EnableLigature;
                         this.terminalControl.InvalidateVisual();
+                    }
+                });
+            }
+
+            if (e.PropertyName is nameof(AppSettings.ScrollbackLines))
+            {
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (this.terminalControl is not null)
+                    {
+                        this.terminalControl.ScrollbackLimit = this.settings.ScrollbackLines;
                     }
                 });
             }
