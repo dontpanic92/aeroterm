@@ -7,6 +7,8 @@ namespace AeroTerm;
 
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using AeroTerm.Controls;
 using AeroTerm.Services;
 using AeroTerm.WindowEffects;
 using Avalonia;
@@ -19,6 +21,23 @@ using Avalonia.Markup.Xaml;
 /// </summary>
 public class App : Application
 {
+    /// <summary>
+    /// Gets or sets a test-only seam. When set, <see cref="MainWindow"/>
+    /// uses this factory to construct tab content instead of spawning a
+    /// real PTY-backed <see cref="Controls.TabSession"/>. Leave <c>null</c>
+    /// in production.
+    /// </summary>
+    internal static Func<AppSettings, ITabSessionContent>? TestTabContentFactory { get; set; }
+
+    /// <summary>
+    /// Gets or sets a test-only seam. When set, <see cref="MainWindow.OnClosing"/>'s
+    /// confirm-close flow delegates to this function instead of showing the
+    /// real modal <see cref="Dialogs.ConfirmCloseDialog"/>. The returned
+    /// task should resolve to <c>true</c> when the window should proceed
+    /// with closing, or <c>false</c> to keep it open.
+    /// </summary>
+    internal static Func<MainWindow, Task<bool>>? TestConfirmCloseHandler { get; set; }
+
     /// <inheritdoc />
     public override void Initialize()
     {

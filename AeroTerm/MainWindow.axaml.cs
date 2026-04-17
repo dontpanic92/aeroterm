@@ -184,8 +184,16 @@ public partial class MainWindow : Window
         bool confirmed;
         try
         {
-            var dlg = new Dialogs.ConfirmCloseDialog(tabCount);
-            confirmed = await dlg.ShowConfirmAsync(this);
+            var testOverride = App.TestConfirmCloseHandler;
+            if (testOverride is not null)
+            {
+                confirmed = await testOverride(this);
+            }
+            else
+            {
+                var dlg = new Dialogs.ConfirmCloseDialog(tabCount);
+                confirmed = await dlg.ShowConfirmAsync(this);
+            }
         }
         catch (Exception ex)
         {
@@ -361,7 +369,10 @@ public partial class MainWindow : Window
 
     private TabSession CreateTabSession()
     {
-        var session = new TabSession(this.settings);
+        var factory = App.TestTabContentFactory;
+        var session = factory is not null
+            ? new TabSession(factory(this.settings))
+            : new TabSession(this.settings);
 
         // Bell goes to the single window-level BellService regardless of tab.
         if (session.Coordinator is { } coord)
