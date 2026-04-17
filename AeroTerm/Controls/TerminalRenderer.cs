@@ -32,6 +32,7 @@ internal sealed class TerminalRenderer : IDisposable
     private readonly StringBuilder runTextBuilder = new();
     private readonly List<TextCellSpan> runCellSpans = new();
     private readonly List<TextCellSpan> allCellSpans = new();
+    private readonly SKPaint selectionPaint = new() { IsAntialias = false, Style = SKPaintStyle.Fill };
     private SKFont textFont = new() { Subpixel = true, LinearMetrics = false };
     private bool isDisposed;
 
@@ -61,6 +62,8 @@ internal sealed class TerminalRenderer : IDisposable
     /// <param name="enableLigature">Whether ligature shaping is enabled.</param>
     /// <param name="backgroundAlpha">The alpha channel for the default background.</param>
     /// <param name="shouldDrawCursor">Whether the cursor should be drawn.</param>
+    /// <param name="selection">Optional active text selection to overlay, or <c>null</c>.</param>
+    /// <param name="selectionColor">Fill color for the selection overlay. Ignored when <paramref name="selection"/> is null or empty.</param>
     public void Render(
         SKCanvas canvas,
         Screen screen,
@@ -68,7 +71,9 @@ internal sealed class TerminalRenderer : IDisposable
         ModeInfo? modeInfo,
         bool enableLigature,
         byte backgroundAlpha,
-        bool shouldDrawCursor)
+        bool shouldDrawCursor,
+        TerminalSelection? selection = null,
+        SKColor selectionColor = default)
     {
         canvas.Clear(GetSkColor(screen.BackgroundColor, backgroundAlpha));
 
@@ -93,6 +98,30 @@ internal sealed class TerminalRenderer : IDisposable
                     this.backgroundPaint.Color = GetSkColor(color);
                     canvas.DrawRect(x, y, textParam.CharWidth, textParam.LineHeight, this.backgroundPaint);
                 }
+            }
+        }
+
+        // Paint selection overlay between backgrounds and text so glyphs stay
+        // legible atop the tint.
+        if (selection is not null && !selection.IsEmpty)
+        {
+            this.selectionPaint.Color = selectionColor;
+            var (sr, sc, er, ec) = selection.GetNormalizedRange();
+            sr = Math.Clamp(sr, 0, rows - 1);
+            er = Math.Clamp(er, 0, rows - 1);
+            for (int i = sr; i <= er; i++)
+            {
+                int startCol = i == sr ? Math.Clamp(sc, 0, cols - 1) : 0;
+                int endCol = i == er ? Math.Clamp(ec, 0, cols - 1) : cols - 1;
+                if (endCol < startCol)
+                {
+                    continue;
+                }
+
+                float x = startCol * textParam.CharWidth;
+                float y = i * textParam.LineHeight;
+                float w = (endCol - startCol + 1) * textParam.CharWidth;
+                canvas.DrawRect(x, y, w, textParam.LineHeight, this.selectionPaint);
             }
         }
 
@@ -162,6 +191,7 @@ internal sealed class TerminalRenderer : IDisposable
             this.undercurlPaint.Dispose();
             this.cursorPaint.Dispose();
             this.preeditUnderlinePaint.Dispose();
+            this.selectionPaint.Dispose();
             this.textFont.Dispose();
             this.undercurlPath.Dispose();
             this.isDisposed = true;

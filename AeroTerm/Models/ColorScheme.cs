@@ -18,4 +18,11 @@ public sealed record ColorScheme(string Name, int Foreground, int Background, in
     /// Gets the number of colors in the ANSI palette.
     /// </summary>
     public const int PaletteSize = 16;
+
+    /// <summary>
+    /// Gets the optional selection overlay color as a 24-bit RGB integer.
+    /// When <see langword="null"/> the renderer derives a tint from the
+    /// foreground color.
+    /// </summary>
+    public int? Selection { get; init; }
 }

@@ -5,6 +5,7 @@
 
 namespace AeroTerm.Controls;
 
+using System.Runtime.InteropServices;
 using System.Text;
 using AeroTerm.Pty;
 using AeroTerm.Utilities;
@@ -36,6 +37,7 @@ public class TerminalControl : Control, IDisposable
     private readonly CursorStateManager cursorState;
     private readonly TerminalDrawOperation drawOperation;
     private readonly IPtyConnectionFactory ptyFactory;
+    private readonly TerminalSelection selection = new();
 
     private TextLayoutParameters textParam;
     private IPtyConnection? ptyConnection;
@@ -47,6 +49,8 @@ public class TerminalControl : Control, IDisposable
     private int lastPtyCols;
     private int lastPtyRows;
     private long synchronizedOutputSinceTicks;
+    private bool pointerDragSelecting;
+    private SKColor selectionColor = new SKColor(0x39, 0x66, 0xCC, 0x70);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -223,6 +227,24 @@ public class TerminalControl : Control, IDisposable
         this.buffer.SetAnsiPalette(scheme.Palette);
         this.buffer.RecolorDefaults(scheme.Foreground, scheme.Background);
 
+        // Update the selection overlay color. If the scheme doesn't specify
+        // one explicitly, derive a muted translucent tint from the foreground
+        // so selections stay visible on any background.
+        if (scheme.Selection is int sel)
+        {
+            byte r = (byte)((sel >> 16) & 0xFF);
+            byte g = (byte)((sel >> 8) & 0xFF);
+            byte b = (byte)(sel & 0xFF);
+            this.selectionColor = new SKColor(r, g, b, 0x80);
+        }
+        else
+        {
+            byte fr = (byte)((scheme.Foreground >> 16) & 0xFF);
+            byte fg = (byte)((scheme.Foreground >> 8) & 0xFF);
+            byte fb = (byte)(scheme.Foreground & 0xFF);
+            this.selectionColor = new SKColor(fr, fg, fb, 0x50);
+        }
+
         // Nudge the PTY with a same-size resize to trigger SIGWINCH,
         // which causes the shell/application to redraw with new colors.
         // Palette-indexed colors in existing cells are baked as RGB at
@@ -365,6 +387,12 @@ public class TerminalControl : Control, IDisposable
         base.OnTextInput(e);
         if (e.Text is not null)
         {
+            if (!this.selection.IsEmpty)
+            {
+                this.selection.Clear();
+                this.InvalidateVisual();
+            }
+
             this.inputHandler.HandleTextInput(e.Text);
             e.Handled = true;
         }
@@ -374,8 +402,37 @@ public class TerminalControl : Control, IDisposable
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+
+        // Copy/paste hotkeys take priority over the PTY input path so they
+        // work regardless of what the shell does with Ctrl+C / Ctrl+V.
+        if (e.Key == Key.C && IsCopyModifier(e.KeyModifiers))
+        {
+            if (!this.selection.IsEmpty)
+            {
+                this.CopySelectionToClipboard();
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.V && IsPasteModifier(e.KeyModifiers))
+        {
+            this.PasteFromClipboard();
+            e.Handled = true;
+            return;
+        }
+
         if (this.inputHandler.HandleKeyDown(e))
         {
+            // A keystroke went to the shell: the selection coordinates are
+            // about to become stale as the shell repaints.
+            if (!this.selection.IsEmpty)
+            {
+                this.selection.Clear();
+                this.InvalidateVisual();
+            }
+
             e.Handled = true;
         }
     }
@@ -385,8 +442,42 @@ public class TerminalControl : Control, IDisposable
     {
         base.OnPointerPressed(e);
         this.Focus();
-        var (row, col) = this.PixelToGridPosition(e.GetCurrentPoint(this).Position);
-        e.Handled = this.inputHandler.HandlePointerPressed(e, row + 1, col + 1);
+
+        var point = e.GetCurrentPoint(this);
+        bool isLeft = point.Properties.IsLeftButtonPressed;
+        bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        bool mouseTrackingOff = this.buffer.MouseTrackingMode == MouseTrackingMode.None;
+
+        if (isLeft && (mouseTrackingOff || shift))
+        {
+            var (row, col) = this.PixelToGridPosition(point.Position);
+            var cells = this.buffer.GetScreen()?.Cells;
+            if (cells is not null)
+            {
+                int clicks = Math.Max(1, e.ClickCount);
+                if (clicks == 2)
+                {
+                    this.selection.BeginWord(row, col, cells);
+                }
+                else if (clicks >= 3)
+                {
+                    this.selection.BeginLine(row, cells);
+                }
+                else
+                {
+                    this.selection.BeginCharacter(row, col, cells);
+                }
+
+                this.pointerDragSelecting = true;
+                e.Pointer.Capture(this);
+                this.InvalidateVisual();
+                e.Handled = true;
+                return;
+            }
+        }
+
+        var (r, c) = this.PixelToGridPosition(point.Position);
+        e.Handled = this.inputHandler.HandlePointerPressed(e, r + 1, c + 1);
     }
 
     /// <inheritdoc />
@@ -394,6 +485,20 @@ public class TerminalControl : Control, IDisposable
     {
         base.OnPointerMoved(e);
         var (row, col) = this.PixelToGridPosition(e.GetCurrentPoint(this).Position);
+
+        if (this.pointerDragSelecting)
+        {
+            var cells = this.buffer.GetScreen()?.Cells;
+            if (cells is not null)
+            {
+                this.selection.ExtendTo(row, col, cells);
+                this.InvalidateVisual();
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         e.Handled = this.inputHandler.HandlePointerMoved(e, row + 1, col + 1);
     }
 
@@ -401,6 +506,24 @@ public class TerminalControl : Control, IDisposable
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+
+        if (this.pointerDragSelecting)
+        {
+            this.pointerDragSelecting = false;
+            e.Pointer.Capture(null);
+
+            // A plain click with no drag clears the selection so the next
+            // keystroke isn't preceded by a phantom range.
+            if (this.selection.IsEmpty)
+            {
+                this.selection.Clear();
+                this.InvalidateVisual();
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         var (row, col) = this.PixelToGridPosition(e.GetCurrentPoint(this).Position);
         e.Handled = this.inputHandler.HandlePointerReleased(e, row + 1, col + 1);
     }
@@ -464,6 +587,70 @@ public class TerminalControl : Control, IDisposable
         }
     }
 
+    private static bool IsCopyModifier(KeyModifiers modifiers)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return modifiers.HasFlag(KeyModifiers.Meta)
+                && !modifiers.HasFlag(KeyModifiers.Shift)
+                && !modifiers.HasFlag(KeyModifiers.Control)
+                && !modifiers.HasFlag(KeyModifiers.Alt);
+        }
+
+        return modifiers.HasFlag(KeyModifiers.Control) && modifiers.HasFlag(KeyModifiers.Shift);
+    }
+
+    private static bool IsPasteModifier(KeyModifiers modifiers) => IsCopyModifier(modifiers);
+
+    private void CopySelectionToClipboard()
+    {
+        var screen = this.buffer.GetScreen();
+        if (screen is null || this.selection.IsEmpty)
+        {
+            return;
+        }
+
+        string text = this.selection.CopyText(screen.Cells);
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(async () =>
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard is not null)
+            {
+                await clipboard.SetTextAsync(text);
+            }
+        });
+    }
+
+    private void PasteFromClipboard()
+    {
+        Dispatcher.UIThread.Post(async () =>
+        {
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard is null)
+            {
+                return;
+            }
+
+            try
+            {
+                string? text = await clipboard.TryGetTextAsync();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    this.inputHandler.HandlePaste(text);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Clipboard unavailable on some platforms in some hosting modes.
+            }
+        });
+    }
+
     private (int Row, int Col) PixelToGridPosition(Point pixel)
     {
         int row = (int)(pixel.Y / this.textParam.LineHeight);
@@ -492,6 +679,20 @@ public class TerminalControl : Control, IDisposable
                 }
 
                 this.parser.Process(buf.AsSpan(0, read));
+
+                // Clear any active selection as soon as the shell writes to
+                // the screen: with no scrollback, coordinates reference the
+                // visible grid only, and new output invalidates them.
+                if (this.selection.Mode != TerminalSelectionMode.None)
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        if (this.selection.Mode != TerminalSelectionMode.None)
+                        {
+                            this.selection.Clear();
+                        }
+                    });
+                }
 
                 // Sync terminal state to input handler.
                 this.inputHandler.ApplicationCursorKeys = this.buffer.ApplicationCursorKeys;
@@ -665,7 +866,9 @@ public class TerminalControl : Control, IDisposable
             this.currentModeInfo,
             this.EnableLigature,
             this.BackgroundAlpha,
-            drawCursor);
+            drawCursor,
+            this.selection,
+            this.selectionColor);
     }
 
     private void RebuildFontChain(List<string> fontNames)
