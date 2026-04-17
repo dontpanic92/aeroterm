@@ -51,6 +51,12 @@ public class TerminalControl : Control, IDisposable
     private long synchronizedOutputSinceTicks;
     private bool pointerDragSelecting;
     private SKColor selectionColor = new SKColor(0x39, 0x66, 0xCC, 0x70);
+    private int pointerRow = -1;
+    private int pointerCol = -1;
+    private bool pointerInside;
+    private bool hyperlinkModifierDown;
+    private Cursor? handCursor;
+    private HyperlinkRun? currentHyperlinkRun;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -403,6 +409,8 @@ public class TerminalControl : Control, IDisposable
     {
         base.OnKeyDown(e);
 
+        this.UpdateHyperlinkModifier(e.KeyModifiers);
+
         // Copy/paste hotkeys take priority over the PTY input path so they
         // work regardless of what the shell does with Ctrl+C / Ctrl+V.
         if (e.Key == Key.C && IsCopyModifier(e.KeyModifiers))
@@ -438,6 +446,13 @@ public class TerminalControl : Control, IDisposable
     }
 
     /// <inheritdoc />
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        base.OnKeyUp(e);
+        this.UpdateHyperlinkModifier(e.KeyModifiers);
+    }
+
+    /// <inheritdoc />
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
@@ -447,6 +462,23 @@ public class TerminalControl : Control, IDisposable
         bool isLeft = point.Properties.IsLeftButtonPressed;
         bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
         bool mouseTrackingOff = this.buffer.MouseTrackingMode == MouseTrackingMode.None;
+
+        this.UpdateHyperlinkModifier(e.KeyModifiers);
+
+        // Modifier+left-click on a hyperlink opens it; short-circuit before
+        // selection logic so the click doesn't begin a drag selection.
+        if (isLeft && IsHyperlinkModifier(e.KeyModifiers))
+        {
+            var (hr, hc) = this.PixelToGridPosition(point.Position);
+            var hcells = this.buffer.GetScreen()?.Cells;
+            var run = HyperlinkBehavior.GetRunAt(hcells, hr, hc);
+            if (run is { } activatedRun)
+            {
+                HyperlinkBehavior.Activate(activatedRun.Uri);
+                e.Handled = true;
+                return;
+            }
+        }
 
         if (isLeft && (mouseTrackingOff || shift))
         {
@@ -485,6 +517,12 @@ public class TerminalControl : Control, IDisposable
     {
         base.OnPointerMoved(e);
         var (row, col) = this.PixelToGridPosition(e.GetCurrentPoint(this).Position);
+
+        this.pointerInside = true;
+        this.pointerRow = row;
+        this.pointerCol = col;
+        this.UpdateHyperlinkModifier(e.KeyModifiers);
+        this.RefreshHyperlinkHover();
 
         if (this.pointerDragSelecting)
         {
@@ -537,6 +575,16 @@ public class TerminalControl : Control, IDisposable
     }
 
     /// <inheritdoc />
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        this.pointerInside = false;
+        this.pointerRow = -1;
+        this.pointerCol = -1;
+        this.RefreshHyperlinkHover();
+    }
+
+    /// <inheritdoc />
     protected override void OnGotFocus(FocusChangedEventArgs e)
     {
         base.OnGotFocus(e);
@@ -558,6 +606,11 @@ public class TerminalControl : Control, IDisposable
         }
 
         this.inputHandler.ClearPressedButton();
+        if (this.hyperlinkModifierDown)
+        {
+            this.hyperlinkModifierDown = false;
+            this.RefreshHyperlinkHover();
+        }
     }
 
     /// <summary>
@@ -601,6 +654,77 @@ public class TerminalControl : Control, IDisposable
     }
 
     private static bool IsPasteModifier(KeyModifiers modifiers) => IsCopyModifier(modifiers);
+
+    private static bool IsHyperlinkModifier(KeyModifiers modifiers)
+    {
+        // macOS: Cmd (Meta). Windows/Linux: Ctrl. Both with no Shift/Alt mixed in.
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return modifiers.HasFlag(KeyModifiers.Meta)
+                && !modifiers.HasFlag(KeyModifiers.Shift)
+                && !modifiers.HasFlag(KeyModifiers.Control)
+                && !modifiers.HasFlag(KeyModifiers.Alt);
+        }
+
+        return modifiers.HasFlag(KeyModifiers.Control)
+            && !modifiers.HasFlag(KeyModifiers.Shift)
+            && !modifiers.HasFlag(KeyModifiers.Alt)
+            && !modifiers.HasFlag(KeyModifiers.Meta);
+    }
+
+    private void UpdateHyperlinkModifier(KeyModifiers modifiers)
+    {
+        bool down = IsHyperlinkModifier(modifiers);
+        if (down == this.hyperlinkModifierDown)
+        {
+            return;
+        }
+
+        this.hyperlinkModifierDown = down;
+        this.RefreshHyperlinkHover();
+    }
+
+    private void RefreshHyperlinkHover()
+    {
+        HyperlinkRun? newRun = null;
+        if (this.pointerInside && this.hyperlinkModifierDown)
+        {
+            var cells = this.buffer.GetScreen()?.Cells;
+            newRun = HyperlinkBehavior.GetRunAt(cells, this.pointerRow, this.pointerCol);
+        }
+
+        bool runChanged = !Nullable.Equals(this.currentHyperlinkRun, newRun);
+        this.currentHyperlinkRun = newRun;
+
+        if (newRun is not null)
+        {
+            if (this.handCursor is null)
+            {
+                this.handCursor = new Cursor(StandardCursorType.Hand);
+            }
+
+            if (this.Cursor != this.handCursor)
+            {
+                this.Cursor = this.handCursor;
+            }
+        }
+        else
+        {
+            // Restore whatever the cursor manager thinks is right for the
+            // current terminal mode (usually Ibeam).
+            bool mouseEnabled = this.buffer.MouseTrackingMode != MouseTrackingMode.None;
+            var defaultCursor = this.cursorState.UpdatePointerCursor(this.currentModeInfo, mouseEnabled);
+            if (!ReferenceEquals(this.Cursor, defaultCursor))
+            {
+                this.Cursor = defaultCursor;
+            }
+        }
+
+        if (runChanged)
+        {
+            this.InvalidateVisual();
+        }
+    }
 
     private void CopySelectionToClipboard()
     {
@@ -868,7 +992,8 @@ public class TerminalControl : Control, IDisposable
             this.BackgroundAlpha,
             drawCursor,
             this.selection,
-            this.selectionColor);
+            this.selectionColor,
+            this.currentHyperlinkRun);
     }
 
     private void RebuildFontChain(List<string> fontNames)
@@ -958,6 +1083,8 @@ public class TerminalControl : Control, IDisposable
     private void DisposeCachedResources()
     {
         this.Cursor = null;
+        this.handCursor?.Dispose();
+        this.handCursor = null;
         this.cursorState.Dispose();
         this.renderer.Dispose();
         this.ligatureTextShaper.Dispose();

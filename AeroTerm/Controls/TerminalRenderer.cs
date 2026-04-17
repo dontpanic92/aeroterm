@@ -64,6 +64,7 @@ internal sealed class TerminalRenderer : IDisposable
     /// <param name="shouldDrawCursor">Whether the cursor should be drawn.</param>
     /// <param name="selection">Optional active text selection to overlay, or <c>null</c>.</param>
     /// <param name="selectionColor">Fill color for the selection overlay. Ignored when <paramref name="selection"/> is null or empty.</param>
+    /// <param name="hyperlinkRun">Optional OSC 8 hyperlink run to underline as a hover affordance, or <c>null</c>.</param>
     public void Render(
         SKCanvas canvas,
         Screen screen,
@@ -73,7 +74,8 @@ internal sealed class TerminalRenderer : IDisposable
         byte backgroundAlpha,
         bool shouldDrawCursor,
         TerminalSelection? selection = null,
-        SKColor selectionColor = default)
+        SKColor selectionColor = default,
+        HyperlinkRun? hyperlinkRun = null)
     {
         canvas.Clear(GetSkColor(screen.BackgroundColor, backgroundAlpha));
 
@@ -158,6 +160,28 @@ internal sealed class TerminalRenderer : IDisposable
                 j = cellRangeEnd;
 
                 this.DrawCellRange(canvas, cells, i, cellRangeStart, cellRangeEnd, textParam, enableLigature);
+            }
+        }
+
+        // Draw hyperlink hover underline overlay. This is purely a rendering-time
+        // affordance — we don't mutate cell style. Drawn after text so it sits on
+        // top even when the cell already has other decorations.
+        if (hyperlinkRun is { } run
+            && run.Row >= 0 && run.Row < rows
+            && run.EndCol >= run.StartCol)
+        {
+            int sc = Math.Clamp(run.StartCol, 0, cols - 1);
+            int ec = Math.Clamp(run.EndCol, 0, cols - 1);
+            if (ec >= sc)
+            {
+                int fg = cells[run.Row, sc].Reverse
+                    ? cells[run.Row, sc].BackgroundColor
+                    : cells[run.Row, sc].ForegroundColor;
+                this.underlinePaint.Color = GetSkColor(fg);
+                float ulY = ((run.Row + 1) * textParam.LineHeight) - 1;
+                float sx = sc * textParam.CharWidth;
+                float ex = (ec + 1) * textParam.CharWidth;
+                canvas.DrawLine(sx, ulY, ex, ulY, this.underlinePaint);
             }
         }
 
