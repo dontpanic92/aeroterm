@@ -35,6 +35,8 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private BellAction bellAction;
     private int scrollbackLines;
     private bool confirmOnClose;
+    private bool quakeModeEnabled;
+    private string quakeHotkey = string.Empty;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AppearancePageViewModel"/> class.
@@ -62,6 +64,8 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         this.bellAction = settings.BellAction;
         this.scrollbackLines = settings.ScrollbackLines;
         this.confirmOnClose = settings.ConfirmOnClose;
+        this.quakeModeEnabled = settings.QuakeModeEnabled;
+        this.quakeHotkey = settings.QuakeHotkey;
 
         this.FontItems.CollectionChanged += this.OnFontItemsChanged;
     }
@@ -88,6 +92,8 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         "Scrollback lines",
         "Ligature preview",
         "Confirm on close",
+        "Quake mode",
+        "Quake hotkey",
     };
 
     /// <summary>
@@ -376,6 +382,86 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             }
         }
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the Quake-mode global
+    /// hotkey is active.
+    /// </summary>
+    public bool QuakeModeEnabled
+    {
+        get => this.quakeModeEnabled;
+        set
+        {
+            if (this.SetField(ref this.quakeModeEnabled, value))
+            {
+                this.settings.QuakeModeEnabled = value;
+                this.OnPropertyChanged(nameof(this.QuakeHotkeyStatus));
+                this.OnPropertyChanged(nameof(this.QuakeHotkeyStatusBrush));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the chord string bound to the Quake hotkey.
+    /// </summary>
+    public string QuakeHotkey
+    {
+        get => this.quakeHotkey;
+        set
+        {
+            string normalized = value ?? string.Empty;
+            if (this.SetField(ref this.quakeHotkey, normalized))
+            {
+                if (KeyChordParser.TryParse(normalized, out _))
+                {
+                    this.settings.QuakeHotkey = normalized;
+                }
+
+                this.OnPropertyChanged(nameof(this.QuakeHotkeyStatus));
+                this.OnPropertyChanged(nameof(this.QuakeHotkeyStatusBrush));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets a short status string describing whether the current
+    /// <see cref="QuakeHotkey"/> string is a valid chord.
+    /// </summary>
+    public string QuakeHotkeyStatus =>
+        KeyChordParser.TryParse(this.quakeHotkey, out _) ? "✓ valid" : "✗ invalid chord";
+
+    /// <summary>
+    /// Gets the brush used to render <see cref="QuakeHotkeyStatus"/>
+    /// (green for valid, red for invalid).
+    /// </summary>
+    public IBrush QuakeHotkeyStatusBrush =>
+        KeyChordParser.TryParse(this.quakeHotkey, out _)
+            ? new SolidColorBrush(Color.FromRgb(0x2E, 0xA0, 0x43))
+            : new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
+
+    /// <summary>
+    /// Gets a platform-specific warning displayed when Quake-mode cannot
+    /// be used on the current OS / session. Empty string when the feature
+    /// is available.
+    /// </summary>
+    public string QuakePlatformWarning
+    {
+        get
+        {
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
+            {
+                return "Quake mode is not yet supported on Linux — the global hotkey backend for X11/Wayland has not shipped.";
+            }
+
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether <see cref="QuakePlatformWarning"/>
+    /// is non-empty.
+    /// </summary>
+    public bool HasQuakePlatformWarning => !string.IsNullOrEmpty(this.QuakePlatformWarning);
 
     /// <summary>
     /// Adds a font name to the priority list at the current selection index.

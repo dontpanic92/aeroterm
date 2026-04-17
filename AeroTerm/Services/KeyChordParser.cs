@@ -41,6 +41,11 @@ public static class KeyChordParser
             ["period"] = Key.OemPeriod,
             ["minus"] = Key.OemMinus,
             ["plus"] = Key.OemPlus,
+            ["oemtilde"] = Key.OemTilde,
+            ["oem3"] = Key.OemTilde,
+            ["tilde"] = Key.OemTilde,
+            ["grave"] = Key.OemTilde,
+            ["backtick"] = Key.OemTilde,
         };
 
     /// <summary>

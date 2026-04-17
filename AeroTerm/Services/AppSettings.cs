@@ -48,6 +48,8 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private BellAction bellAction = BellAction.Visual;
     private int scrollbackLines = 1000;
     private bool confirmOnClose = true;
+    private bool quakeModeEnabled;
+    private string quakeHotkey = DefaultQuakeHotkey();
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -283,6 +285,29 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the global Quake-mode
+    /// hotkey is registered. Defaults to <c>false</c> because the feature
+    /// grabs a system-wide key combination and should be opt-in.
+    /// </summary>
+    public bool QuakeModeEnabled
+    {
+        get => this.quakeModeEnabled;
+        set => this.SetField(ref this.quakeModeEnabled, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the chord (in <see cref="KeyChordParser"/> syntax)
+    /// used as the Quake-mode global hotkey. Default is <c>Ctrl+Oem3</c>
+    /// on Windows / Linux and <c>Cmd+Oem3</c> on macOS — the classic
+    /// Quake tilde key.
+    /// </summary>
+    public string QuakeHotkey
+    {
+        get => this.quakeHotkey;
+        set => this.SetField(ref this.quakeHotkey, value ?? DefaultQuakeHotkey());
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
@@ -332,6 +357,8 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.BellAction = fresh.BellAction;
         this.ScrollbackLines = fresh.ScrollbackLines;
         this.ConfirmOnClose = fresh.ConfirmOnClose;
+        this.QuakeModeEnabled = fresh.QuakeModeEnabled;
+        this.QuakeHotkey = fresh.QuakeHotkey;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }
@@ -414,6 +441,13 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private static string GetSettingsPath()
     {
         return Path.Combine(GetSettingsDirectory(), "settings.json");
+    }
+
+    private static string DefaultQuakeHotkey()
+    {
+        return System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX)
+            ? "Cmd+Oem3"
+            : "Ctrl+Oem3";
     }
 
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

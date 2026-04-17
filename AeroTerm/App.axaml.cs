@@ -28,6 +28,8 @@ public class App : Application
     private static ProfileStore? profileStore;
     private static ProfileStoreData profiles = new(new List<Profile> { ProfileStore.CreateSynthesizedDefault() }, null);
     private static PaletteMruStore? paletteMru;
+    private static QuakeModeService? quakeModeService;
+    private static IGlobalHotkeySource? globalHotkeySource;
 
     /// <summary>
     /// Raised whenever <see cref="Keybindings"/> has been reloaded from
@@ -96,6 +98,12 @@ public class App : Application
     /// Gets the current application-wide profile snapshot.
     /// </summary>
     public static ProfileStoreData Profiles => profiles;
+
+    /// <summary>
+    /// Gets the process-wide Quake-mode service. <see langword="null"/>
+    /// before <see cref="OnFrameworkInitializationCompleted"/> has run.
+    /// </summary>
+    public static QuakeModeService? QuakeMode => quakeModeService;
 
     /// <summary>
     /// Gets or sets a test-only seam. When set, <see cref="MainWindow"/>
@@ -167,6 +175,8 @@ public class App : Application
             {
                 this.SetupMacOSActivation();
             }
+
+            this.InitializeQuakeMode(desktop);
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -221,6 +231,17 @@ public class App : Application
     }
 
     /// <summary>
+    /// Replaces the process-wide global-hotkey source (tests only). Must
+    /// be set before <see cref="OnFrameworkInitializationCompleted"/>
+    /// runs to take effect for the production Quake service.
+    /// </summary>
+    /// <param name="source">The replacement source, or <see langword="null"/> to reset.</param>
+    internal static void SetGlobalHotkeySourceForTesting(IGlobalHotkeySource? source)
+    {
+        globalHotkeySource = source;
+    }
+
+    /// <summary>
     /// Handles the New Window menu item click from the macOS native app menu.
     /// </summary>
     private void OnNewWindowClicked(object? sender, EventArgs e)
@@ -259,5 +280,36 @@ public class App : Application
                 }
             };
         }
+    }
+
+    /// <summary>
+    /// Creates the Quake-mode service, registers the configured global
+    /// hotkey (if any), subscribes to setting changes, and disposes the
+    /// registration on desktop shutdown.
+    /// </summary>
+    private void InitializeQuakeMode(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        var settings = AppSettings.Default;
+        var source = globalHotkeySource ?? new DefaultGlobalHotkeySource();
+        globalHotkeySource = source;
+
+        quakeModeService = new QuakeModeService(
+            settings,
+            source,
+            windowFactory: () => new Dialogs.QuakeWindow(settings),
+            toggleAction: w => ((Dialogs.QuakeWindow)w).Toggle());
+
+        quakeModeService.ApplySettings();
+
+        settings.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AppSettings.QuakeModeEnabled)
+                || e.PropertyName == nameof(AppSettings.QuakeHotkey))
+            {
+                quakeModeService?.ApplySettings();
+            }
+        };
+
+        desktop.ShutdownRequested += (_, _) => quakeModeService?.Dispose();
     }
 }

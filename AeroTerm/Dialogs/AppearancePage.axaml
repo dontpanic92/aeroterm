@@ -70,13 +70,15 @@
                     </Grid.ColumnDefinitions>
 
                     <ListBox Grid.Column="0" ItemsSource="{Binding FontItems}"
-                             SelectedIndex="{Binding SelectedFontIndex, Mode=TwoWay}"
                              AutomationProperties.Name="Font priority list"
+                             AutomationProperties.HelpText="Drag items to reorder, or use the adjacent buttons."
+                             SelectedIndex="{Binding SelectedFontIndex, Mode=TwoWay}"
                              Height="120" Margin="0,0,5,0" />
 
                     <StackPanel Grid.Column="1" Spacing="3">
                         <Button Content="Add..." Width="76" Click="FontAdd_Click"
-                                AutomationProperties.Name="Add font" />
+                                AutomationProperties.Name="Add font"
+                                AutomationProperties.HelpText="Add a font to the priority list." />
                         <Button Content="Remove" Width="76" Click="FontRemove_Click"
                                 AutomationProperties.Name="Remove font"
                                 IsEnabled="{Binding CanRemoveFont}" />
@@ -125,8 +127,8 @@
             <StackPanel dialogs:SettingsSearch.Label="Color Scheme"
                         Spacing="8">
                 <ComboBox ItemsSource="{Binding ColorSchemes}"
-                          SelectedItem="{Binding SelectedColorScheme, Mode=TwoWay}"
                           AutomationProperties.Name="Color scheme"
+                          SelectedItem="{Binding SelectedColorScheme, Mode=TwoWay}"
                           Width="250" HorizontalAlignment="Left">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="models:ColorScheme">
@@ -162,8 +164,8 @@
                 <TextBlock Text="Action when the terminal sends BEL (Ctrl+G)"
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
                 <ComboBox ItemsSource="{Binding BellActions}"
-                          SelectedItem="{Binding BellAction, Mode=TwoWay}"
                           AutomationProperties.Name="Bell action"
+                          SelectedItem="{Binding BellAction, Mode=TwoWay}"
                           Width="200" HorizontalAlignment="Left" />
             </StackPanel>
         </GroupBox>
@@ -189,6 +191,26 @@
                 <CheckBox dialogs:SettingsSearch.Label="Confirm on close"
                           IsChecked="{Binding ConfirmOnClose, Mode=TwoWay}"
                           Content="Confirm before closing a window with multiple tabs" />
+
+                <CheckBox dialogs:SettingsSearch.Label="Quake mode"
+                          IsChecked="{Binding QuakeModeEnabled, Mode=TwoWay}"
+                          Content="Enable Quake-style dropdown terminal (global hotkey)" />
+
+                <StackPanel dialogs:SettingsSearch.Label="Quake hotkey"
+                            Orientation="Horizontal" Spacing="8" Margin="20,0,0,0"
+                            IsEnabled="{Binding QuakeModeEnabled}">
+                    <TextBlock Text="Quake hotkey" VerticalAlignment="Center" />
+                    <TextBox Text="{Binding QuakeHotkey, Mode=TwoWay}" Width="180" />
+                    <TextBlock Text="{Binding QuakeHotkeyStatus}" VerticalAlignment="Center"
+                               Foreground="{Binding QuakeHotkeyStatusBrush}" FontSize="11" />
+                </StackPanel>
+
+                <TextBlock Text="Press the hotkey from any app to toggle a dropdown terminal."
+                           FontSize="11" Foreground="Gray" Margin="20,0,0,0" TextWrapping="Wrap" />
+
+                <TextBlock Text="{Binding QuakePlatformWarning}"
+                           IsVisible="{Binding HasQuakePlatformWarning}"
+                           FontSize="11" Foreground="#CC7700" Margin="20,2,0,0" TextWrapping="Wrap" />
             </StackPanel>
         </GroupBox>
     </StackPanel>
