@@ -84,6 +84,35 @@
             </StackPanel>
         </GroupBox>
 
+        <!-- Ligature preview -->
+        <GroupBox Header="Ligature preview" Padding="8,8"
+                  AutomationProperties.Name="Ligature preview"
+                  dialogs:SettingsSearch.Label="Ligature preview">
+            <StackPanel Spacing="2">
+                <TextBlock dialogs:SettingsSearch.Label="Ligature preview"
+                           Text="{Binding LigaturePreviewLine1}"
+                           FontFamily="{Binding PreviewFontFamily}"
+                           FontSize="{Binding FontSize}"
+                           FontFeatures="{Binding PreviewFontFeatures}"
+                           TextWrapping="NoWrap" />
+                <TextBlock dialogs:SettingsSearch.Label="Ligature preview"
+                           Text="{Binding LigaturePreviewLine2}"
+                           FontFamily="{Binding PreviewFontFamily}"
+                           FontSize="{Binding FontSize}"
+                           FontFeatures="{Binding PreviewFontFeatures}"
+                           TextWrapping="NoWrap" />
+                <TextBlock dialogs:SettingsSearch.Label="Ligature preview"
+                           Text="{Binding LigaturePreviewLine3}"
+                           FontFamily="{Binding PreviewFontFamily}"
+                           FontSize="{Binding FontSize}"
+                           FontFeatures="{Binding PreviewFontFeatures}"
+                           TextWrapping="NoWrap" />
+                <TextBlock Text="Rendered with the current font priority and size."
+                           FontSize="11" FontStyle="Italic" Foreground="Gray"
+                           Margin="0,4,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+        </GroupBox>
+
         <!-- Color Scheme -->
         <GroupBox Header="Color Scheme" Padding="8,8">
             <StackPanel dialogs:SettingsSearch.Label="Color Scheme"

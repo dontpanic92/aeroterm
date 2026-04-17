@@ -8,6 +8,7 @@ namespace AeroTerm.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using AeroTerm.Dialogs;
@@ -15,6 +16,7 @@ using AeroTerm.Models;
 using AeroTerm.Services;
 using AeroTerm.Utilities;
 using AeroTerm.WindowEffects;
+using Avalonia.Media;
 
 /// <summary>
 /// View model for the Appearance settings page.
@@ -58,6 +60,8 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
 
         this.bellAction = settings.BellAction;
         this.scrollbackLines = settings.ScrollbackLines;
+
+        this.FontItems.CollectionChanged += this.OnFontItemsChanged;
     }
 
     /// <inheritdoc/>
@@ -80,6 +84,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         "Color Scheme",
         "Bell",
         "Scrollback lines",
+        "Ligature preview",
     };
 
     /// <summary>
@@ -93,6 +98,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             if (this.SetField(ref this.enableLigature, value))
             {
                 this.settings.EnableLigature = value;
+                this.OnPropertyChanged(nameof(this.PreviewFontFeatures));
             }
         }
     }
@@ -111,6 +117,50 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             }
         }
     }
+
+    /// <summary>
+    /// Gets the preview string exercising common programming ligatures.
+    /// </summary>
+    public string LigaturePreviewLine1 => "!= == === !== -> => <=> :=  |> <| >>= <<= <= >=  /* */  // <!--  -->  ::  ...";
+
+    /// <summary>
+    /// Gets the preview string exercising general shaping (letters, digits, common ligatures).
+    /// </summary>
+    public string LigaturePreviewLine2 => "fi fl ffi  0 O o  l 1 I  abcABC 0123 :;,.";
+
+    /// <summary>
+    /// Gets the preview string exercising box-drawing clusters.
+    /// </summary>
+    public string LigaturePreviewLine3 => "─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼   ═ ║ ╔ ╗ ╚ ╝";
+
+    /// <summary>
+    /// Gets the effective <see cref="Avalonia.Media.FontFamily"/> used by the
+    /// ligature preview. Expands the user font list (including the
+    /// <c>$SYSTEM_MONO</c> sentinel) into a comma-separated Avalonia font
+    /// family chain so that the preview matches what the terminal resolves.
+    /// </summary>
+    public FontFamily PreviewFontFamily
+    {
+        get
+        {
+            var expanded = FontPriorityList.Expand(this.GetRawFontList());
+            if (expanded.Count == 0)
+            {
+                return FontFamily.Default;
+            }
+
+            return new FontFamily(string.Join(",", expanded));
+        }
+    }
+
+    /// <summary>
+    /// Gets the font feature overrides applied to the ligature preview. Returns
+    /// <see langword="null"/> when ligatures are enabled (so the font's default
+    /// OpenType features apply) and a collection that disables <c>liga</c>,
+    /// <c>clig</c>, and <c>calt</c> when ligatures are disabled.
+    /// </summary>
+    public FontFeatureCollection? PreviewFontFeatures
+        => this.EnableLigature ? null : FontFeatureCollection.Parse("liga=0,clig=0,calt=0");
 
     /// <summary>
     /// Gets the font priority list items. Each item is either a plain
@@ -433,5 +483,11 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private void UpdateFontPriorityLive()
     {
         this.settings.FallbackFonts = this.GetRawFontList();
+        this.OnPropertyChanged(nameof(this.PreviewFontFamily));
+    }
+
+    private void OnFontItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        this.OnPropertyChanged(nameof(this.PreviewFontFamily));
     }
 }
