@@ -128,6 +128,35 @@ public struct Cell
     public bool Overline { get; internal set; }
 
     /// <summary>
+    /// Gets the effective underline decoration style for this cell, derived
+    /// from the <see cref="Underline"/>, <see cref="DoubleUnderline"/>, and
+    /// <see cref="Undercurl"/> flags. Only one style is active at a time;
+    /// curly takes precedence over double, which takes precedence over single.
+    /// </summary>
+    public UnderlineStyle UnderlineStyle
+    {
+        get
+        {
+            if (this.Undercurl)
+            {
+                return UnderlineStyle.Curly;
+            }
+
+            if (this.DoubleUnderline)
+            {
+                return UnderlineStyle.Double;
+            }
+
+            if (this.Underline)
+            {
+                return UnderlineStyle.Single;
+            }
+
+            return UnderlineStyle.None;
+        }
+    }
+
+    /// <summary>
     /// Gets the OSC 8 hyperlink URI associated with this cell, or <see langword="null"/>
     /// if the cell is not part of a hyperlink.
     /// </summary>

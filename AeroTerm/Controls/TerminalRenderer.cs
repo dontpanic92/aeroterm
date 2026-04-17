@@ -325,13 +325,13 @@ internal sealed class TerminalRenderer : IDisposable
     {
         bool bold = cells[row, colStart].Bold;
         bool italic = cells[row, colStart].Italic;
-        bool underline = cells[row, colStart].Underline;
-        bool undercurl = cells[row, colStart].Undercurl;
-        bool doubleUnderline = cells[row, colStart].DoubleUnderline;
+        UnderlineStyle underlineStyle = cells[row, colStart].UnderlineStyle;
         bool strikethrough = cells[row, colStart].Strikethrough;
+        int specialColor = cells[row, colStart].SpecialColor;
         int foregroundColor = cells[row, colStart].Reverse
             ? cells[row, colStart].BackgroundColor
             : cells[row, colStart].ForegroundColor;
+        int underlineColor = specialColor != 0 ? specialColor : foregroundColor;
 
         var weight = bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal;
         var slant = italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright;
@@ -352,50 +352,58 @@ internal sealed class TerminalRenderer : IDisposable
             this.DrawPlainTextRange(canvas, cells, row, colStart, colEnd, styledTypeface, weight, slant, baselineY, textParam);
         }
 
-        // Draw underline
-        if (underline)
+        // Draw underline decoration (single / double / curly)
+        switch (underlineStyle)
         {
-            this.underlinePaint.Color = GetSkColor(foregroundColor);
-            float ulY = ((row + 1) * textParam.LineHeight) - 1;
-            canvas.DrawLine(colStart * textParam.CharWidth, ulY, colEnd * textParam.CharWidth, ulY, this.underlinePaint);
+            case UnderlineStyle.Single:
+            case UnderlineStyle.Dotted:
+            case UnderlineStyle.Dashed:
+                this.underlinePaint.Color = GetSkColor(underlineColor);
+                {
+                    float ulY = ((row + 1) * textParam.LineHeight) - 1;
+                    canvas.DrawLine(colStart * textParam.CharWidth, ulY, colEnd * textParam.CharWidth, ulY, this.underlinePaint);
+                }
+
+                break;
+
+            case UnderlineStyle.Double:
+                this.underlinePaint.Color = GetSkColor(underlineColor);
+                {
+                    float ulY1 = ((row + 1) * textParam.LineHeight) - 3;
+                    float ulY2 = ((row + 1) * textParam.LineHeight) - 1;
+                    float sx = colStart * textParam.CharWidth;
+                    float ex = colEnd * textParam.CharWidth;
+                    canvas.DrawLine(sx, ulY1, ex, ulY1, this.underlinePaint);
+                    canvas.DrawLine(sx, ulY2, ex, ulY2, this.underlinePaint);
+                }
+
+                break;
+
+            case UnderlineStyle.Curly:
+                this.undercurlPaint.Color = GetSkColor(underlineColor);
+                {
+                    float curlY = ((row + 1) * textParam.LineHeight) - 2;
+                    this.undercurlPath.Reset();
+                    float startX = colStart * textParam.CharWidth;
+                    float endX = colEnd * textParam.CharWidth;
+                    this.undercurlPath.MoveTo(startX, curlY);
+                    for (float cx = startX; cx < endX; cx += 4)
+                    {
+                        this.undercurlPath.QuadTo(cx + 2, curlY - 2, cx + 4, curlY);
+                    }
+
+                    canvas.DrawPath(this.undercurlPath, this.undercurlPaint);
+                }
+
+                break;
         }
 
-        // Draw double underline (SGR 21 / 4:2)
-        if (doubleUnderline)
-        {
-            this.underlinePaint.Color = GetSkColor(foregroundColor);
-            float ulY1 = ((row + 1) * textParam.LineHeight) - 3;
-            float ulY2 = ((row + 1) * textParam.LineHeight) - 1;
-            float sx = colStart * textParam.CharWidth;
-            float ex = colEnd * textParam.CharWidth;
-            canvas.DrawLine(sx, ulY1, ex, ulY1, this.underlinePaint);
-            canvas.DrawLine(sx, ulY2, ex, ulY2, this.underlinePaint);
-        }
-
-        // Draw strikethrough
+        // Draw strikethrough (always uses foreground color).
         if (strikethrough)
         {
             this.underlinePaint.Color = GetSkColor(foregroundColor);
             float sY = (row * textParam.LineHeight) + (textParam.LineHeight * 0.55f);
             canvas.DrawLine(colStart * textParam.CharWidth, sY, colEnd * textParam.CharWidth, sY, this.underlinePaint);
-        }
-
-        // Draw undercurl
-        if (undercurl)
-        {
-            int specialColor = cells[row, colStart].SpecialColor;
-            this.undercurlPaint.Color = GetSkColor(specialColor);
-            float curlY = ((row + 1) * textParam.LineHeight) - 2;
-            this.undercurlPath.Reset();
-            float startX = colStart * textParam.CharWidth;
-            float endX = colEnd * textParam.CharWidth;
-            this.undercurlPath.MoveTo(startX, curlY);
-            for (float cx = startX; cx < endX; cx += 4)
-            {
-                this.undercurlPath.QuadTo(cx + 2, curlY - 2, cx + 4, curlY);
-            }
-
-            canvas.DrawPath(this.undercurlPath, this.undercurlPaint);
         }
     }
 

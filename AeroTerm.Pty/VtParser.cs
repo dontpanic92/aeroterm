@@ -43,13 +43,16 @@ public class VtParser
     // 6x6x6 color cube component values.
     private static readonly int[] CubeValues = { 0, 95, 135, 175, 215, 255 };
 
+    private static readonly int[] EmptySubParams = Array.Empty<int>();
+
     private readonly TerminalBuffer buffer;
     private readonly Action<string> titleChanged;
     private readonly Action<byte[]>? writeBack;
     private readonly Func<string>? clipboardRead;
     private readonly Action<string>? clipboardWrite;
     private readonly List<int> parameters = new();
-    private readonly List<int> subParameters = new();
+    private readonly List<int[]> subParameters = new();
+    private readonly List<int> currentSubParams = new();
     private readonly StringBuilder oscString = new();
 
     // Pending grapheme cluster: code points accumulated until either a
@@ -552,7 +555,17 @@ public class VtParser
         }
         else if (b == (byte)':')
         {
-            this.inSubParam = true;
+            if (this.inSubParam)
+            {
+                // Additional colon: push the previous sub-parameter value and start a new slot.
+                this.currentSubParams.Add(this.currentSubParam);
+            }
+            else
+            {
+                this.inSubParam = true;
+                this.currentSubParams.Clear();
+            }
+
             this.currentSubParam = 0;
         }
         else if (b == (byte)'?')
@@ -696,6 +709,7 @@ public class VtParser
     {
         this.parameters.Clear();
         this.subParameters.Clear();
+        this.currentSubParams.Clear();
         this.currentParam = 0;
         this.hasCurrentParam = false;
         this.currentSubParam = -1;
@@ -709,7 +723,17 @@ public class VtParser
     private void FinalizeParam()
     {
         this.parameters.Add(this.hasCurrentParam ? this.currentParam : 0);
-        this.subParameters.Add(this.inSubParam ? this.currentSubParam : -1);
+        if (this.inSubParam)
+        {
+            this.currentSubParams.Add(this.currentSubParam);
+            this.subParameters.Add(this.currentSubParams.ToArray());
+            this.currentSubParams.Clear();
+        }
+        else
+        {
+            this.subParameters.Add(EmptySubParams);
+        }
+
         this.currentParam = 0;
         this.hasCurrentParam = false;
         this.currentSubParam = -1;
@@ -1112,7 +1136,8 @@ public class VtParser
                     this.buffer.SetItalic(true);
                     break;
                 case 4:
-                    int sub4 = (i < this.subParameters.Count) ? this.subParameters[i] : -1;
+                    int[] subs4 = (i < this.subParameters.Count) ? this.subParameters[i] : EmptySubParams;
+                    int sub4 = subs4.Length > 0 ? subs4[0] : -1;
                     switch (sub4)
                     {
                         case 0: // 4:0 — underline/undercurl/double off
@@ -1236,9 +1261,55 @@ public class VtParser
 
     /// <summary>
     /// Parse extended color (38;5;N or 38;2;R;G;B) and return the updated parameter index.
+    /// Also handles the ITU T.416 colon sub-parameter form 38:5:N / 38:2[:cs]:R:G:B.
     /// </summary>
     private int ParseExtendedColor(int index, bool isForeground, bool isSpecial = false)
     {
+        // Colon sub-parameter form: all components packed into sub-params of a single main param.
+        // E.g. 38:2::R:G:B → subParameters[index] = [2, 0, R, G, B]
+        //      38:2:R:G:B  → subParameters[index] = [2, R, G, B]
+        //      38:5:N      → subParameters[index] = [5, N]
+        if (index < this.subParameters.Count && this.subParameters[index].Length > 0)
+        {
+            int[] subs = this.subParameters[index];
+            int colonMode = subs[0];
+            if (colonMode == 5 && subs.Length >= 2)
+            {
+                int colorIndex = Math.Clamp(subs[1], 0, 255);
+                int color = Convert256Color(colorIndex);
+                this.ApplyExtendedColor(color, isForeground, isSpecial);
+                return index;
+            }
+
+            if (colonMode == 2)
+            {
+                // Accept both 5-value form (with color-space slot) and 4-value form.
+                int r, g, b;
+                if (subs.Length >= 5)
+                {
+                    r = Math.Clamp(subs[2], 0, 255);
+                    g = Math.Clamp(subs[3], 0, 255);
+                    b = Math.Clamp(subs[4], 0, 255);
+                }
+                else if (subs.Length >= 4)
+                {
+                    r = Math.Clamp(subs[1], 0, 255);
+                    g = Math.Clamp(subs[2], 0, 255);
+                    b = Math.Clamp(subs[3], 0, 255);
+                }
+                else
+                {
+                    return index;
+                }
+
+                int color = PackRgb(r, g, b);
+                this.ApplyExtendedColor(color, isForeground, isSpecial);
+                return index;
+            }
+
+            return index;
+        }
+
         if (index + 1 >= this.parameters.Count)
         {
             return index;
