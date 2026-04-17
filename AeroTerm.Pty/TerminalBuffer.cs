@@ -77,6 +77,10 @@ public class TerminalBuffer
     private int[] palette = (int[])DefaultPalette.Clone();
     private int cursorColor = -1;
 
+    // OSC 8 hyperlink state currently being stamped onto new cells.
+    private string? currentHyperlinkUri;
+    private string? currentHyperlinkId;
+
     private Dictionary<int, int> bgHistogram = new(16);
     private bool bgHistogramValid;
 
@@ -1047,6 +1051,20 @@ public class TerminalBuffer
     public void SetOverline(bool on) => this.overline = on;
 
     /// <summary>
+    /// Set the current OSC 8 hyperlink state. Subsequent characters written
+    /// via <see cref="PutChar(int)"/> are stamped with this URI (and optional
+    /// id). Pass <see langword="null"/> for both to end the hyperlink.
+    /// </summary>
+    /// <param name="uri">Hyperlink URI, or <see langword="null"/> to clear.</param>
+    /// <param name="id">Optional hyperlink id; allows non-contiguous runs to be
+    /// recognized as the same logical link.</param>
+    public void SetHyperlink(string? uri, string? id)
+    {
+        this.currentHyperlinkUri = string.IsNullOrEmpty(uri) ? null : uri;
+        this.currentHyperlinkId = this.currentHyperlinkUri is null ? null : id;
+    }
+
+    /// <summary>
     /// Set foreground color (RGB format).
     /// </summary>
     /// <param name="color">Color value in RGB format.</param>
@@ -1503,6 +1521,8 @@ public class TerminalBuffer
         cell.Hidden = this.hidden;
         cell.Blink = this.blink;
         cell.Overline = this.overline;
+        cell.HyperlinkUri = this.currentHyperlinkUri;
+        cell.HyperlinkId = this.currentHyperlinkId;
     }
 
     /// <summary>

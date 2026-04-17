@@ -107,5 +107,16 @@
                 </ItemsControl>
             </StackPanel>
         </GroupBox>
+
+        <!-- Bell -->
+        <GroupBox Header="Bell" Padding="8,8">
+            <StackPanel Spacing="5">
+                <TextBlock Text="Action when the terminal sends BEL (Ctrl+G)"
+                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
+                <ComboBox ItemsSource="{Binding BellActions}"
+                          SelectedItem="{Binding BellAction, Mode=TwoWay}"
+                          Width="200" HorizontalAlignment="Left" />
+            </StackPanel>
+        </GroupBox>
     </StackPanel>
 </UserControl>

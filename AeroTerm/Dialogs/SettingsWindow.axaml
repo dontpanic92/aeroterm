@@ -6,7 +6,8 @@
         x:CompileBindings="True"
         x:DataType="vm:SettingsViewModel"
         Title="Settings" Height="480" Width="680"
-        CanResize="False"
+        MinWidth="560" MinHeight="420"
+        CanResize="True"
         WindowStartupLocation="CenterOwner">
     <Grid Margin="10">
         <Grid.RowDefinitions>
@@ -32,23 +33,26 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <!-- Page content -->
-            <ContentControl Grid.Column="1" Content="{Binding SelectedPage}">
-                <ContentControl.DataTemplates>
-                    <DataTemplate DataType="vm:AppearancePageViewModel">
-                        <dialogs:AppearancePage />
-                    </DataTemplate>
+            <!-- Page content (scrollable so long pages / small windows work) -->
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled" Padding="0,0,4,0">
+                <ContentControl Content="{Binding SelectedPage}">
+                    <ContentControl.DataTemplates>
+                        <DataTemplate DataType="vm:AppearancePageViewModel">
+                            <dialogs:AppearancePage />
+                        </DataTemplate>
 
-                    <DataTemplate DataType="vm:UpdatesPageViewModel">
-                        <dialogs:UpdatesPage />
-                    </DataTemplate>
+                        <DataTemplate DataType="vm:UpdatesPageViewModel">
+                            <dialogs:UpdatesPage />
+                        </DataTemplate>
 
-                    <!-- Fallback for pages without a specific template -->
-                    <DataTemplate DataType="vm:SettingsPageViewModel">
-                        <TextBlock Text="Page content loading..." />
-                    </DataTemplate>
-                </ContentControl.DataTemplates>
-            </ContentControl>
+                        <!-- Fallback for pages without a specific template -->
+                        <DataTemplate DataType="vm:SettingsPageViewModel">
+                            <TextBlock Text="Page content loading..." />
+                        </DataTemplate>
+                    </ContentControl.DataTemplates>
+                </ContentControl>
+            </ScrollViewer>
         </Grid>
 
         <!-- Buttons -->

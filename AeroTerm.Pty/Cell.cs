@@ -122,6 +122,19 @@ public struct Cell
     public bool Overline { get; internal set; }
 
     /// <summary>
+    /// Gets the OSC 8 hyperlink URI associated with this cell, or <see langword="null"/>
+    /// if the cell is not part of a hyperlink.
+    /// </summary>
+    public string? HyperlinkUri { get; internal set; }
+
+    /// <summary>
+    /// Gets the optional OSC 8 hyperlink identifier associated with this cell. Cells
+    /// sharing the same non-null id are considered the same logical hyperlink even
+    /// when they are not contiguous (e.g. across line wraps).
+    /// </summary>
+    public string? HyperlinkId { get; internal set; }
+
+    /// <summary>
     /// Set cell properties from a <see cref="CellStyle"/>.
     /// </summary>
     /// <param name="character">The character in the cell.</param>

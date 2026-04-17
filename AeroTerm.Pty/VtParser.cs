@@ -90,6 +90,17 @@ public class VtParser
         this.clipboardWrite = clipboardWrite;
     }
 
+    /// <summary>
+    /// Raised when a BEL (0x07) control character is received in the ground state.
+    /// </summary>
+    public event EventHandler? BellRaised;
+
+    /// <summary>
+    /// Raised when an OSC 133 shell-integration sequence is received. The argument
+    /// carries the prompt-mark kind (A/B/C/D) and an optional payload.
+    /// </summary>
+    public event EventHandler<ShellIntegrationEventArgs>? ShellIntegrationReceived;
+
     private enum VtState
     {
         Ground,
@@ -341,7 +352,8 @@ public class VtParser
             case 0x0F: // SI — shift in (activate G0)
                 this.buffer.ShiftIn();
                 break;
-            case 0x07: // BEL — ignore in ground state
+            case 0x07: // BEL — notify listeners
+                this.BellRaised?.Invoke(this, EventArgs.Empty);
                 break;
         }
     }
@@ -1227,11 +1239,15 @@ public class VtParser
             {
                 case 0: // Set icon name and window title
                 case 2: // Set window title
-                    this.titleChanged?.Invoke(payload);
+                    this.titleChanged.Invoke(payload);
                     break;
 
                 case 4: // Set/query 256-color palette entry
                     this.HandleOscPalette(payload);
+                    break;
+
+                case 8: // Hyperlink (OSC 8 ; params ; URI)
+                    this.HandleOscHyperlink(payload);
                     break;
 
                 case 10: // Set/query foreground color
@@ -1268,6 +1284,10 @@ public class VtParser
 
                 case 112: // Reset cursor color
                     this.buffer.ResetTerminalCursorColor();
+                    break;
+
+                case 133: // Shell integration prompt marks
+                    this.HandleOscShellIntegration(payload);
                     break;
             }
         }
@@ -1410,5 +1430,84 @@ public class VtParser
                 }
             }
         }
+    }
+
+    // OSC 8 ; params ; URI    — begin hyperlink
+    // OSC 8 ; ; (empty URI)   — end hyperlink
+    // params is a colon-separated list of key=value pairs; the common key is "id=<value>".
+    private void HandleOscHyperlink(string payload)
+    {
+        int semicolonIndex = payload.IndexOf(';');
+        string paramsPart;
+        string uri;
+        if (semicolonIndex < 0)
+        {
+            paramsPart = string.Empty;
+            uri = payload;
+        }
+        else
+        {
+            paramsPart = payload.Substring(0, semicolonIndex);
+            uri = payload.Substring(semicolonIndex + 1);
+        }
+
+        if (string.IsNullOrEmpty(uri))
+        {
+            this.buffer.SetHyperlink(null, null);
+            return;
+        }
+
+        string? id = null;
+        if (paramsPart.Length > 0)
+        {
+            foreach (string kv in paramsPart.Split(':'))
+            {
+                if (kv.StartsWith("id=", StringComparison.Ordinal))
+                {
+                    id = kv.Substring(3);
+                    break;
+                }
+            }
+        }
+
+        this.buffer.SetHyperlink(uri, id);
+    }
+
+    // OSC 133 ; kind [; payload] — shell integration prompt marks.
+    //   A = prompt start, B = command start, C = command executed, D = command finished.
+    private void HandleOscShellIntegration(string payload)
+    {
+        if (payload.Length == 0)
+        {
+            return;
+        }
+
+        char kindChar = payload[0];
+        string? subPayload = null;
+        if (payload.Length > 1 && payload[1] == ';')
+        {
+            subPayload = payload.Substring(2);
+        }
+
+        ShellIntegrationKind kind;
+        switch (kindChar)
+        {
+            case 'A':
+                kind = ShellIntegrationKind.PromptStart;
+                break;
+            case 'B':
+                kind = ShellIntegrationKind.CommandStart;
+                break;
+            case 'C':
+                kind = ShellIntegrationKind.CommandExecuted;
+                break;
+            case 'D':
+                kind = ShellIntegrationKind.CommandFinished;
+                break;
+            default:
+                return;
+        }
+
+        this.ShellIntegrationReceived?.Invoke(this, new ShellIntegrationEventArgs(kind, subPayload));
     }
 }

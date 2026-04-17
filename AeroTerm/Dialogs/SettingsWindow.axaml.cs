@@ -37,6 +37,15 @@ public partial class SettingsWindow : Window
         this.settings = settings;
         this.DataContext = viewModel;
         this.InitializeComponent();
+
+        // Restore persisted size if it is within sensible bounds.
+        if (settings.SettingsWindowWidth >= this.MinWidth
+            && settings.SettingsWindowHeight >= this.MinHeight)
+        {
+            this.Width = settings.SettingsWindowWidth;
+            this.Height = settings.SettingsWindowHeight;
+        }
+
         this.Closing += this.OnWindowClosing;
     }
 
@@ -74,6 +83,12 @@ public partial class SettingsWindow : Window
 
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
+        // Always capture current size so the next open remembers it,
+        // regardless of OK/Cancel — window sizing is UI state, not
+        // content state.
+        this.settings.SettingsWindowWidth = (int)this.Width;
+        this.settings.SettingsWindowHeight = (int)this.Height;
+
         switch (this.CloseReason)
         {
             case Result.Ok:
@@ -94,6 +109,12 @@ public partial class SettingsWindow : Window
             case Result.Cancel:
             case Result.NotClosed:
                 this.settings.Reload();
+
+                // Reload would overwrite the captured size; re-apply it so
+                // the persisted window geometry is not lost on Cancel.
+                this.settings.SettingsWindowWidth = (int)this.Width;
+                this.settings.SettingsWindowHeight = (int)this.Height;
+                this.settings.Save();
                 break;
         }
     }

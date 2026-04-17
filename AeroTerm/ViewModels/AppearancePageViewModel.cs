@@ -28,6 +28,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private double fontSize;
     private int selectedFontIndex = -1;
     private ColorScheme selectedColorScheme;
+    private BellAction bellAction;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AppearancePageViewModel"/> class.
@@ -51,6 +52,8 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         this.ColorSchemes = ColorSchemePresets.All;
         this.selectedColorScheme = ColorSchemePresets.FindByName(settings.ColorSchemeName)
             ?? ColorSchemePresets.Default;
+
+        this.bellAction = settings.BellAction;
     }
 
     /// <inheritdoc/>
@@ -239,6 +242,33 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     /// Gets a value indicating whether the opacity slider should be enabled.
     /// </summary>
     public bool IsOpacityEnabled => this.EnableBlurBehind;
+
+    /// <summary>
+    /// Gets the available bell-action choices for data binding.
+    /// </summary>
+    public IReadOnlyList<BellAction> BellActions { get; } = new[]
+    {
+        BellAction.None,
+        BellAction.Visual,
+        BellAction.Audio,
+        BellAction.Notification,
+        BellAction.All,
+    };
+
+    /// <summary>
+    /// Gets or sets how the app reacts to the terminal BEL character.
+    /// </summary>
+    public BellAction BellAction
+    {
+        get => this.bellAction;
+        set
+        {
+            if (this.SetField(ref this.bellAction, value))
+            {
+                this.settings.BellAction = value;
+            }
+        }
+    }
 
     /// <summary>
     /// Adds a font name to the priority list at the current selection index.

@@ -55,6 +55,12 @@ internal sealed class TerminalSessionCoordinator
     public event Action? ProcessExitedNormally;
 
     /// <summary>
+    /// Raised when the terminal receives a BEL (0x07) control character.
+    /// Always invoked on the UI thread.
+    /// </summary>
+    public event Action? BellRaised;
+
+    /// <summary>
     /// Gets the active terminal control, or <c>null</c> if not yet initialized.
     /// </summary>
     public TerminalControl? Control => this.terminalControl;
@@ -121,6 +127,8 @@ internal sealed class TerminalSessionCoordinator
         this.terminalControl.BackgroundColorChanged += color =>
             Dispatcher.UIThread.Post(() => this.BackgroundColorChanged?.Invoke(color));
         this.terminalControl.ProcessExited += this.OnProcessExited;
+        this.terminalControl.BellRaised += () =>
+            Dispatcher.UIThread.Post(() => this.BellRaised?.Invoke());
 
         // Add the control to the visual tree first so Avalonia can lay it
         // out and assign real bounds before we read DesiredColCount/DesiredRowCount.

@@ -60,6 +60,7 @@ public class TerminalControl : Control, IDisposable
             this.OnWriteBack,
             this.OnClipboardRead,
             this.OnClipboardWrite);
+        this.parser.BellRaised += (_, _) => this.BellRaised?.Invoke();
         this.inputHandler = new TerminalInputHandler(this.WriteToPty);
 
         this.ClipToBounds = true;
@@ -96,6 +97,13 @@ public class TerminalControl : Control, IDisposable
     /// Occurs when the child process has exited.
     /// </summary>
     public event Action? ProcessExited;
+
+    /// <summary>
+    /// Occurs when the terminal receives a BEL (0x07) control character.
+    /// Raised on the PTY reader thread; handlers must marshal to the UI
+    /// thread themselves if they touch UI state.
+    /// </summary>
+    public event Action? BellRaised;
 
     /// <summary>
     /// Gets or sets a value indicating whether font ligature is enabled.

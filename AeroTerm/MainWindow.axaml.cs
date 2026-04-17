@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private readonly Grid titleBar;
     private readonly TextBlock titleText;
     private readonly Border terminalBorder;
+    private readonly BellService bellService;
     private bool isSettingsDialogOpen;
 
     /// <summary>
@@ -62,6 +63,7 @@ public partial class MainWindow : Window
         this.effectsService = new WindowEffectsService(this, settings, AppLogger.Factory.CreateLogger<WindowEffectsService>());
         this.effectsService.CurrentBackgroundColor = settings.BackgroundColor;
         this.coordinator = new TerminalSessionCoordinator(settings);
+        this.bellService = new BellService(settings, this, this.terminalBorder);
 
         this.effectsService.BackgroundBrushChanged += this.OnBackgroundBrushChanged;
         this.effectsService.BackgroundAlphaChanged += this.OnBackgroundAlphaChanged;
@@ -69,6 +71,7 @@ public partial class MainWindow : Window
         this.coordinator.TitleChanged += this.OnTitleChanged;
         this.coordinator.BackgroundColorChanged += this.OnBackgroundColorChanged;
         this.coordinator.ProcessExitedNormally += this.OnProcessExitedNormally;
+        this.coordinator.BellRaised += this.bellService.Handle;
         this.settings.PropertyChanged += this.OnSettingsPropertyChanged;
 
         this.UpdateTitleBarForeground(settings.ForegroundColor);

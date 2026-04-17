@@ -43,6 +43,9 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private bool autoCheckForUpdates = true;
     private DateTime? lastUpdateCheckUtc;
     private string? skippedVersion;
+    private int settingsWindowWidth = 680;
+    private int settingsWindowHeight = 480;
+    private BellAction bellAction = BellAction.Visual;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -228,6 +231,33 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets the remembered width of the Settings dialog.
+    /// </summary>
+    public int SettingsWindowWidth
+    {
+        get => this.settingsWindowWidth;
+        set => this.SetField(ref this.settingsWindowWidth, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the remembered height of the Settings dialog.
+    /// </summary>
+    public int SettingsWindowHeight
+    {
+        get => this.settingsWindowHeight;
+        set => this.SetField(ref this.settingsWindowHeight, value);
+    }
+
+    /// <summary>
+    /// Gets or sets how the app reacts to the terminal BEL character.
+    /// </summary>
+    public BellAction BellAction
+    {
+        get => this.bellAction;
+        set => this.SetField(ref this.bellAction, value);
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
@@ -272,6 +302,9 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.AutoCheckForUpdates = fresh.AutoCheckForUpdates;
         this.LastUpdateCheckUtc = fresh.LastUpdateCheckUtc;
         this.SkippedVersion = fresh.SkippedVersion;
+        this.SettingsWindowWidth = fresh.SettingsWindowWidth;
+        this.SettingsWindowHeight = fresh.SettingsWindowHeight;
+        this.BellAction = fresh.BellAction;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }
