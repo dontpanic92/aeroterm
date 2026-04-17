@@ -27,6 +27,7 @@ public class TerminalBuffer
 
     private Cell[,] cells;
     private Cell[,]? altCells;
+    private bool[]? altRowWrapped;
     private bool usingAltBuffer;
 
     private int cursorRow;
@@ -101,9 +102,20 @@ public class TerminalBuffer
     // as jagged rows preserving their original column count (no reflow on
     // resize).
     private Cell[]?[] scrollbackRing = new Cell[]?[DefaultScrollbackLimit];
+
+    // Parallel to scrollbackRing: whether the evicted row was marked as
+    // line-wrapped (i.e. its logical line continues into the next row).
+    // Indexed the same way as scrollbackRing (slot = (head + i) % limit).
+    private bool[] scrollbackWrappedRing = new bool[DefaultScrollbackLimit];
     private int scrollbackHead;
     private int scrollbackCount;
     private int scrollbackLimit = DefaultScrollbackLimit;
+
+    // Per-row "line-wrapped" marker on the primary (or alt) grid. When
+    // rowWrapped[r] is true, row r+1 is understood as a continuation of
+    // row r (the cursor auto-wrapped at the right margin while writing
+    // row r). Reflow concatenates such rows into a single logical line.
+    private bool[] rowWrapped;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalBuffer"/> class.
@@ -116,6 +128,7 @@ public class TerminalBuffer
         this.Cols = cols;
         this.cells = new Cell[rows, cols];
         this.dirtyRows = new bool[rows];
+        this.rowWrapped = new bool[rows];
         this.tabStops = CreateDefaultTabStops(cols);
         this.scrollBottom = rows - 1;
         this.ClearRegion(0, 0, rows - 1, cols - 1);
@@ -272,6 +285,7 @@ public class TerminalBuffer
                 if (clamped == 0)
                 {
                     this.scrollbackRing = Array.Empty<Cell[]?>();
+                    this.scrollbackWrappedRing = Array.Empty<bool>();
                     this.scrollbackHead = 0;
                     this.scrollbackCount = 0;
                     this.scrollbackLimit = 0;
@@ -282,13 +296,16 @@ public class TerminalBuffer
                 int keep = Math.Min(this.scrollbackCount, clamped);
                 int skip = this.scrollbackCount - keep;
                 var newRing = new Cell[]?[clamped];
+                var newWrapped = new bool[clamped];
                 for (int i = 0; i < keep; i++)
                 {
                     int src = (this.scrollbackHead + skip + i) % Math.Max(this.scrollbackLimit, 1);
                     newRing[i] = this.scrollbackRing[src];
+                    newWrapped[i] = src < this.scrollbackWrappedRing.Length && this.scrollbackWrappedRing[src];
                 }
 
                 this.scrollbackRing = newRing;
+                this.scrollbackWrappedRing = newWrapped;
                 this.scrollbackHead = 0;
                 this.scrollbackCount = keep;
                 this.scrollbackLimit = clamped;
@@ -331,6 +348,17 @@ public class TerminalBuffer
     /// </summary>
     /// <param name="cols">New column count.</param>
     /// <param name="rows">New row count.</param>
+    /// <remarks>
+    /// On the primary screen the content is re-flowed: logical lines
+    /// (sequences of rows whose <c>rowWrapped</c> flag joins them) are
+    /// concatenated, re-chunked into <paramref name="cols"/>-wide
+    /// physical rows, and partitioned back into scrollback and the live
+    /// grid. The cursor's logical position is preserved where possible.
+    /// On the alternate screen reflow is explicitly skipped — full-screen
+    /// apps (vim / less / htop) redraw their own content on SIGWINCH and
+    /// don't benefit from engine-side reflow, which could also destroy
+    /// their layout. Any buffer-side selection state is cleared.
+    /// </remarks>
     public void Resize(int cols, int rows)
     {
         lock (this.screenLock)
@@ -340,52 +368,13 @@ public class TerminalBuffer
                 return;
             }
 
-            var newCells = new Cell[rows, cols];
-            int copyRows = Math.Min(rows, this.Rows);
-            int copyCols = Math.Min(cols, this.Cols);
-
-            for (int i = 0; i < copyRows; i++)
+            if (this.usingAltBuffer || cols <= 0 || rows <= 0)
             {
-                for (int j = 0; j < copyCols; j++)
-                {
-                    newCells[i, j] = this.cells[i, j];
-                }
+                this.ResizeTruncatePad(cols, rows);
+                return;
             }
 
-            // Clear new cells using the last detected (visual) background
-            // color rather than the VT default, so they blend with the
-            // existing content and don't cause a colour flash during resize.
-            for (int i = 0; i < rows; i++)
-            {
-                int startCol = i < copyRows ? copyCols : 0;
-                for (int j = startCol; j < cols; j++)
-                {
-                    newCells[i, j].Clear(this.defaultFg, this.detectedBg, this.currentSpecial);
-                }
-            }
-
-            this.cells = newCells;
-            this.Rows = rows;
-            this.Cols = cols;
-            this.dirtyRows = new bool[rows];
-            var newTabStops = CreateDefaultTabStops(cols);
-            Array.Copy(this.tabStops, newTabStops, Math.Min(this.tabStops.Length, newTabStops.Length));
-            this.tabStops = newTabStops;
-            this.scrollTop = 0;
-            this.scrollBottom = rows - 1;
-            this.allDirty = true;
-            this.bgHistogramValid = false;
-            this.suppressNextErase = true;
-
-            if (this.cursorRow >= rows)
-            {
-                this.cursorRow = rows - 1;
-            }
-
-            if (this.cursorCol >= cols)
-            {
-                this.cursorCol = cols - 1;
-            }
+            this.ResizeReflowPrimary(cols, rows);
         }
     }
 
@@ -407,6 +396,7 @@ public class TerminalBuffer
             if (this.PendingWrap)
             {
                 this.PendingWrap = false;
+                this.MarkRowWrapped(this.cursorRow);
                 this.cursorCol = 0;
                 this.LineFeedInternal();
             }
@@ -416,6 +406,7 @@ public class TerminalBuffer
             {
                 if (this.AutoWrap)
                 {
+                    this.MarkRowWrapped(this.cursorRow);
                     this.cursorCol = 0;
                     this.LineFeedInternal();
                 }
@@ -591,6 +582,10 @@ public class TerminalBuffer
     {
         lock (this.screenLock)
         {
+            // Explicit LF means the current row is NOT a wrap
+            // continuation of the prior line — clear the wrap flag that
+            // some earlier cursor-wrap may have set on this row.
+            this.ClearRowWrapped(this.cursorRow);
             this.LineFeedInternal();
         }
     }
@@ -904,6 +899,11 @@ public class TerminalBuffer
         lock (this.screenLock)
         {
             Array.Clear(this.scrollbackRing, 0, this.scrollbackRing.Length);
+            if (this.scrollbackWrappedRing.Length > 0)
+            {
+                Array.Clear(this.scrollbackWrappedRing, 0, this.scrollbackWrappedRing.Length);
+            }
+
             this.scrollbackHead = 0;
             this.scrollbackCount = 0;
         }
@@ -1082,7 +1082,9 @@ public class TerminalBuffer
             if (!this.usingAltBuffer)
             {
                 this.altCells = this.cells;
+                this.altRowWrapped = this.rowWrapped;
                 this.cells = new Cell[this.Rows, this.Cols];
+                this.rowWrapped = new bool[this.Rows];
                 this.ClearRegion(0, 0, this.Rows - 1, this.Cols - 1);
                 this.usingAltBuffer = true;
                 this.allDirty = true;
@@ -1130,7 +1132,16 @@ public class TerminalBuffer
                 }
 
                 this.cells = this.altCells;
+                this.rowWrapped = this.altRowWrapped ?? new bool[this.Rows];
+                if (this.rowWrapped.Length != this.Rows)
+                {
+                    var resizedWrap = new bool[this.Rows];
+                    Array.Copy(this.rowWrapped, resizedWrap, Math.Min(this.rowWrapped.Length, this.Rows));
+                    this.rowWrapped = resizedWrap;
+                }
+
                 this.altCells = null!;
+                this.altRowWrapped = null;
                 this.usingAltBuffer = false;
                 this.allDirty = true;
                 this.bgHistogramValid = false;
@@ -1169,6 +1180,11 @@ public class TerminalBuffer
             this.glCharset = 0;
             this.singleShiftCharset = -1;
             this.tabStops = CreateDefaultTabStops(this.Cols);
+            if (this.rowWrapped is not null)
+            {
+                Array.Clear(this.rowWrapped, 0, this.rowWrapped.Length);
+            }
+
             this.ResetPaletteColors();
             this.ResetTerminalDefaultForeground();
             this.ResetTerminalDefaultBackground();
@@ -1648,6 +1664,46 @@ public class TerminalBuffer
         return this.screen;
     }
 
+    /// <summary>
+    /// Returns whether the given live-grid row is currently marked as
+    /// line-wrapped (its logical line continues into the next row).
+    /// Exposed for test assertions.
+    /// </summary>
+    /// <param name="row">Zero-based row index.</param>
+    /// <returns>True when the row has a wrap flag set.</returns>
+    internal bool IsRowWrapped(int row)
+    {
+        lock (this.screenLock)
+        {
+            if (row < 0 || row >= this.rowWrapped.Length)
+            {
+                return false;
+            }
+
+            return this.rowWrapped[row];
+        }
+    }
+
+    /// <summary>
+    /// Returns whether the scrollback row at <paramref name="index"/>
+    /// (0 = oldest) carries a line-wrap flag.
+    /// </summary>
+    /// <param name="index">Zero-based scrollback index.</param>
+    /// <returns>True when the scrollback row is wrapped.</returns>
+    internal bool IsScrollbackRowWrapped(int index)
+    {
+        lock (this.screenLock)
+        {
+            if (index < 0 || index >= this.scrollbackCount || this.scrollbackLimit <= 0)
+            {
+                return false;
+            }
+
+            int slot = (this.scrollbackHead + index) % this.scrollbackLimit;
+            return this.scrollbackWrappedRing[slot];
+        }
+    }
+
     private static int[] CreateDefaultPalette()
     {
         var palette = new int[256];
@@ -1727,6 +1783,68 @@ public class TerminalBuffer
         }
 
         return stops;
+    }
+
+    private static bool IsDefaultBlank(Cell cell, int defaultFg, int detectedBg, int defaultBg)
+    {
+        _ = defaultFg;
+        if (cell.Character is null)
+        {
+            // Wide continuation — not "blank" for reflow purposes.
+            return false;
+        }
+
+        if (cell.Character != " " && cell.Character != string.Empty)
+        {
+            return false;
+        }
+
+        if (cell.BackgroundColor != detectedBg && cell.BackgroundColor != defaultBg)
+        {
+            return false;
+        }
+
+        if (cell.Reverse || cell.Underline || cell.Undercurl || cell.DoubleUnderline
+            || cell.Strikethrough || cell.Overline || cell.HyperlinkUri is not null)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static Cell DefaultBlankCell(int defaultFg, int detectedBg, int specialColor)
+    {
+        var c = default(Cell);
+        c.Clear(defaultFg, detectedBg, specialColor);
+        return c;
+    }
+
+    private static Cell[] BlankRow(int cols, int defaultFg, int detectedBg, int specialColor)
+    {
+        var row = new Cell[cols];
+        for (int j = 0; j < cols; j++)
+        {
+            row[j].Clear(defaultFg, detectedBg, specialColor);
+        }
+
+        return row;
+    }
+
+    private static int CellWidth(Cell cell)
+    {
+        if (cell.Character is null)
+        {
+            return 0;
+        }
+
+        if (cell.Character.Length == 0)
+        {
+            return 0;
+        }
+
+        int codePoint = char.ConvertToUtf32(cell.Character, 0);
+        return UnicodeWidth.IsWideCharacter(codePoint) ? 2 : 1;
     }
 
     private int ResolveFg() => this.currentFg == -1 ? this.defaultFg : this.currentFg;
@@ -1873,6 +1991,7 @@ public class TerminalBuffer
             this.cells[row, j].Clear(fg, bg, this.currentSpecial);
         }
 
+        this.ClearRowWrapped(row);
         this.MarkDirty(row);
     }
 
@@ -1892,6 +2011,11 @@ public class TerminalBuffer
             for (int j = jStart; j <= jEnd; j++)
             {
                 this.cells[i, j].Clear(fg, bg, this.currentSpecial);
+            }
+
+            if (jStart == 0 && jEnd == this.Cols - 1)
+            {
+                this.ClearRowWrapped(i);
             }
 
             this.MarkDirty(i);
@@ -1987,6 +2111,11 @@ public class TerminalBuffer
                 this.cells[i, j] = this.cells[i + n, j];
             }
 
+            if (this.rowWrapped is not null && i + n < this.rowWrapped.Length)
+            {
+                this.rowWrapped[i] = this.rowWrapped[i + n];
+            }
+
             this.MarkDirty(i);
         }
 
@@ -2003,6 +2132,11 @@ public class TerminalBuffer
             for (int j = 0; j < this.Cols; j++)
             {
                 this.cells[i, j] = this.cells[i - n, j];
+            }
+
+            if (this.rowWrapped is not null && i - n >= 0)
+            {
+                this.rowWrapped[i] = this.rowWrapped[i - n];
             }
 
             this.MarkDirty(i);
@@ -2038,11 +2172,12 @@ public class TerminalBuffer
                 row[j] = this.cells[i, j];
             }
 
-            this.AppendScrollbackRow(row);
+            bool wrapped = this.rowWrapped is not null && i < this.rowWrapped.Length && this.rowWrapped[i];
+            this.AppendScrollbackRow(row, wrapped);
         }
     }
 
-    private void AppendScrollbackRow(Cell[] row)
+    private void AppendScrollbackRow(Cell[] row, bool wrapped)
     {
         if (this.scrollbackLimit <= 0)
         {
@@ -2053,13 +2188,433 @@ public class TerminalBuffer
         {
             int tail = (this.scrollbackHead + this.scrollbackCount) % this.scrollbackLimit;
             this.scrollbackRing[tail] = row;
+            this.scrollbackWrappedRing[tail] = wrapped;
             this.scrollbackCount++;
         }
         else
         {
             // Ring is full: overwrite the oldest slot and advance head.
             this.scrollbackRing[this.scrollbackHead] = row;
+            this.scrollbackWrappedRing[this.scrollbackHead] = wrapped;
             this.scrollbackHead = (this.scrollbackHead + 1) % this.scrollbackLimit;
+        }
+    }
+
+    private void ResizeTruncatePad(int cols, int rows)
+    {
+        var newCells = new Cell[rows, cols];
+        int copyRows = Math.Min(rows, this.Rows);
+        int copyCols = Math.Min(cols, this.Cols);
+
+        for (int i = 0; i < copyRows; i++)
+        {
+            for (int j = 0; j < copyCols; j++)
+            {
+                newCells[i, j] = this.cells[i, j];
+            }
+        }
+
+        for (int i = 0; i < rows; i++)
+        {
+            int startCol = i < copyRows ? copyCols : 0;
+            for (int j = startCol; j < cols; j++)
+            {
+                newCells[i, j].Clear(this.defaultFg, this.detectedBg, this.currentSpecial);
+            }
+        }
+
+        var newRowWrapped = new bool[rows];
+        Array.Copy(this.rowWrapped, newRowWrapped, Math.Min(this.rowWrapped.Length, rows));
+
+        // A row that wrapped into a column past the new grid width is no
+        // longer a meaningful wrap relation — clear the flag.
+        if (cols < this.Cols)
+        {
+            for (int i = 0; i < rows; i++)
+            {
+                newRowWrapped[i] = false;
+            }
+        }
+
+        this.cells = newCells;
+        this.Rows = rows;
+        this.Cols = cols;
+        this.dirtyRows = new bool[rows];
+        this.rowWrapped = newRowWrapped;
+        var newTabStops = CreateDefaultTabStops(cols);
+        Array.Copy(this.tabStops, newTabStops, Math.Min(this.tabStops.Length, newTabStops.Length));
+        this.tabStops = newTabStops;
+        this.scrollTop = 0;
+        this.scrollBottom = rows - 1;
+        this.allDirty = true;
+        this.bgHistogramValid = false;
+        this.suppressNextErase = true;
+
+        if (this.cursorRow >= rows)
+        {
+            this.cursorRow = rows - 1;
+        }
+
+        if (this.cursorCol >= cols)
+        {
+            this.cursorCol = cols - 1;
+        }
+    }
+
+    private void ResizeReflowPrimary(int newCols, int newRows)
+    {
+        // Step 1: collect every "physical" row (scrollback oldest-first,
+        // then live grid top-to-bottom up to last-meaningful-row) with
+        // its wrap flag and a marker for where the cursor sits.
+        var physRows = new List<Cell[]>();
+        var physWrapped = new List<bool>();
+        int cursorPhysRow = -1;
+        int cursorPhysCol = Math.Clamp(this.cursorCol, 0, Math.Max(0, this.Cols - 1));
+
+        for (int i = 0; i < this.scrollbackCount; i++)
+        {
+            int slot = (this.scrollbackHead + i) % Math.Max(this.scrollbackLimit, 1);
+            var src = this.scrollbackRing[slot] ?? Array.Empty<Cell>();
+            var copy = new Cell[src.Length];
+            Array.Copy(src, copy, src.Length);
+            physRows.Add(copy);
+            physWrapped.Add(this.scrollbackWrappedRing[slot]);
+        }
+
+        int lastLiveRow = this.FindLastMeaningfulRow();
+        int liveRowCount = Math.Max(this.cursorRow, lastLiveRow) + 1;
+        liveRowCount = Math.Min(liveRowCount, this.Rows);
+
+        for (int r = 0; r < liveRowCount; r++)
+        {
+            var row = new Cell[this.Cols];
+            for (int c = 0; c < this.Cols; c++)
+            {
+                row[c] = this.cells[r, c];
+            }
+
+            physRows.Add(row);
+            physWrapped.Add(this.rowWrapped[r]);
+
+            if (r == this.cursorRow)
+            {
+                cursorPhysRow = physRows.Count - 1;
+            }
+        }
+
+        // If we never recorded the cursor (e.g. cursor sits on a blank
+        // trailing row beyond liveRowCount), add stub rows so its line
+        // index stays representable.
+        while (cursorPhysRow < 0 && physRows.Count <= this.scrollbackCount + this.cursorRow)
+        {
+            physRows.Add(new Cell[this.Cols]);
+            physWrapped.Add(false);
+            if (physRows.Count - 1 == this.scrollbackCount + this.cursorRow)
+            {
+                cursorPhysRow = physRows.Count - 1;
+            }
+        }
+
+        if (cursorPhysRow < 0)
+        {
+            cursorPhysRow = Math.Max(0, physRows.Count - 1);
+        }
+
+        // Step 2: group consecutive physical rows into logical lines via
+        // wrap flags. Also locate which logical line the cursor lives in
+        // and its column offset inside that line.
+        var logicalLines = new List<List<Cell>>();
+        var logicalLineEndsWrapped = new List<bool>();
+        int cursorLogicalLine = 0;
+        int cursorLogicalCol = 0;
+
+        int idx = 0;
+        while (idx < physRows.Count)
+        {
+            var line = new List<Cell>();
+            int start = idx;
+            while (true)
+            {
+                var row = physRows[idx];
+                bool wrapped = physWrapped[idx];
+
+                if (idx == cursorPhysRow)
+                {
+                    cursorLogicalLine = logicalLines.Count;
+                    cursorLogicalCol = line.Count + cursorPhysCol;
+                }
+
+                line.AddRange(row);
+
+                if (!wrapped || idx + 1 >= physRows.Count)
+                {
+                    idx++;
+                    break;
+                }
+
+                idx++;
+            }
+
+            _ = start;
+            logicalLines.Add(line);
+            logicalLineEndsWrapped.Add(false);
+        }
+
+        // Step 3: trim trailing default-blank cells from each logical
+        // line. For the cursor's line, keep at least through cursorLogicalCol.
+        for (int li = 0; li < logicalLines.Count; li++)
+        {
+            var line = logicalLines[li];
+            int keep = line.Count;
+            while (keep > 0 && IsDefaultBlank(line[keep - 1], this.defaultFg, this.detectedBg, this.defaultBg))
+            {
+                keep--;
+            }
+
+            if (li == cursorLogicalLine)
+            {
+                keep = Math.Max(keep, Math.Min(line.Count, cursorLogicalCol));
+            }
+
+            if (keep < line.Count)
+            {
+                line.RemoveRange(keep, line.Count - keep);
+            }
+        }
+
+        // Step 4: re-chunk each logical line into newCols-wide physical
+        // rows, handling wide-glyph straddle.
+        var outRows = new List<Cell[]>();
+        var outWrapped = new List<bool>();
+        int newCursorRow = 0;
+        int newCursorCol = 0;
+        bool cursorPlaced = false;
+
+        for (int li = 0; li < logicalLines.Count; li++)
+        {
+            var line = logicalLines[li];
+            int outRowStart = outRows.Count;
+
+            if (line.Count == 0)
+            {
+                outRows.Add(BlankRow(newCols, this.defaultFg, this.detectedBg, this.currentSpecial));
+                outWrapped.Add(false);
+            }
+            else
+            {
+                var current = new List<Cell>(newCols);
+                int ci = 0;
+                while (ci < line.Count)
+                {
+                    var cell = line[ci];
+                    int width = CellWidth(cell);
+
+                    // Continuation cells (null char) belong with their
+                    // lead; they were emitted inline by PutChar. Skip
+                    // them here — the lead's width==2 path handles them.
+                    if (cell.Character is null)
+                    {
+                        ci++;
+                        continue;
+                    }
+
+                    if (width == 2)
+                    {
+                        if (current.Count + 2 > newCols)
+                        {
+                            // Pad with a blank, wrap.
+                            while (current.Count < newCols)
+                            {
+                                current.Add(DefaultBlankCell(this.defaultFg, this.detectedBg, this.currentSpecial));
+                            }
+
+                            outRows.Add(current.ToArray());
+                            outWrapped.Add(true);
+                            current = new List<Cell>(newCols);
+                        }
+
+                        current.Add(cell);
+
+                        // Synthetic continuation cell.
+                        var cont = cell;
+                        cont.Set(null, new CellStyle(cell.ForegroundColor, cell.BackgroundColor, cell.SpecialColor, cell.Reverse, cell.Italic, cell.Bold, cell.Underline, cell.Undercurl));
+                        current.Add(cont);
+                    }
+                    else
+                    {
+                        if (current.Count + 1 > newCols)
+                        {
+                            outRows.Add(current.ToArray());
+                            outWrapped.Add(true);
+                            current = new List<Cell>(newCols);
+                        }
+
+                        current.Add(cell);
+                    }
+
+                    ci++;
+                }
+
+                // Pad last chunk to newCols.
+                while (current.Count < newCols)
+                {
+                    current.Add(DefaultBlankCell(this.defaultFg, this.detectedBg, this.currentSpecial));
+                }
+
+                outRows.Add(current.ToArray());
+                outWrapped.Add(false);
+            }
+
+            // Place cursor if this is the cursor's logical line.
+            if (!cursorPlaced && li == cursorLogicalLine)
+            {
+                int col = Math.Max(0, cursorLogicalCol);
+                int rowOffset = newCols > 0 ? col / newCols : 0;
+                int colOffset = newCols > 0 ? col % newCols : 0;
+                int rowsForLine = outRows.Count - outRowStart;
+                if (rowOffset >= rowsForLine)
+                {
+                    rowOffset = Math.Max(0, rowsForLine - 1);
+                    colOffset = newCols > 0 ? Math.Min(colOffset, newCols - 1) : 0;
+                }
+
+                newCursorRow = outRowStart + rowOffset;
+                newCursorCol = colOffset;
+                cursorPlaced = true;
+            }
+        }
+
+        if (!cursorPlaced)
+        {
+            newCursorRow = outRows.Count;
+            newCursorCol = 0;
+        }
+
+        // Step 5: partition into scrollback + live grid.
+        int totalOut = outRows.Count;
+        int liveStart = Math.Max(0, totalOut - newRows);
+
+        // Ensure cursor fits in the live grid window. If newCursorRow
+        // sits above liveStart (content pushed cursor into scrollback),
+        // bump liveStart up so the cursor stays on row 0+.
+        if (newCursorRow < liveStart)
+        {
+            liveStart = newCursorRow;
+        }
+
+        // Rows [0 .. liveStart) become scrollback (FIFO).
+        var newScrollbackRing = this.scrollbackLimit > 0
+            ? new Cell[]?[this.scrollbackLimit]
+            : Array.Empty<Cell[]?>();
+        var newScrollbackWrapped = this.scrollbackLimit > 0
+            ? new bool[this.scrollbackLimit]
+            : Array.Empty<bool>();
+        int newScrollCount = 0;
+
+        if (this.scrollbackLimit > 0)
+        {
+            int first = Math.Max(0, liveStart - this.scrollbackLimit);
+            for (int i = first; i < liveStart; i++)
+            {
+                newScrollbackRing[newScrollCount] = outRows[i];
+                newScrollbackWrapped[newScrollCount] = outWrapped[i];
+                newScrollCount++;
+            }
+        }
+
+        // Live grid: take up to newRows rows starting at liveStart, pad
+        // remainder with blanks.
+        var newLive = new Cell[newRows, newCols];
+        var newLiveWrapped = new bool[newRows];
+        int filled = 0;
+        for (int i = liveStart; i < totalOut && filled < newRows; i++, filled++)
+        {
+            var row = outRows[i];
+            for (int c = 0; c < newCols; c++)
+            {
+                newLive[filled, c] = c < row.Length ? row[c] : DefaultBlankCell(this.defaultFg, this.detectedBg, this.currentSpecial);
+            }
+
+            newLiveWrapped[filled] = outWrapped[i];
+        }
+
+        for (int i = filled; i < newRows; i++)
+        {
+            for (int c = 0; c < newCols; c++)
+            {
+                newLive[i, c] = DefaultBlankCell(this.defaultFg, this.detectedBg, this.currentSpecial);
+            }
+
+            newLiveWrapped[i] = false;
+        }
+
+        // The live-grid's last row must never carry a wrap flag (nothing
+        // follows within the live grid) — wrap state beyond the live
+        // grid is not representable.
+        if (newRows > 0)
+        {
+            newLiveWrapped[newRows - 1] = false;
+        }
+
+        // Step 6: commit.
+        this.cells = newLive;
+        this.rowWrapped = newLiveWrapped;
+        this.scrollbackRing = newScrollbackRing;
+        this.scrollbackWrappedRing = newScrollbackWrapped;
+        this.scrollbackHead = 0;
+        this.scrollbackCount = newScrollCount;
+        this.Rows = newRows;
+        this.Cols = newCols;
+        this.dirtyRows = new bool[newRows];
+        var newTabStops = CreateDefaultTabStops(newCols);
+        Array.Copy(this.tabStops, newTabStops, Math.Min(this.tabStops.Length, newTabStops.Length));
+        this.tabStops = newTabStops;
+        this.scrollTop = 0;
+        this.scrollBottom = newRows - 1;
+        this.allDirty = true;
+        this.bgHistogramValid = false;
+        this.suppressNextErase = true;
+        this.PendingWrap = false;
+
+        int cursorLive = Math.Max(0, newCursorRow - liveStart);
+        this.cursorRow = Math.Clamp(cursorLive, 0, Math.Max(0, newRows - 1));
+        this.cursorCol = Math.Clamp(newCursorCol, 0, Math.Max(0, newCols - 1));
+    }
+
+    private int FindLastMeaningfulRow()
+    {
+        for (int r = this.Rows - 1; r >= 0; r--)
+        {
+            for (int c = 0; c < this.Cols; c++)
+            {
+                if (!IsDefaultBlank(this.cells[r, c], this.defaultFg, this.detectedBg, this.defaultBg))
+                {
+                    return r;
+                }
+            }
+
+            if (this.rowWrapped[r])
+            {
+                return r;
+            }
+        }
+
+        return -1;
+    }
+
+    private void MarkRowWrapped(int row)
+    {
+        if (this.rowWrapped is not null && row >= 0 && row < this.rowWrapped.Length)
+        {
+            this.rowWrapped[row] = true;
+        }
+    }
+
+    private void ClearRowWrapped(int row)
+    {
+        if (this.rowWrapped is not null && row >= 0 && row < this.rowWrapped.Length)
+        {
+            this.rowWrapped[row] = false;
         }
     }
 }

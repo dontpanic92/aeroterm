@@ -497,11 +497,13 @@ public class TerminalBufferTests
     }
 
     /// <summary>
-    /// Scrollback rows preserve their capture-time column count; resizing
-    /// the live grid does not mutate or reflow stored rows.
+    /// Scrollback rows re-enter the live grid when reflow is given enough
+    /// rows to hold them. The captured content is preserved verbatim —
+    /// this covers the small-history case where nothing needs to stay in
+    /// scrollback after resize.
     /// </summary>
     [Test]
-    public void Scrollback_ResizeLiveGrid_DoesNotMutateHistory()
+    public void Scrollback_ResizeLiveGrid_ReflowsHistoryIntoLiveGrid()
     {
         var buffer = new TerminalBuffer(3, 2);
         FillRow(buffer, 0, 'A');
@@ -511,10 +513,12 @@ public class TerminalBufferTests
 
         buffer.Resize(8, 4);
 
-        Assert.That(buffer.ScrollbackCount, Is.EqualTo(1));
-        var row = buffer.GetScrollbackLine(0);
-        Assert.That(row.Length, Is.EqualTo(3));
-        Assert.That(row[0].Character, Is.EqualTo("A"));
+        // Scrollback row (AAA) + two live rows all fit in 4 rows — pulled back.
+        Assert.That(buffer.ScrollbackCount, Is.EqualTo(0));
+        var screen = buffer.GetScreen();
+        Assert.That(screen!.Cells[0, 0].Character, Is.EqualTo("A"));
+        Assert.That(screen.Cells[0, 1].Character, Is.EqualTo("A"));
+        Assert.That(screen.Cells[0, 2].Character, Is.EqualTo("A"));
     }
 
     private static void FillRow(TerminalBuffer buffer, int row, char value)
