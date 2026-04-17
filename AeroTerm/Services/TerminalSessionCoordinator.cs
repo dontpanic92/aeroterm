@@ -17,11 +17,13 @@ using Microsoft.Extensions.Logging;
 /// Coordinates terminal session lifecycle: shell detection, PTY creation,
 /// TerminalControl instantiation, event wiring, and shutdown.
 /// </summary>
-internal sealed class TerminalSessionCoordinator
+internal sealed class TerminalSessionCoordinator : IDisposable
 {
     private readonly AppSettings settings;
     private readonly ILogger log;
     private TerminalControl? terminalControl;
+    private System.ComponentModel.PropertyChangedEventHandler? settingsHandler;
+    private bool disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalSessionCoordinator"/> class.
@@ -90,7 +92,7 @@ internal sealed class TerminalSessionCoordinator
         var scheme = ColorSchemePresets.FindByName(this.settings.ColorSchemeName) ?? ColorSchemePresets.Default;
         this.terminalControl.ApplyColorScheme(scheme);
 
-        this.settings.PropertyChanged += (s, e) =>
+        this.settingsHandler = (s, e) =>
         {
             if (e.PropertyName == nameof(AppSettings.ColorSchemeName))
             {
@@ -133,6 +135,7 @@ internal sealed class TerminalSessionCoordinator
                 });
             }
         };
+        this.settings.PropertyChanged += this.settingsHandler;
 
         this.terminalControl.TitleChanged += title =>
             Dispatcher.UIThread.Post(() => this.TitleChanged?.Invoke(title));
@@ -153,12 +156,28 @@ internal sealed class TerminalSessionCoordinator
     }
 
     /// <summary>
-    /// Disposes the terminal control and releases resources.
+    /// Disposes the terminal control and releases resources. Safe to call
+    /// multiple times.
     /// </summary>
     public void Shutdown()
     {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        this.disposed = true;
+        if (this.settingsHandler is not null)
+        {
+            this.settings.PropertyChanged -= this.settingsHandler;
+            this.settingsHandler = null;
+        }
+
         this.terminalControl?.Dispose();
     }
+
+    /// <inheritdoc />
+    public void Dispose() => this.Shutdown();
 
     private static string DetectShell()
     {

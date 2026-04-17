@@ -134,6 +134,9 @@
                     Click="CloseButton_Click" />
         </Grid>
 
+        <!-- Tab Strip (visible when more than one tab) -->
+        <Border DockPanel.Dock="Top" Name="TabStripHost" Background="Transparent" IsVisible="False" />
+
         <!-- Terminal Content -->
         <Border Name="TerminalBorder" Background="Transparent" />
     </DockPanel>

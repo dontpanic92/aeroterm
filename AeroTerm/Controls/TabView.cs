@@ -1,0 +1,241 @@
+// <copyright file="TabView.cs">
+// Copyright (c) AeroTerm Developers. All rights reserved.
+// Licensed under the GPLv2 license. See LICENSE file in the project root for full license information.
+// </copyright>
+
+namespace AeroTerm.Controls;
+
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using Avalonia.Controls;
+
+/// <summary>
+/// Content host for <see cref="TabSession"/> instances. Does NOT render the
+/// tab strip itself — the strip (<see cref="TabStrip"/>) is placed by the
+/// hosting window wherever is platform-appropriate (e.g. inside the title
+/// bar row on Windows / Linux, below the traffic-light reservation on
+/// macOS).
+/// <para>
+/// All tab visuals are kept simultaneously attached to the content area
+/// with <c>IsVisible</c> toggled — the "hidden but attached" strategy.
+/// </para>
+/// </summary>
+public sealed class TabView : UserControl, INotifyPropertyChanged
+{
+    private readonly Grid contentArea = new();
+    private TabSession? activeTab;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TabView"/> class.
+    /// </summary>
+    public TabView()
+    {
+        this.Tabs = new ObservableCollection<TabSession>();
+        this.Tabs.CollectionChanged += this.OnTabsCollectionChanged;
+        this.Content = this.contentArea;
+    }
+
+    /// <inheritdoc />
+    public new event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
+    /// Raised whenever <see cref="ActiveTab"/> changes. Argument is the new
+    /// active tab (or <c>null</c> if none).
+    /// </summary>
+    public event Action<TabSession?>? ActiveTabChanged;
+
+    /// <summary>
+    /// Raised when the last remaining tab has just been closed. The
+    /// hosting window typically subscribes to close itself.
+    /// </summary>
+    public event Action? LastTabClosed;
+
+    /// <summary>
+    /// Gets the observable collection of tabs in display order.
+    /// </summary>
+    public ObservableCollection<TabSession> Tabs { get; }
+
+    /// <summary>
+    /// Gets the currently active tab, or <c>null</c> if there are no tabs.
+    /// </summary>
+    public TabSession? ActiveTab
+    {
+        get => this.activeTab;
+        private set
+        {
+            if (ReferenceEquals(this.activeTab, value))
+            {
+                return;
+            }
+
+            this.activeTab = value;
+            this.ApplyActiveVisibility();
+            this.OnPropertyChanged();
+            this.ActiveTabChanged?.Invoke(value);
+        }
+    }
+
+    /// <summary>
+    /// Adds a tab to the end of the collection. Does NOT change the active
+    /// tab unless this is the first tab — callers control focus.
+    /// </summary>
+    /// <param name="tab">The tab to add.</param>
+    public void AddTab(TabSession tab)
+    {
+        if (tab is null)
+        {
+            throw new ArgumentNullException(nameof(tab));
+        }
+
+        this.Tabs.Add(tab);
+    }
+
+    /// <summary>
+    /// Closes a tab: removes it from the collection, disposes its underlying
+    /// session, and activates a neighbour if the closed tab was active. When
+    /// the closed tab was the last one, <see cref="LastTabClosed"/> fires.
+    /// </summary>
+    /// <param name="tab">The tab to close.</param>
+    public void CloseTab(TabSession tab)
+    {
+        if (tab is null)
+        {
+            throw new ArgumentNullException(nameof(tab));
+        }
+
+        int index = this.Tabs.IndexOf(tab);
+        if (index < 0)
+        {
+            return;
+        }
+
+        bool wasActive = ReferenceEquals(this.activeTab, tab);
+        this.Tabs.RemoveAt(index);
+        tab.Dispose();
+
+        if (this.Tabs.Count == 0)
+        {
+            this.ActiveTab = null;
+            this.LastTabClosed?.Invoke();
+            return;
+        }
+
+        if (wasActive)
+        {
+            int next = Math.Min(index, this.Tabs.Count - 1);
+            this.ActivateByIndex(next);
+        }
+    }
+
+    /// <summary>
+    /// Makes <paramref name="tab"/> the active tab. No-op if the tab is
+    /// not a member of <see cref="Tabs"/> or is already active.
+    /// </summary>
+    /// <param name="tab">The tab to activate.</param>
+    public void ActivateTab(TabSession tab)
+    {
+        if (tab is null)
+        {
+            throw new ArgumentNullException(nameof(tab));
+        }
+
+        if (!this.Tabs.Contains(tab))
+        {
+            return;
+        }
+
+        this.ActiveTab = tab;
+    }
+
+    /// <summary>
+    /// Activates the tab at <paramref name="index"/> in <see cref="Tabs"/>.
+    /// Out-of-range indices are silently ignored.
+    /// </summary>
+    /// <param name="index">Zero-based index into <see cref="Tabs"/>.</param>
+    public void ActivateByIndex(int index)
+    {
+        if (index < 0 || index >= this.Tabs.Count)
+        {
+            return;
+        }
+
+        this.ActiveTab = this.Tabs[index];
+    }
+
+    /// <summary>
+    /// Activates the tab immediately to the right of the active one,
+    /// wrapping to the first tab from the last.
+    /// </summary>
+    public void ActivateNext()
+    {
+        if (this.Tabs.Count == 0)
+        {
+            return;
+        }
+
+        int i = this.activeTab is null ? -1 : this.Tabs.IndexOf(this.activeTab);
+        int next = (i + 1) % this.Tabs.Count;
+        this.ActiveTab = this.Tabs[next];
+    }
+
+    /// <summary>
+    /// Activates the tab immediately to the left of the active one,
+    /// wrapping to the last tab from the first.
+    /// </summary>
+    public void ActivatePrev()
+    {
+        if (this.Tabs.Count == 0)
+        {
+            return;
+        }
+
+        int i = this.activeTab is null ? 0 : this.Tabs.IndexOf(this.activeTab);
+        int prev = (i - 1 + this.Tabs.Count) % this.Tabs.Count;
+        this.ActiveTab = this.Tabs[prev];
+    }
+
+    private void OnTabsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems is not null)
+        {
+            foreach (TabSession tab in e.NewItems)
+            {
+                if (!this.contentArea.Children.Contains(tab.Control))
+                {
+                    tab.Control.IsVisible = false;
+                    this.contentArea.Children.Add(tab.Control);
+                }
+            }
+        }
+
+        if (e.OldItems is not null)
+        {
+            foreach (TabSession tab in e.OldItems)
+            {
+                this.contentArea.Children.Remove(tab.Control);
+            }
+        }
+
+        // First tab added to an empty view becomes active automatically;
+        // further additions keep the current active tab (caller decides).
+        if (this.activeTab is null && this.Tabs.Count > 0)
+        {
+            this.ActiveTab = this.Tabs[0];
+        }
+    }
+
+    private void ApplyActiveVisibility()
+    {
+        foreach (var tab in this.Tabs)
+        {
+            tab.Control.IsVisible = ReferenceEquals(tab, this.activeTab);
+        }
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+}
