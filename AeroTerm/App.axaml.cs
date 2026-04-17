@@ -8,6 +8,7 @@ namespace AeroTerm;
 using System.Linq;
 using System.Runtime.InteropServices;
 using AeroTerm.Services;
+using AeroTerm.WindowEffects;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -32,6 +33,7 @@ public class App : Application
             if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                MacOSWindowMenu.SetNewWindowHandler(() => this.CreateNewWindow());
             }
 
             desktop.MainWindow = this.CreateNewWindow();

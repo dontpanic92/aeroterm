@@ -99,6 +99,11 @@ public partial class MainWindow : Window
     /// <inheritdoc />
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            MacOSWindowMenu.UnregisterWindow(this);
+        }
+
         WindowSettingsPersistence.Capture(this, this.settings);
         this.settings.Save();
         this.coordinator.Shutdown();
@@ -189,6 +194,11 @@ public partial class MainWindow : Window
     {
         this.effectsService.DeferMacOSNativeTransparency();
         this.coordinator.Initialize();
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            MacOSWindowMenu.RegisterWindow(this);
+        }
 
         // Focus terminal after a brief delay to ensure layout is complete
         await Task.Delay(100);
