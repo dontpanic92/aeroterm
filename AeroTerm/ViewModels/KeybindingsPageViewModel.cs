@@ -129,7 +129,7 @@ internal sealed class KeybindingsPageViewModel : SettingsPageViewModel, INotifyP
         foreach (KeybindingAction action in Enum.GetValues<KeybindingAction>())
         {
             // Reserved actions aren't wired into any dispatcher yet.
-            if (action is KeybindingAction.ToggleTransparency or KeybindingAction.OpenCommandPalette)
+            if (action is KeybindingAction.ToggleTransparency)
             {
                 continue;
             }

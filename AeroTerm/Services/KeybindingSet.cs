@@ -70,6 +70,7 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.Copy, new KeyChord(KeyModifiers.Meta, Key.C)));
             list.Add(new Keybinding(KeybindingAction.Paste, new KeyChord(KeyModifiers.Meta, Key.V)));
             list.Add(new Keybinding(KeybindingAction.FindInScrollback, new KeyChord(KeyModifiers.Meta, Key.F)));
+            list.Add(new Keybinding(KeybindingAction.OpenCommandPalette, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.P)));
 
             // OpenSettings, NewWindow, CloseWindow: handled by the macOS
             // native menu / OS, so no chord defaults here — avoids
@@ -96,6 +97,7 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.Paste, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.V)));
             list.Add(new Keybinding(KeybindingAction.FindInScrollback, new KeyChord(KeyModifiers.Control, Key.F)));
             list.Add(new Keybinding(KeybindingAction.OpenSettings, new KeyChord(KeyModifiers.Control, Key.OemComma)));
+            list.Add(new Keybinding(KeybindingAction.OpenCommandPalette, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.P)));
         }
 
         return list;
@@ -129,7 +131,7 @@ public sealed class KeybindingSet
         KeybindingAction.NewWindow => "New window",
         KeybindingAction.CloseWindow => "Close window",
         KeybindingAction.ToggleTransparency => "Toggle transparency (reserved)",
-        KeybindingAction.OpenCommandPalette => "Open command palette (reserved)",
+        KeybindingAction.OpenCommandPalette => "Open command palette",
         _ => action.ToString(),
     };
 

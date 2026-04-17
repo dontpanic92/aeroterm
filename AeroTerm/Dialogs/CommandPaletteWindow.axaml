@@ -1,0 +1,91 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dialogs="using:AeroTerm.Dialogs"
+        x:Class="AeroTerm.Dialogs.CommandPaletteWindow"
+        x:CompileBindings="True"
+        x:DataType="dialogs:CommandPaletteWindow"
+        Width="560"
+        SizeToContent="Height"
+        MinHeight="64"
+        MaxHeight="480"
+        CanResize="False"
+        WindowDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Title="Command Palette">
+  <Window.Resources>
+    <SolidColorBrush x:Key="PaletteBackground" Color="#E01E1E22" />
+    <SolidColorBrush x:Key="PaletteBorder" Color="#66FFFFFF" />
+    <SolidColorBrush x:Key="PaletteForeground" Color="#F0FFFFFF" />
+    <SolidColorBrush x:Key="PaletteMuted" Color="#90FFFFFF" />
+    <SolidColorBrush x:Key="PaletteSelection" Color="#4C6CB6FF" />
+  </Window.Resources>
+
+  <Window.Styles>
+    <Style Selector="ListBoxItem">
+      <Setter Property="Padding" Value="10,5" />
+      <Setter Property="Foreground" Value="{DynamicResource PaletteForeground}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource PaletteSelection}" />
+    </Style>
+    <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#25FFFFFF" />
+    </Style>
+  </Window.Styles>
+
+  <Border Background="{DynamicResource PaletteBackground}"
+          BorderBrush="{DynamicResource PaletteBorder}"
+          BorderThickness="1"
+          CornerRadius="6"
+          Padding="0">
+    <Grid RowDefinitions="Auto,*">
+      <TextBox Grid.Row="0"
+               Name="QueryTextBox"
+               PlaceholderText="Type a command…"
+               Background="Transparent"
+               Foreground="{DynamicResource PaletteForeground}"
+               CaretBrush="{DynamicResource PaletteForeground}"
+               BorderThickness="0,0,0,1"
+               BorderBrush="{DynamicResource PaletteBorder}"
+               FontSize="14"
+               Padding="12,10"
+               VerticalContentAlignment="Center" />
+
+      <ListBox Grid.Row="1"
+               Name="Results"
+               Background="Transparent"
+               BorderThickness="0"
+               MaxHeight="410"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="dialogs:PaletteRowViewModel">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+              <TextBlock Grid.Column="0" Grid.Row="0"
+                         Name="TitleBlock"
+                         FontSize="13"
+                         Foreground="{DynamicResource PaletteForeground}"
+                         TextTrimming="CharacterEllipsis" />
+
+              <TextBlock Grid.Column="1" Grid.Row="0"
+                         FontSize="11"
+                         Foreground="{DynamicResource PaletteMuted}"
+                         IsVisible="{Binding HasCategory}"
+                         Margin="12,0,0,0"
+                         Text="{Binding Category}" />
+
+              <TextBlock Grid.Column="0" Grid.Row="1" Grid.ColumnSpan="2"
+                         FontSize="11"
+                         Foreground="{DynamicResource PaletteMuted}"
+                         IsVisible="{Binding HasSubtitle}"
+                         TextTrimming="CharacterEllipsis"
+                         Text="{Binding Subtitle}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </Border>
+</Window>

@@ -27,6 +27,7 @@ public class App : Application
     private static KeybindingSet keybindings = KeybindingSet.Defaults;
     private static ProfileStore? profileStore;
     private static ProfileStoreData profiles = new(new List<Profile> { ProfileStore.CreateSynthesizedDefault() }, null);
+    private static PaletteMruStore? paletteMru;
 
     /// <summary>
     /// Raised whenever <see cref="Keybindings"/> has been reloaded from
@@ -74,6 +75,20 @@ public class App : Application
             }
 
             return profileStore;
+        }
+    }
+
+    /// <summary>
+    /// Gets the process-wide command-palette MRU store. Created lazily
+    /// on first access so tests can swap it via
+    /// <see cref="SetPaletteMruForTesting"/>.
+    /// </summary>
+    public static PaletteMruStore PaletteMru
+    {
+        get
+        {
+            paletteMru ??= new PaletteMruStore();
+            return paletteMru;
         }
     }
 
@@ -194,6 +209,15 @@ public class App : Application
 
         profiles = (store ?? new ProfileStore()).Load();
         ProfilesChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Replaces the process-wide palette MRU store (tests only).
+    /// </summary>
+    /// <param name="store">The replacement store, or <see langword="null"/> to reset.</param>
+    internal static void SetPaletteMruForTesting(PaletteMruStore? store)
+    {
+        paletteMru = store;
     }
 
     /// <summary>

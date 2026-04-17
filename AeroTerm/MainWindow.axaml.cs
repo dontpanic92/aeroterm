@@ -5,6 +5,8 @@
 
 namespace AeroTerm;
 
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using AeroTerm.Controls;
 using AeroTerm.Diagnostics;
@@ -222,6 +224,15 @@ public partial class MainWindow : Window
 
     private bool HandleTabShortcut(KeyEventArgs e)
     {
+        // Command palette first — honours user overrides via App.Keybindings.
+        var chord = new KeyChord(e.KeyModifiers, e.Key);
+        var resolved = App.Keybindings.Resolve(chord);
+        if (resolved?.Action == KeybindingAction.OpenCommandPalette)
+        {
+            this.OpenCommandPalette();
+            return true;
+        }
+
         var m = e.KeyModifiers;
 
         if (IsMac())

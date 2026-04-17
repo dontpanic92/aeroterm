@@ -1,0 +1,116 @@
+// <copyright file="MainWindow.PaletteHost.cs">
+// Copyright (c) AeroTerm Developers. All rights reserved.
+// Licensed under the GPLv2 license. See LICENSE file in the project root for full license information.
+// </copyright>
+
+namespace AeroTerm;
+
+using System.Collections.Generic;
+using System.Linq;
+using AeroTerm.Services;
+using Avalonia;
+
+/// <summary>
+/// <see cref="IPaletteHost"/> implementation for the main window. Split
+/// out into its own partial file so the interface members can cluster
+/// without fighting StyleCop's element-ordering rules in the rest of
+/// the class.
+/// </summary>
+public partial class MainWindow : IPaletteHost
+{
+    /// <inheritdoc />
+    IReadOnlyList<string> IPaletteHost.TabTitles =>
+        this.tabView.Tabs.Select(t => t.Title).ToList();
+
+    /// <inheritdoc />
+    int IPaletteHost.ActiveTabIndex
+    {
+        get
+        {
+            var active = this.tabView.ActiveTab;
+            if (active is null)
+            {
+                return 0;
+            }
+
+            int idx = 0;
+            foreach (var t in this.tabView.Tabs)
+            {
+                if (ReferenceEquals(t, active))
+                {
+                    return idx + 1;
+                }
+
+                idx++;
+            }
+
+            return 0;
+        }
+    }
+
+    /// <inheritdoc />
+    AppSettings IPaletteHost.Settings => this.settings;
+
+    /// <summary>
+    /// Opens the Cmd/Ctrl+Shift+P command palette non-modally. The
+    /// palette constructs its command list from a snapshot of the
+    /// current profiles + color-scheme presets, so each open reflects
+    /// live state.
+    /// </summary>
+    public void OpenCommandPalette()
+    {
+        IPaletteHost host = this;
+        var commands = PaletteCommandSource.Build(
+            host,
+            App.Profiles.Profiles,
+            Models.ColorSchemePresets.All);
+
+        var palette = new Dialogs.CommandPaletteWindow(host, App.PaletteMru, commands);
+        palette.ShowForOwner(this);
+    }
+
+    /// <inheritdoc />
+    void IPaletteHost.NewTab() => this.CreateAndActivateNewTab();
+
+    /// <inheritdoc />
+    void IPaletteHost.NewTabFromProfile(Profile profile) => this.CreateAndActivateNewTabFromProfile(profile);
+
+    /// <inheritdoc />
+    void IPaletteHost.CloseActiveTab()
+    {
+        if (this.tabView.ActiveTab is { } active)
+        {
+            this.tabView.CloseTab(active);
+        }
+    }
+
+    /// <inheritdoc />
+    void IPaletteHost.DuplicateActiveTab() => this.DuplicateActiveTab();
+
+    /// <inheritdoc />
+    void IPaletteHost.ActivateNextTab() => this.tabView.ActivateNext();
+
+    /// <inheritdoc />
+    void IPaletteHost.ActivatePreviousTab() => this.tabView.ActivatePrev();
+
+    /// <inheritdoc />
+    void IPaletteHost.ActivateTabByIndex(int index) => this.tabView.ActivateByIndex(index);
+
+    /// <inheritdoc />
+    void IPaletteHost.OpenSettings() => this.OpenSettings();
+
+    /// <inheritdoc />
+    void IPaletteHost.NewWindow()
+    {
+        if (Application.Current is App app)
+        {
+            app.CreateNewWindow();
+        }
+    }
+
+    /// <inheritdoc />
+    void IPaletteHost.CloseHostWindow() => this.Close();
+
+    /// <inheritdoc />
+    void IPaletteHost.ReloadKeybindings() => App.ReloadKeybindings();
+}
