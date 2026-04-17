@@ -7,27 +7,29 @@ namespace AeroTerm.Controls;
 
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
-using AeroTerm.Diagnostics;
+using AeroTerm.Controls.Terminal;
 using AeroTerm.Pty;
 using AeroTerm.Services;
 using AeroTerm.Utilities;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Input.Platform;
 using Avalonia.Input.TextInput;
 using Avalonia.Media;
-using Avalonia.Platform;
-using Avalonia.Rendering.SceneGraph;
-using Avalonia.Skia;
 using Avalonia.Threading;
-using Microsoft.Extensions.Logging;
 using SkiaSharp;
 
 /// <summary>
 /// Custom Avalonia control that hosts a terminal emulator with PTY backend,
-/// VT parsing, and SkiaSharp rendering.
+/// VT parsing, and SkiaSharp rendering. The control is a thin coordinator
+/// that composes focused peer helpers under
+/// <see cref="AeroTerm.Controls.Terminal"/>:
+/// <see cref="TerminalInputHandler"/> for keyboard/text input,
+/// <see cref="TerminalPointerHandler"/> for pointer &amp; selection dispatch,
+/// <see cref="TerminalClipboardBridge"/> for copy/paste and PRIMARY
+/// selection, <see cref="TerminalPtyBridge"/> for PTY lifecycle and the
+/// reader thread, and <see cref="TerminalVisualHost"/> for the render
+/// pipeline.
 /// </summary>
 public class TerminalControl : Control, IDisposable
 {
@@ -39,30 +41,20 @@ public class TerminalControl : Control, IDisposable
     private readonly LigatureTextShaper ligatureTextShaper = new();
     private readonly TerminalRenderer renderer;
     private readonly CursorStateManager cursorState;
-    private readonly TerminalDrawOperation drawOperation;
-    private readonly IPtyConnectionFactory ptyFactory;
     private readonly TerminalSelection selection = new();
     private readonly SearchOverlay searchOverlay = new();
     private readonly DispatcherTimer searchRecomputeTimer;
 
+    private readonly TerminalClipboardBridge clipboard;
+    private readonly TerminalPtyBridge ptyBridge;
+    private readonly TerminalPointerHandler pointerHandler;
+    private readonly TerminalVisualHost visualHost;
+
     private TextLayoutParameters textParam;
-    private IPtyConnection? ptyConnection;
-    private Thread? readerThread;
     private ModeInfo currentModeInfo;
     private int lastReportedBg = -1;
     private volatile bool isDisposed;
-    private int redrawQueued;
-    private int lastPtyCols;
-    private int lastPtyRows;
-    private long synchronizedOutputSinceTicks;
-    private bool pointerDragSelecting;
     private SKColor selectionColor = new SKColor(0x39, 0x66, 0xCC, 0x70);
-    private int pointerRow = -1;
-    private int pointerCol = -1;
-    private bool pointerInside;
-    private bool hyperlinkModifierDown;
-    private Cursor? handCursor;
-    private HyperlinkRun? currentHyperlinkRun;
     private int viewportOffset;
     private bool searchOverlayOpen;
     private bool searchUsingAltBufferSnapshot;
@@ -70,8 +62,6 @@ public class TerminalControl : Control, IDisposable
     private int activeMatchIndex = -1;
     private int searchSnapshotScrollbackCount;
     private int searchSnapshotRows;
-    private bool middleClickPastes = true;
-    private IPrimarySelectionService primarySelectionService = DefaultPrimarySelectionService.Instance;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -92,16 +82,26 @@ public class TerminalControl : Control, IDisposable
     /// <param name="rows">Initial row count.</param>
     public TerminalControl(IPtyConnectionFactory ptyFactory, int cols = 80, int rows = 24)
     {
-        this.ptyFactory = ptyFactory ?? throw new ArgumentNullException(nameof(ptyFactory));
+        ArgumentNullException.ThrowIfNull(ptyFactory);
+
         this.buffer = new TerminalBuffer(cols, rows);
+
+        this.clipboard = new TerminalClipboardBridge(
+            () => TopLevel.GetTopLevel(this),
+            text => this.inputHandler!.HandlePaste(text));
+
         this.parser = new VtParser(
             this.buffer,
             this.OnTitleChanged,
-            this.OnWriteBack,
-            this.OnClipboardRead,
-            this.OnClipboardWrite);
+            data => this.ptyBridge!.WriteToPty(data),
+            () => this.clipboard.ReadClipboardForParser(),
+            text => this.clipboard.WriteClipboardFromParser(text));
         this.parser.BellRaised += (_, _) => this.BellRaised?.Invoke();
-        this.inputHandler = new TerminalInputHandler(this.WriteToPty);
+
+        this.ptyBridge = new TerminalPtyBridge(ptyFactory, new ReaderHost(this));
+        this.ptyBridge.ProcessExited += () => this.ProcessExited?.Invoke();
+
+        this.inputHandler = new TerminalInputHandler(this.ptyBridge.WriteToPty);
 
         this.ClipToBounds = true;
         this.Focusable = true;
@@ -110,7 +110,9 @@ public class TerminalControl : Control, IDisposable
         this.renderer = new TerminalRenderer(this.fontChain, this.ligatureTextShaper, this.imeClient);
         this.currentModeInfo = new ModeInfo(CursorShape.Block, 100, CursorBlinking.BlinkOn);
         this.cursorState = new CursorStateManager(this.InvalidateVisual, () => this.currentModeInfo);
-        this.drawOperation = new TerminalDrawOperation(this, default);
+
+        this.pointerHandler = new TerminalPointerHandler(this);
+        this.visualHost = new TerminalVisualHost(this.RenderWithSkia);
 
         this.AddHandler(
             InputElement.TextInputMethodClientRequestedEvent,
@@ -261,8 +263,8 @@ public class TerminalControl : Control, IDisposable
     /// </summary>
     public bool MiddleClickPastes
     {
-        get => this.middleClickPastes;
-        set => this.middleClickPastes = value;
+        get => this.clipboard.MiddleClickPastes;
+        set => this.clipboard.MiddleClickPastes = value;
     }
 
     /// <summary>
@@ -277,8 +279,8 @@ public class TerminalControl : Control, IDisposable
     /// </summary>
     internal IPrimarySelectionService PrimarySelectionService
     {
-        get => this.primarySelectionService;
-        set => this.primarySelectionService = value ?? DefaultPrimarySelectionService.Instance;
+        get => this.clipboard.PrimarySelectionService;
+        set => this.clipboard.PrimarySelectionService = value ?? DefaultPrimarySelectionService.Instance;
     }
 
     /// <summary>
@@ -286,7 +288,52 @@ public class TerminalControl : Control, IDisposable
     /// or <c>null</c> if no process has been started (or the underlying
     /// PTY has since been released).
     /// </summary>
-    internal int? ChildPid => this.ptyConnection?.Pid;
+    internal int? ChildPid => this.ptyBridge.ChildPid;
+
+    /// <summary>
+    /// Gets the underlying terminal buffer. Used by peer helpers living in
+    /// <see cref="AeroTerm.Controls.Terminal"/>.
+    /// </summary>
+    internal TerminalBuffer Buffer => this.buffer;
+
+    /// <summary>
+    /// Gets the active selection model. Used by peer helpers.
+    /// </summary>
+    internal TerminalSelection Selection => this.selection;
+
+    /// <summary>
+    /// Gets the keyboard/text input handler shared between
+    /// <see cref="OnKeyDown"/> and the pointer handler.
+    /// </summary>
+    internal TerminalInputHandler InputHandler => this.inputHandler;
+
+    /// <summary>
+    /// Gets the clipboard bridge. Used by the pointer handler for middle-
+    /// click paste and PRIMARY selection publication.
+    /// </summary>
+    internal TerminalClipboardBridge Clipboard => this.clipboard;
+
+    /// <summary>
+    /// Gets the cursor state manager, exposed to the pointer handler so it
+    /// can restore the default cursor when the hand-hover clears.
+    /// </summary>
+    internal CursorStateManager CursorState => this.cursorState;
+
+    /// <summary>
+    /// Gets the current cached mode info, exposed to the pointer handler
+    /// for cursor resolution.
+    /// </summary>
+    internal ModeInfo CurrentModeInfo => this.currentModeInfo;
+
+    /// <summary>
+    /// Gets or sets the viewport's scrollback offset in rows. Zero means
+    /// the viewport is anchored to the live grid.
+    /// </summary>
+    internal int ViewportOffset
+    {
+        get => this.viewportOffset;
+        set => this.viewportOffset = value;
+    }
 
     /// <summary>
     /// Starts a child process connected via a PTY.
@@ -297,24 +344,9 @@ public class TerminalControl : Control, IDisposable
     /// <param name="cwd">Working directory for the child process.</param>
     public void StartProcess(string app, string[] args, IDictionary<string, string> env, string cwd)
     {
-        if (this.ptyConnection is not null)
-        {
-            throw new InvalidOperationException("A process is already running.");
-        }
-
         int cols = (int)this.DesiredColCount;
         int rows = (int)this.DesiredRowCount;
-        this.lastPtyCols = cols;
-        this.lastPtyRows = rows;
-        this.ptyConnection = this.ptyFactory.Create(app, args, env, cwd, rows, cols);
-        this.ptyConnection.ProcessExited += this.OnProcessExited;
-
-        this.readerThread = new Thread(this.ReaderThreadProc)
-        {
-            Name = "TerminalControl.Reader",
-            IsBackground = true,
-        };
-        this.readerThread.Start();
+        this.ptyBridge.StartProcess(app, args, env, cwd, cols, rows);
     }
 
     /// <summary>
@@ -349,11 +381,11 @@ public class TerminalControl : Control, IDisposable
         // which causes the shell/application to redraw with new colors.
         // Palette-indexed colors in existing cells are baked as RGB at
         // write time, so only a full shell repaint can fix them.
-        if (this.ptyConnection is not null)
+        if (this.ptyBridge.IsRunning)
         {
             int cols = (int)this.DesiredColCount;
             int rows = (int)this.DesiredRowCount;
-            this.ptyConnection.Resize(cols, rows);
+            this.ptyBridge.ForceResize(cols, rows);
         }
 
         this.BackgroundColorChanged?.Invoke(scheme.Background);
@@ -455,8 +487,7 @@ public class TerminalControl : Control, IDisposable
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
-        this.drawOperation.Bounds = new Rect(0, 0, this.Bounds.Width, this.Bounds.Height);
-        context.Custom(this.drawOperation);
+        this.visualHost.Render(context, new Rect(0, 0, this.Bounds.Width, this.Bounds.Height));
     }
 
     /// <summary>
@@ -505,6 +536,26 @@ public class TerminalControl : Control, IDisposable
         return this.fontChain.PrimaryFontName;
     }
 
+    /// <summary>
+    /// Converts a pointer pixel position to grid (row, column) coordinates,
+    /// clamped to the visible grid.
+    /// </summary>
+    /// <param name="pixel">The pointer position in control-local pixels.</param>
+    /// <returns>A <c>(row, col)</c> tuple in visible-grid space.</returns>
+    internal (int Row, int Col) PixelToGridPosition(Point pixel)
+    {
+        int row = (int)(pixel.Y / this.textParam.LineHeight);
+        int col = (int)(pixel.X / this.textParam.CharWidth);
+
+        int maxRow = (int)this.DesiredRowCount - 1;
+        int maxCol = (int)this.DesiredColCount - 1;
+
+        row = Math.Clamp(row, 0, maxRow);
+        col = Math.Clamp(col, 0, maxCol);
+
+        return (row, col);
+    }
+
     /// <inheritdoc />
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -544,7 +595,7 @@ public class TerminalControl : Control, IDisposable
     {
         base.OnKeyDown(e);
 
-        this.UpdateHyperlinkModifier(e.KeyModifiers);
+        this.pointerHandler.UpdateHyperlinkModifier(e.KeyModifiers);
 
         // Copy/paste hotkeys take priority over the PTY input path so they
         // work regardless of what the shell does with Ctrl+C / Ctrl+V.
@@ -552,7 +603,7 @@ public class TerminalControl : Control, IDisposable
         {
             if (!this.selection.IsEmpty)
             {
-                this.CopySelectionToClipboard();
+                this.clipboard.CopySelectionToClipboard(this.selection, this.buffer);
             }
 
             e.Handled = true;
@@ -561,7 +612,7 @@ public class TerminalControl : Control, IDisposable
 
         if (e.Key == Key.V && IsPasteModifier(e.KeyModifiers))
         {
-            this.PasteFromClipboard();
+            this.clipboard.PasteFromClipboard();
             e.Handled = true;
             return;
         }
@@ -595,225 +646,42 @@ public class TerminalControl : Control, IDisposable
     protected override void OnKeyUp(KeyEventArgs e)
     {
         base.OnKeyUp(e);
-        this.UpdateHyperlinkModifier(e.KeyModifiers);
+        this.pointerHandler.UpdateHyperlinkModifier(e.KeyModifiers);
     }
 
     /// <inheritdoc />
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
-        this.Focus();
-
-        var point = e.GetCurrentPoint(this);
-        bool isLeft = point.Properties.IsLeftButtonPressed;
-        bool isMiddle = point.Properties.IsMiddleButtonPressed;
-        bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-        bool mouseTrackingOff = this.buffer.MouseTrackingMode == MouseTrackingMode.None;
-
-        this.UpdateHyperlinkModifier(e.KeyModifiers);
-
-        // Middle-click pastes (PRIMARY on Linux/X11, regular clipboard elsewhere).
-        // Only when mouse-tracking is off — apps that capture the mouse
-        // (vim, tmux, htop…) get the raw button report.
-        if (isMiddle && mouseTrackingOff && this.middleClickPastes)
-        {
-            this.PasteMiddleClick();
-            e.Handled = true;
-            return;
-        }
-
-        // Pointer rows translate to live-grid rows once the viewport is
-        // scrolled into scrollback; selection and hyperlink resolution are
-        // both visible-grid-only features and must skip scrollback-only rows.
-        int gridRows = (int)this.DesiredRowCount;
-        int historyRows = Math.Min(this.viewportOffset, gridRows);
-
-        // Modifier+left-click on a hyperlink opens it; short-circuit before
-        // selection logic so the click doesn't begin a drag selection.
-        if (isLeft && IsHyperlinkModifier(e.KeyModifiers))
-        {
-            var (hr, hc) = this.PixelToGridPosition(point.Position);
-            int hLive = hr - historyRows;
-            if (hLive >= 0)
-            {
-                var hcells = this.buffer.GetScreen()?.Cells;
-                var run = HyperlinkBehavior.GetRunAt(hcells, hLive, hc);
-                if (run is { } activatedRun)
-                {
-                    HyperlinkBehavior.Activate(activatedRun.Uri);
-                    e.Handled = true;
-                    return;
-                }
-            }
-        }
-
-        if (isLeft && (mouseTrackingOff || shift))
-        {
-            var (row, col) = this.PixelToGridPosition(point.Position);
-            int liveRow = row - historyRows;
-            if (liveRow < 0)
-            {
-                // Click landed on a scrollback-only row; selection is a
-                // visible-grid-only feature today, so do nothing.
-                e.Handled = true;
-                return;
-            }
-
-            var cells = this.buffer.GetScreen()?.Cells;
-            if (cells is not null)
-            {
-                int clicks = Math.Max(1, e.ClickCount);
-                if (clicks == 2)
-                {
-                    this.selection.BeginWord(liveRow, col, cells);
-                }
-                else if (clicks >= 3)
-                {
-                    this.selection.BeginLine(liveRow, cells);
-                }
-                else
-                {
-                    this.selection.BeginCharacter(liveRow, col, cells);
-                }
-
-                this.pointerDragSelecting = true;
-                e.Pointer.Capture(this);
-                this.InvalidateVisual();
-                e.Handled = true;
-                return;
-            }
-        }
-
-        var (r, c) = this.PixelToGridPosition(point.Position);
-        e.Handled = this.inputHandler.HandlePointerPressed(e, r + 1, c + 1);
+        this.pointerHandler.HandlePointerPressed(e);
     }
 
     /// <inheritdoc />
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
-        var (row, col) = this.PixelToGridPosition(e.GetCurrentPoint(this).Position);
-
-        this.pointerInside = true;
-        this.pointerRow = row;
-        this.pointerCol = col;
-        this.UpdateHyperlinkModifier(e.KeyModifiers);
-        this.RefreshHyperlinkHover();
-
-        if (this.pointerDragSelecting)
-        {
-            int gridRows = (int)this.DesiredRowCount;
-            int historyRows = Math.Min(this.viewportOffset, gridRows);
-            int liveRow = Math.Max(0, row - historyRows);
-            var cells = this.buffer.GetScreen()?.Cells;
-            if (cells is not null)
-            {
-                this.selection.ExtendTo(liveRow, col, cells);
-                this.InvalidateVisual();
-            }
-
-            e.Handled = true;
-            return;
-        }
-
-        e.Handled = this.inputHandler.HandlePointerMoved(e, row + 1, col + 1);
+        this.pointerHandler.HandlePointerMoved(e);
     }
 
     /// <inheritdoc />
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
-
-        if (this.pointerDragSelecting)
-        {
-            this.pointerDragSelecting = false;
-            e.Pointer.Capture(null);
-
-            // A plain click with no drag clears the selection so the next
-            // keystroke isn't preceded by a phantom range.
-            if (this.selection.IsEmpty)
-            {
-                this.selection.Clear();
-                this.InvalidateVisual();
-            }
-            else
-            {
-                // A completed drag that actually selected text should be
-                // published to the X11 PRIMARY selection so middle-click
-                // paste works across applications. No-op on other platforms.
-                this.PublishSelectionToPrimary();
-            }
-
-            e.Handled = true;
-            return;
-        }
-
-        var (row, col) = this.PixelToGridPosition(e.GetCurrentPoint(this).Position);
-        e.Handled = this.inputHandler.HandlePointerReleased(e, row + 1, col + 1);
+        this.pointerHandler.HandlePointerReleased(e);
     }
 
     /// <inheritdoc />
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         base.OnPointerWheelChanged(e);
-        var (row, col) = this.PixelToGridPosition(e.GetCurrentPoint(this).Position);
-        if (this.inputHandler.HandlePointerWheel(e, row + 1, col + 1))
-        {
-            e.Handled = true;
-            return;
-        }
-
-        // Mouse tracking is off and the PTY did not consume the event —
-        // use the wheel to navigate the scrollback viewport instead.
-        // Disabled while the alt buffer is active (pagers manage their own
-        // scrolling via arrow keys / page keys).
-        if (this.buffer.IsUsingAltBuffer)
-        {
-            return;
-        }
-
-        int scrollbackCount = this.buffer.ScrollbackCount;
-        if (scrollbackCount == 0 && this.viewportOffset == 0)
-        {
-            return;
-        }
-
-        // One wheel notch moves three lines. `e.Delta.Y` is positive when
-        // scrolling up (toward older content).
-        int lines = (int)Math.Round(e.Delta.Y * 3.0);
-        if (lines == 0)
-        {
-            return;
-        }
-
-        int before = this.viewportOffset;
-        int target = Math.Clamp(this.viewportOffset + lines, 0, scrollbackCount);
-        if (target == before)
-        {
-            e.Handled = true;
-            return;
-        }
-
-        this.viewportOffset = target;
-
-        // Entering scrollback invalidates the visible-grid-anchored selection.
-        if (!this.selection.IsEmpty)
-        {
-            this.selection.Clear();
-        }
-
-        this.InvalidateVisual();
-        e.Handled = true;
+        this.pointerHandler.HandlePointerWheel(e);
     }
 
     /// <inheritdoc />
     protected override void OnPointerExited(PointerEventArgs e)
     {
         base.OnPointerExited(e);
-        this.pointerInside = false;
-        this.pointerRow = -1;
-        this.pointerCol = -1;
-        this.RefreshHyperlinkHover();
+        this.pointerHandler.HandlePointerExited();
     }
 
     /// <inheritdoc />
@@ -822,7 +690,7 @@ public class TerminalControl : Control, IDisposable
         base.OnGotFocus(e);
         if (this.buffer.FocusEventsEnabled)
         {
-            this.WriteToPty(Encoding.ASCII.GetBytes("\x1B[I"));
+            this.ptyBridge.WriteToPty(Encoding.ASCII.GetBytes("\x1B[I"));
         }
 
         this.cursorState.UpdateCursorBlink(this.currentModeInfo, resetCursorBlink: true);
@@ -834,15 +702,11 @@ public class TerminalControl : Control, IDisposable
         base.OnLostFocus(e);
         if (this.buffer.FocusEventsEnabled)
         {
-            this.WriteToPty(Encoding.ASCII.GetBytes("\x1B[O"));
+            this.ptyBridge.WriteToPty(Encoding.ASCII.GetBytes("\x1B[O"));
         }
 
         this.inputHandler.ClearPressedButton();
-        if (this.hyperlinkModifierDown)
-        {
-            this.hyperlinkModifierDown = false;
-            this.RefreshHyperlinkHover();
-        }
+        this.pointerHandler.OnFocusLost();
     }
 
     /// <summary>
@@ -858,16 +722,7 @@ public class TerminalControl : Control, IDisposable
             if (disposing)
             {
                 this.searchRecomputeTimer.Stop();
-                if (this.ptyConnection is not null)
-                {
-                    this.ptyConnection.ProcessExited -= this.OnProcessExited;
-                    this.ptyConnection.Kill();
-                    this.ptyConnection.Dispose();
-                    this.ptyConnection = null;
-                }
-
-                this.readerThread = null;
-
+                this.ptyBridge.Dispose();
                 Dispatcher.UIThread.Post(this.DisposeCachedResources, DispatcherPriority.Background);
             }
         }
@@ -906,354 +761,6 @@ public class TerminalControl : Control, IDisposable
             && !modifiers.HasFlag(KeyModifiers.Meta);
     }
 
-    private static bool IsHyperlinkModifier(KeyModifiers modifiers)
-    {
-        // macOS: Cmd (Meta). Windows/Linux: Ctrl. Both with no Shift/Alt mixed in.
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            return modifiers.HasFlag(KeyModifiers.Meta)
-                && !modifiers.HasFlag(KeyModifiers.Shift)
-                && !modifiers.HasFlag(KeyModifiers.Control)
-                && !modifiers.HasFlag(KeyModifiers.Alt);
-        }
-
-        return modifiers.HasFlag(KeyModifiers.Control)
-            && !modifiers.HasFlag(KeyModifiers.Shift)
-            && !modifiers.HasFlag(KeyModifiers.Alt)
-            && !modifiers.HasFlag(KeyModifiers.Meta);
-    }
-
-    private void UpdateHyperlinkModifier(KeyModifiers modifiers)
-    {
-        bool down = IsHyperlinkModifier(modifiers);
-        if (down == this.hyperlinkModifierDown)
-        {
-            return;
-        }
-
-        this.hyperlinkModifierDown = down;
-        this.RefreshHyperlinkHover();
-    }
-
-    private void RefreshHyperlinkHover()
-    {
-        HyperlinkRun? newRun = null;
-        if (this.pointerInside && this.hyperlinkModifierDown)
-        {
-            // When the viewport is scrolled into scrollback, the top rows
-            // on-screen aren't part of the live grid. Translate the pointer
-            // row back into live-grid coordinates; skip cleanly if the row
-            // is scrollback-only (hyperlink resolution over history is not
-            // supported yet).
-            int rows = (int)this.DesiredRowCount;
-            int historyRows = Math.Min(this.viewportOffset, rows);
-            int liveRow = this.pointerRow - historyRows;
-            if (liveRow >= 0)
-            {
-                var cells = this.buffer.GetScreen()?.Cells;
-                newRun = HyperlinkBehavior.GetRunAt(cells, liveRow, this.pointerCol);
-            }
-        }
-
-        bool runChanged = !Nullable.Equals(this.currentHyperlinkRun, newRun);
-        this.currentHyperlinkRun = newRun;
-
-        if (newRun is not null)
-        {
-            if (this.handCursor is null)
-            {
-                this.handCursor = new Cursor(StandardCursorType.Hand);
-            }
-
-            if (this.Cursor != this.handCursor)
-            {
-                this.Cursor = this.handCursor;
-            }
-        }
-        else
-        {
-            // Restore whatever the cursor manager thinks is right for the
-            // current terminal mode (usually Ibeam).
-            bool mouseEnabled = this.buffer.MouseTrackingMode != MouseTrackingMode.None;
-            var defaultCursor = this.cursorState.UpdatePointerCursor(this.currentModeInfo, mouseEnabled);
-            if (!ReferenceEquals(this.Cursor, defaultCursor))
-            {
-                this.Cursor = defaultCursor;
-            }
-        }
-
-        if (runChanged)
-        {
-            this.InvalidateVisual();
-        }
-    }
-
-    private void CopySelectionToClipboard()
-    {
-        var screen = this.buffer.GetScreen();
-        if (screen is null || this.selection.IsEmpty)
-        {
-            return;
-        }
-
-        string text = this.selection.CopyText(screen.Cells);
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        Dispatcher.UIThread.Post(async () =>
-        {
-            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-            if (clipboard is not null)
-            {
-                await clipboard.SetTextAsync(text);
-            }
-        });
-    }
-
-    private void PublishSelectionToPrimary()
-    {
-        var screen = this.buffer.GetScreen();
-        if (screen is null || this.selection.IsEmpty)
-        {
-            return;
-        }
-
-        string text = this.selection.CopyText(screen.Cells);
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        var service = this.primarySelectionService;
-
-        // Fire-and-forget; PRIMARY writes are best-effort and must never
-        // block the UI thread or surface an exception to the caller.
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await MiddleClickPaster.TryWritePrimaryAsync(service, text).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                AppLogger.For<TerminalControl>().LogDebug(ex, "PRIMARY selection write failed.");
-            }
-        });
-    }
-
-    private void PasteFromClipboard()
-    {
-        Dispatcher.UIThread.Post(async () =>
-        {
-            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-            if (clipboard is null)
-            {
-                return;
-            }
-
-            try
-            {
-                string? text = await clipboard.TryGetTextAsync();
-                if (!string.IsNullOrEmpty(text))
-                {
-                    this.inputHandler.HandlePaste(text);
-                }
-            }
-            catch (InvalidOperationException)
-            {
-                // Clipboard unavailable on some platforms in some hosting modes.
-            }
-        });
-    }
-
-    private void PasteMiddleClick()
-    {
-        var service = this.primarySelectionService;
-        var topLevel = TopLevel.GetTopLevel(this);
-        var clipboard = topLevel?.Clipboard;
-
-        Func<Task<string?>> clipboardFallback = async () =>
-        {
-            if (clipboard is null)
-            {
-                return null;
-            }
-
-            try
-            {
-                return await clipboard.TryGetTextAsync().ConfigureAwait(false);
-            }
-            catch (InvalidOperationException)
-            {
-                return null;
-            }
-        };
-
-        Dispatcher.UIThread.Post(async () =>
-        {
-            try
-            {
-                await MiddleClickPaster.TryPasteAsync(
-                    this.middleClickPastes,
-                    service,
-                    clipboardFallback,
-                    text => this.inputHandler.HandlePaste(text)).ConfigureAwait(true);
-            }
-            catch (InvalidOperationException)
-            {
-                // Clipboard/PRIMARY transiently unavailable — ignore.
-            }
-        });
-    }
-
-    private (int Row, int Col) PixelToGridPosition(Point pixel)
-    {
-        int row = (int)(pixel.Y / this.textParam.LineHeight);
-        int col = (int)(pixel.X / this.textParam.CharWidth);
-
-        int maxRow = (int)this.DesiredRowCount - 1;
-        int maxCol = (int)this.DesiredColCount - 1;
-
-        row = Math.Clamp(row, 0, maxRow);
-        col = Math.Clamp(col, 0, maxCol);
-
-        return (row, col);
-    }
-
-    private void ReaderThreadProc()
-    {
-        byte[] buf = new byte[4096];
-        try
-        {
-            while (!this.isDisposed && this.ptyConnection is not null)
-            {
-                int read = this.ptyConnection.ReaderStream.Read(buf, 0, buf.Length);
-                if (read <= 0)
-                {
-                    break;
-                }
-
-                int scrollbackBefore = this.buffer.ScrollbackCount;
-                this.parser.Process(buf.AsSpan(0, read));
-                int scrollbackAfter = this.buffer.ScrollbackCount;
-
-                // Anchor the viewport in history while the user is scrolled up:
-                // new lines captured into scrollback shift the visible window
-                // away from the most recent output by the same amount. When
-                // the ring was already full, `scrollbackAfter - scrollbackBefore`
-                // is zero even though older lines were evicted — in that case
-                // the on-screen content still advances by the overflow, so we
-                // account for it via a best-effort estimate using the raw
-                // capture count (newestLine - oldNewestLine).
-                if (this.viewportOffset > 0 && scrollbackAfter >= scrollbackBefore)
-                {
-                    int delta = scrollbackAfter - scrollbackBefore;
-                    if (delta > 0)
-                    {
-                        int newOffset = Math.Min(this.viewportOffset + delta, this.buffer.ScrollbackLimit);
-                        newOffset = Math.Min(newOffset, scrollbackAfter);
-                        this.viewportOffset = newOffset;
-                    }
-                }
-
-                // Clear any active selection as soon as the shell writes to
-                // the screen: with no scrollback, coordinates reference the
-                // visible grid only, and new output invalidates them.
-                if (this.selection.Mode != TerminalSelectionMode.None)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (this.selection.Mode != TerminalSelectionMode.None)
-                        {
-                            this.selection.Clear();
-                        }
-                    });
-                }
-
-                // Sync terminal state to input handler.
-                this.inputHandler.ApplicationCursorKeys = this.buffer.ApplicationCursorKeys;
-                this.inputHandler.BracketedPasteEnabled = this.buffer.BracketedPasteEnabled;
-                this.inputHandler.MouseTrackingMode = this.buffer.MouseTrackingMode;
-
-                // DECSET 2026 — synchronized output. Defer repaints while enabled
-                // so the app can stage a full frame atomically. A 150 ms safety
-                // timer mirrors the de-facto industry default (kitty / WezTerm)
-                // and guards against a runaway app that never disables the mode.
-                if (this.buffer.SynchronizedOutput)
-                {
-                    if (this.synchronizedOutputSinceTicks == 0)
-                    {
-                        this.synchronizedOutputSinceTicks = Environment.TickCount64;
-                    }
-
-                    if (Environment.TickCount64 - this.synchronizedOutputSinceTicks < 150)
-                    {
-                        continue;
-                    }
-                }
-                else
-                {
-                    this.synchronizedOutputSinceTicks = 0;
-                }
-
-                // Queue a redraw on the UI thread, coalescing rapid updates.
-                if (Interlocked.Exchange(ref this.redrawQueued, 1) == 0)
-                {
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        if (!this.isDisposed)
-                        {
-                            this.UpdateModeInfoFromBuffer();
-                            this.ApplyTerminalUiState();
-                            this.ScheduleSearchRecompute();
-                            this.InvalidateVisual();
-                        }
-
-                        Interlocked.Exchange(ref this.redrawQueued, 0);
-                    });
-                }
-            }
-        }
-        catch (IOException)
-        {
-            // PTY stream closed.
-        }
-        catch (ObjectDisposedException)
-        {
-            // PTY disposed during shutdown.
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // PTY file descriptor closed during shutdown (macOS/Linux).
-        }
-    }
-
-    private void WriteToPty(byte[] data)
-    {
-        if (this.ptyConnection is not null && !this.isDisposed)
-        {
-            try
-            {
-                this.ptyConnection.WriterStream.Write(data, 0, data.Length);
-                this.ptyConnection.WriterStream.Flush();
-            }
-            catch (IOException)
-            {
-                // PTY stream closed.
-            }
-            catch (ObjectDisposedException)
-            {
-                // PTY disposed.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // PTY file descriptor closed during shutdown (macOS/Linux).
-            }
-        }
-    }
-
     private void TryResize()
     {
         int cols = (int)this.DesiredColCount;
@@ -1264,13 +771,7 @@ public class TerminalControl : Control, IDisposable
         }
 
         this.buffer.Resize(cols, rows);
-
-        if (cols != this.lastPtyCols || rows != this.lastPtyRows)
-        {
-            this.lastPtyCols = cols;
-            this.lastPtyRows = rows;
-            this.ptyConnection?.Resize(cols, rows);
-        }
+        this.ptyBridge.Resize(cols, rows);
     }
 
     private void UpdateModeInfoFromBuffer()
@@ -1507,7 +1008,7 @@ public class TerminalControl : Control, IDisposable
             return;
         }
 
-        Interlocked.Exchange(ref this.redrawQueued, 0);
+        this.ptyBridge.ResetRedrawLatch();
 
         // Update IME cursor position.
         var cursorPos = screen.CursorPosition;
@@ -1532,12 +1033,12 @@ public class TerminalControl : Control, IDisposable
 
         bool drawCursor = this.cursorState.ShouldDrawCursor(this.currentModeInfo);
         TerminalSelection? selectionForRender = this.selection;
-        HyperlinkRun? hyperlinkForRender = this.currentHyperlinkRun;
+        HyperlinkRun? hyperlinkForRender = this.pointerHandler.CurrentHyperlinkRun;
         Pty.Screen renderScreen = screen;
 
         if (this.viewportOffset > 0)
         {
-            renderScreen = this.ComposeScrollbackScreen(screen, this.viewportOffset);
+            renderScreen = TerminalVisualHost.ComposeScrollbackScreen(screen, this.buffer, this.viewportOffset);
 
             // Hide the cursor and any hyperlink overlay while viewing history;
             // selection is visible-grid-only and is cleared on entering
@@ -1547,7 +1048,15 @@ public class TerminalControl : Control, IDisposable
             selectionForRender = null;
         }
 
-        IReadOnlyList<VisibleMatch>? visibleMatches = this.ProjectVisibleMatches(renderScreen);
+        IReadOnlyList<VisibleMatch>? visibleMatches = this.searchOverlayOpen
+            ? TerminalVisualHost.ProjectVisibleMatches(
+                this.searchMatches,
+                this.activeMatchIndex,
+                renderScreen,
+                this.searchSnapshotScrollbackCount,
+                this.viewportOffset,
+                this.searchUsingAltBufferSnapshot)
+            : null;
 
         this.renderer.Render(
             canvas,
@@ -1563,133 +1072,6 @@ public class TerminalControl : Control, IDisposable
             visibleMatches);
     }
 
-    /// <summary>
-    /// Maps the (absolute-row) <see cref="searchMatches"/> list into
-    /// screen-row coordinates for the currently composed frame. Returns
-    /// <see langword="null"/> when the overlay is closed or no matches
-    /// are on-screen. In alt-buffer mode the absolute-row space is just
-    /// the live grid (no scrollback); otherwise scrollback rows occupy
-    /// absolute rows <c>[0, ScrollbackCount)</c> and live rows follow.
-    /// </summary>
-    private IReadOnlyList<VisibleMatch>? ProjectVisibleMatches(Pty.Screen renderScreen)
-    {
-        if (!this.searchOverlayOpen || this.searchMatches.Count == 0)
-        {
-            return null;
-        }
-
-        int screenRows = renderScreen.Cells.GetLength(0);
-        int screenCols = renderScreen.Cells.GetLength(1);
-
-        int scrollbackCount = this.searchSnapshotScrollbackCount;
-        bool altBuffer = this.searchUsingAltBufferSnapshot;
-
-        // Absolute row of the top-most visible row.
-        int topAbsolute;
-        if (altBuffer)
-        {
-            topAbsolute = 0;
-        }
-        else
-        {
-            topAbsolute = scrollbackCount - this.viewportOffset;
-        }
-
-        int bottomAbsolute = topAbsolute + screenRows - 1;
-
-        var projected = new List<VisibleMatch>();
-        for (int i = 0; i < this.searchMatches.Count; i++)
-        {
-            var m = this.searchMatches[i];
-            if (m.AbsoluteRow < topAbsolute || m.AbsoluteRow > bottomAbsolute)
-            {
-                continue;
-            }
-
-            int screenRow = m.AbsoluteRow - topAbsolute;
-            int startCol = Math.Min(m.StartCol, screenCols - 1);
-            if (startCol < 0)
-            {
-                continue;
-            }
-
-            int cellLength = m.CellLength;
-            if (startCol + cellLength > screenCols)
-            {
-                cellLength = screenCols - startCol;
-            }
-
-            if (cellLength <= 0)
-            {
-                continue;
-            }
-
-            projected.Add(new VisibleMatch(screenRow, startCol, cellLength, i == this.activeMatchIndex));
-        }
-
-        return projected.Count == 0 ? null : projected;
-    }
-
-    private Pty.Screen ComposeScrollbackScreen(Pty.Screen live, int viewportOffset)
-    {
-        int rows = live.Cells.GetLength(0);
-        int cols = live.Cells.GetLength(1);
-        int historyRows = Math.Min(viewportOffset, rows);
-        int scrollbackCount = this.buffer.ScrollbackCount;
-
-        // Oldest scrollback row shown at the top of the viewport.
-        int scrollbackStart = Math.Max(0, scrollbackCount - viewportOffset);
-
-        var composed = new Cell[rows, cols];
-        var defaultStyle = new CellStyle(live.ForegroundColor, live.BackgroundColor, 0, false, false, false, false, false);
-
-        for (int i = 0; i < historyRows; i++)
-        {
-            int sbIndex = scrollbackStart + i;
-            if (sbIndex < 0 || sbIndex >= scrollbackCount)
-            {
-                // Out-of-range (e.g. scrollback shrank mid-render) — fill blank.
-                for (int j = 0; j < cols; j++)
-                {
-                    composed[i, j].Clear(live.ForegroundColor, live.BackgroundColor, 0);
-                }
-
-                continue;
-            }
-
-            var sbRow = this.buffer.GetScrollbackLine(sbIndex);
-            int copyCols = Math.Min(cols, sbRow.Length);
-            for (int j = 0; j < copyCols; j++)
-            {
-                composed[i, j] = sbRow[j];
-            }
-
-            for (int j = copyCols; j < cols; j++)
-            {
-                composed[i, j].Set(" ", defaultStyle);
-            }
-        }
-
-        int liveRowsToShow = rows - historyRows;
-        for (int i = 0; i < liveRowsToShow; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                composed[historyRows + i, j] = live.Cells[i, j];
-            }
-        }
-
-        return new Pty.Screen
-        {
-            Cells = composed,
-            CursorPosition = live.CursorPosition,
-            ForegroundColor = live.ForegroundColor,
-            BackgroundColor = live.BackgroundColor,
-            AllDirty = true,
-            DirtyRows = null,
-        };
-    }
-
     private void RebuildFontChain(List<string> fontNames)
     {
         this.ligatureTextShaper.ClearCache();
@@ -1702,124 +1084,83 @@ public class TerminalControl : Control, IDisposable
         Dispatcher.UIThread.Post(() => this.TitleChanged?.Invoke(title));
     }
 
-    private void OnWriteBack(byte[] data)
+    private int ReaderProcessAndReportScrollbackDelta(ReadOnlySpan<byte> bytes)
     {
-        this.WriteToPty(data);
+        int before = this.buffer.ScrollbackCount;
+        this.parser.Process(bytes);
+        int after = this.buffer.ScrollbackCount;
+        return after - before;
     }
 
-    private string OnClipboardRead()
+    private void ReaderOnAfterParse(int scrollbackDelta)
     {
-        // Clipboard access must happen on the UI thread. We block the
-        // parser thread briefly to fetch the value synchronously.
-        string? result = null;
-        if (Dispatcher.UIThread.CheckAccess())
+        // Anchor the viewport in history while the user is scrolled up:
+        // new lines captured into scrollback shift the visible window
+        // away from the most recent output by the same amount. When the
+        // ring was already full the delta is zero even though older lines
+        // were evicted — on-screen content still advances then, but the
+        // old code accepted this loss so we preserve the behavior.
+        if (this.viewportOffset > 0 && scrollbackDelta > 0)
         {
-            result = this.ReadClipboardSync();
+            int newOffset = Math.Min(this.viewportOffset + scrollbackDelta, this.buffer.ScrollbackLimit);
+            newOffset = Math.Min(newOffset, this.buffer.ScrollbackCount);
+            this.viewportOffset = newOffset;
         }
-        else
+
+        // Clear any active selection as soon as the shell writes to the
+        // screen: with no scrollback, coordinates reference the visible
+        // grid only, and new output invalidates them.
+        if (this.selection.Mode != TerminalSelectionMode.None)
         {
-            var tcs = new TaskCompletionSource<string?>();
-            Dispatcher.UIThread.Post(async () =>
+            Dispatcher.UIThread.Post(() =>
             {
-                try
+                if (this.selection.Mode != TerminalSelectionMode.None)
                 {
-                    var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-                    var text = clipboard is not null ? await clipboard.TryGetTextAsync() : null;
-                    tcs.SetResult(text);
-                }
-                catch (Exception ex)
-                {
-                    tcs.SetException(ex);
+                    this.selection.Clear();
                 }
             });
-
-            try
-            {
-                result = tcs.Task.GetAwaiter().GetResult();
-            }
-            catch
-            {
-                result = string.Empty;
-            }
         }
 
-        return result ?? string.Empty;
+        // Sync terminal state to input handler.
+        this.inputHandler.ApplicationCursorKeys = this.buffer.ApplicationCursorKeys;
+        this.inputHandler.BracketedPasteEnabled = this.buffer.BracketedPasteEnabled;
+        this.inputHandler.MouseTrackingMode = this.buffer.MouseTrackingMode;
     }
 
-    private string? ReadClipboardSync()
+    private void ReaderOnRedrawTick()
     {
-        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-        if (clipboard is null)
-        {
-            return null;
-        }
-
-        return clipboard.TryGetTextAsync().GetAwaiter().GetResult();
-    }
-
-    private void OnClipboardWrite(string text)
-    {
-        Dispatcher.UIThread.Post(async () =>
-        {
-            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-            if (clipboard is not null)
-            {
-                await clipboard.SetTextAsync(text);
-            }
-        });
-    }
-
-    private void OnProcessExited(object? sender, EventArgs e)
-    {
-        Dispatcher.UIThread.Post(() => this.ProcessExited?.Invoke());
+        this.UpdateModeInfoFromBuffer();
+        this.ApplyTerminalUiState();
+        this.ScheduleSearchRecompute();
+        this.InvalidateVisual();
     }
 
     private void DisposeCachedResources()
     {
         this.Cursor = null;
-        this.handCursor?.Dispose();
-        this.handCursor = null;
+        this.pointerHandler.DisposeResources();
         this.cursorState.Dispose();
         this.renderer.Dispose();
         this.ligatureTextShaper.Dispose();
         this.fontChain.Dispose();
     }
 
-    /// <summary>
-    /// Custom draw operation for rendering the terminal grid with SkiaSharp.
-    /// Reused across frames to avoid per-frame allocation.
-    /// </summary>
-    private sealed class TerminalDrawOperation : ICustomDrawOperation
+    private sealed class ReaderHost : IPtyReaderHost
     {
-        private readonly TerminalControl control;
+        private readonly TerminalControl owner;
 
-        public TerminalDrawOperation(TerminalControl control, Rect bounds)
+        public ReaderHost(TerminalControl owner)
         {
-            this.control = control;
-            this.Bounds = bounds;
+            this.owner = owner;
         }
 
-        public Rect Bounds { get; set; }
+        public bool SynchronizedOutput => this.owner.buffer.SynchronizedOutput;
 
-        public void Dispose()
-        {
-        }
+        public int ProcessAndReportScrollbackDelta(ReadOnlySpan<byte> bytes)
+            => this.owner.ReaderProcessAndReportScrollbackDelta(bytes);
 
-        public bool Equals(ICustomDrawOperation? other) => false;
+        public void OnAfterParse(int scrollbackDelta) => this.owner.ReaderOnAfterParse(scrollbackDelta);
 
-        public bool HitTest(Point p) => this.Bounds.Contains(p);
-
-        public void Render(ImmediateDrawingContext context)
-        {
-            var leaseFeature = context.TryGetFeature<ISkiaSharpApiLeaseFeature>();
-            if (leaseFeature is null)
-            {
-                return;
-            }
-
-            using var lease = leaseFeature.Lease();
-            var canvas = lease.SkCanvas;
-            this.control.RenderWithSkia(canvas);
-        }
+        public void OnRedrawTick() => this.owner.ReaderOnRedrawTick();
     }
 }
