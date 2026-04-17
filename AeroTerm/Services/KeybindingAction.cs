@@ -89,4 +89,25 @@ public enum KeybindingAction
 
     /// <summary>Remove the active tab from its current group.</summary>
     UngroupActive,
+
+    /// <summary>Split the active pane with a horizontal divider (stacks the two panes vertically).</summary>
+    SplitPaneHorizontal,
+
+    /// <summary>Split the active pane with a vertical divider (places the two panes side-by-side).</summary>
+    SplitPaneVertical,
+
+    /// <summary>Move pane focus one pane to the left.</summary>
+    FocusPaneLeft,
+
+    /// <summary>Move pane focus one pane to the right.</summary>
+    FocusPaneRight,
+
+    /// <summary>Move pane focus one pane up.</summary>
+    FocusPaneUp,
+
+    /// <summary>Move pane focus one pane down.</summary>
+    FocusPaneDown,
+
+    /// <summary>Close the active pane (falls back to closing the tab when it is the last pane).</summary>
+    ClosePane,
 }

@@ -76,6 +76,17 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.GroupNewFromActive, new KeyChord(KeyModifiers.Meta | KeyModifiers.Shift, Key.G)));
             list.Add(new Keybinding(KeybindingAction.UngroupActive, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.G)));
 
+            // Pane splits / navigation — Cmd+Opt prefix keeps pane chords
+            // out of the way of shell Alt-prefix sequences and of
+            // existing Cmd / Cmd+Shift tab chords.
+            list.Add(new Keybinding(KeybindingAction.SplitPaneHorizontal, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.OemMinus)));
+            list.Add(new Keybinding(KeybindingAction.SplitPaneVertical, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.OemPipe)));
+            list.Add(new Keybinding(KeybindingAction.FocusPaneLeft, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.Left)));
+            list.Add(new Keybinding(KeybindingAction.FocusPaneRight, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.Right)));
+            list.Add(new Keybinding(KeybindingAction.FocusPaneUp, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.Up)));
+            list.Add(new Keybinding(KeybindingAction.FocusPaneDown, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.Down)));
+            list.Add(new Keybinding(KeybindingAction.ClosePane, new KeyChord(KeyModifiers.Meta | KeyModifiers.Alt, Key.W)));
+
             // OpenSettings, NewWindow, CloseWindow: handled by the macOS
             // native menu / OS, so no chord defaults here — avoids
             // double-firing. Users may still bind them via the
@@ -106,6 +117,16 @@ public sealed class KeybindingSet
             list.Add(new Keybinding(KeybindingAction.MoveTabRight, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.PageDown)));
             list.Add(new Keybinding(KeybindingAction.GroupNewFromActive, new KeyChord(KeyModifiers.Control | KeyModifiers.Shift, Key.G)));
             list.Add(new Keybinding(KeybindingAction.UngroupActive, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.G)));
+
+            // Pane splits / navigation — Ctrl+Alt prefix keeps pane
+            // chords distinct from the Ctrl+Shift tab family.
+            list.Add(new Keybinding(KeybindingAction.SplitPaneHorizontal, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.OemMinus)));
+            list.Add(new Keybinding(KeybindingAction.SplitPaneVertical, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.OemPipe)));
+            list.Add(new Keybinding(KeybindingAction.FocusPaneLeft, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.Left)));
+            list.Add(new Keybinding(KeybindingAction.FocusPaneRight, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.Right)));
+            list.Add(new Keybinding(KeybindingAction.FocusPaneUp, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.Up)));
+            list.Add(new Keybinding(KeybindingAction.FocusPaneDown, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.Down)));
+            list.Add(new Keybinding(KeybindingAction.ClosePane, new KeyChord(KeyModifiers.Control | KeyModifiers.Alt, Key.W)));
         }
 
         return list;
@@ -144,6 +165,13 @@ public sealed class KeybindingSet
         KeybindingAction.MoveTabRight => "Move tab right",
         KeybindingAction.GroupNewFromActive => "Group: new group from active tab",
         KeybindingAction.UngroupActive => "Group: ungroup active tab",
+        KeybindingAction.SplitPaneHorizontal => "Split pane horizontally",
+        KeybindingAction.SplitPaneVertical => "Split pane vertically",
+        KeybindingAction.FocusPaneLeft => "Focus pane left",
+        KeybindingAction.FocusPaneRight => "Focus pane right",
+        KeybindingAction.FocusPaneUp => "Focus pane up",
+        KeybindingAction.FocusPaneDown => "Focus pane down",
+        KeybindingAction.ClosePane => "Close pane",
         _ => action.ToString(),
     };
 

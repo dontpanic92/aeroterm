@@ -413,5 +413,33 @@ internal partial class CommandPaletteWindow : Window
         public void UngroupActiveTab()
         {
         }
+
+        public void SplitActivePaneHorizontal()
+        {
+        }
+
+        public void SplitActivePaneVertical()
+        {
+        }
+
+        public void FocusPaneLeft()
+        {
+        }
+
+        public void FocusPaneRight()
+        {
+        }
+
+        public void FocusPaneUp()
+        {
+        }
+
+        public void FocusPaneDown()
+        {
+        }
+
+        public void CloseActivePane()
+        {
+        }
     }
 }

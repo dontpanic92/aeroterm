@@ -40,6 +40,9 @@ public partial class MainWindow : Window
     private readonly TabView tabView;
     private readonly TabStrip tabStrip;
     private readonly Dictionary<TabSession, Action> tabUnwire = new();
+    private readonly Dictionary<AeroTerm.Controls.ITabSessionContent, Action> paneUnwire
+        = new(ReferenceEqualityComparer.Instance);
+
     private bool isSettingsDialogOpen;
     private bool isCloseConfirmed;
     private bool suppressInitialTab;
@@ -264,6 +267,48 @@ public partial class MainWindow : Window
             return true;
         }
 
+        if (resolved?.Action == KeybindingAction.SplitPaneHorizontal)
+        {
+            this.SplitActivePane(AeroTerm.Controls.Panes.PaneOrientation.Horizontal);
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.SplitPaneVertical)
+        {
+            this.SplitActivePane(AeroTerm.Controls.Panes.PaneOrientation.Vertical);
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.FocusPaneLeft)
+        {
+            this.FocusActivePane(AeroTerm.Controls.Panes.PaneDirection.Left);
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.FocusPaneRight)
+        {
+            this.FocusActivePane(AeroTerm.Controls.Panes.PaneDirection.Right);
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.FocusPaneUp)
+        {
+            this.FocusActivePane(AeroTerm.Controls.Panes.PaneDirection.Up);
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.FocusPaneDown)
+        {
+            this.FocusActivePane(AeroTerm.Controls.Panes.PaneDirection.Down);
+            return true;
+        }
+
+        if (resolved?.Action == KeybindingAction.ClosePane)
+        {
+            this.CloseActivePane();
+            return true;
+        }
+
         var m = e.KeyModifiers;
 
         if (IsMac())
@@ -408,9 +453,12 @@ public partial class MainWindow : Window
     {
         foreach (var tab in this.tabView.Tabs)
         {
-            if (tab.Terminal is not null)
+            foreach (var content in tab.AllContents)
             {
-                tab.Terminal.BackgroundAlpha = alpha;
+                if (content.Terminal is not null)
+                {
+                    content.Terminal.BackgroundAlpha = alpha;
+                }
             }
         }
     }
@@ -444,35 +492,72 @@ public partial class MainWindow : Window
     /// Subscribes per-window plumbing (bell, bg-color-change, exit) to the
     /// supplied tab and records compensating unsubscribe actions so
     /// <see cref="UnwireTabSession"/> can undo the wiring when the tab
-    /// detaches into a different window.
+    /// detaches into a different window. Splits inside the tab trigger
+    /// per-pane wiring via the session's <c>PaneAdded</c> event.
     /// </summary>
     /// <param name="session">The session to wire into this window.</param>
     private void WireTabSession(TabSession session)
     {
+        foreach (var content in session.AllContents)
+        {
+            this.WirePane(session, content);
+        }
+
+        Action<AeroTerm.Controls.ITabSessionContent> onPaneAdded = c => this.WirePane(session, c);
+        Action<AeroTerm.Controls.ITabSessionContent> onPaneRemoving = c => this.UnwirePane(c);
+        session.PaneAdded += onPaneAdded;
+        session.PaneRemoving += onPaneRemoving;
+
+        Action exitHandler = () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(session));
+        session.ProcessExitedNormally += exitHandler;
+
+        this.tabUnwire[session] = () =>
+        {
+            session.PaneAdded -= onPaneAdded;
+            session.PaneRemoving -= onPaneRemoving;
+            session.ProcessExitedNormally -= exitHandler;
+            foreach (var content in session.AllContents)
+            {
+                this.UnwirePane(content);
+            }
+        };
+    }
+
+    private void WirePane(TabSession session, AeroTerm.Controls.ITabSessionContent content)
+    {
+        if (this.paneUnwire.ContainsKey(content))
+        {
+            return;
+        }
+
         var unwires = new List<Action>();
 
-        if (session.Coordinator is { } coord)
+        if (content.Coordinator is { } coord)
         {
             Action bellHandler = this.bellService.Handle;
             coord.BellRaised += bellHandler;
             unwires.Add(() => coord.BellRaised -= bellHandler);
 
-            Action<int> bgHandler = color => this.OnTabBackgroundColorChanged(session, color);
+            Action<int> bgHandler = color => this.OnPaneBackgroundColorChanged(session, content, color);
             coord.BackgroundColorChanged += bgHandler;
             unwires.Add(() => coord.BackgroundColorChanged -= bgHandler);
         }
 
-        Action exitHandler = () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(session));
-        session.ProcessExitedNormally += exitHandler;
-        unwires.Add(() => session.ProcessExitedNormally -= exitHandler);
-
-        this.tabUnwire[session] = () =>
+        this.paneUnwire[content] = () =>
         {
             foreach (var u in unwires)
             {
                 u();
             }
         };
+    }
+
+    private void UnwirePane(AeroTerm.Controls.ITabSessionContent content)
+    {
+        if (this.paneUnwire.Remove(content, out var unwire))
+        {
+            unwire();
+        }
     }
 
     private void UnwireTabSession(TabSession session)
@@ -567,6 +652,56 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SplitActivePane(AeroTerm.Controls.Panes.PaneOrientation orientation)
+    {
+        if (this.tabView.ActiveTab is not { } active)
+        {
+            return;
+        }
+
+        try
+        {
+            active.SplitActivePane(orientation);
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
+
+        // Force a layout pass so the new pane's visual host has real
+        // bounds before we Start the PTY (mirrors the new-tab path).
+        Dispatcher.UIThread.RunJobs();
+        active.Start();
+        active.FocusInput();
+    }
+
+    private void FocusActivePane(AeroTerm.Controls.Panes.PaneDirection direction)
+    {
+        if (this.tabView.ActiveTab is { } active)
+        {
+            active.FocusPaneDirection(direction);
+        }
+    }
+
+    private void CloseActivePane()
+    {
+        if (this.tabView.ActiveTab is not { } active)
+        {
+            return;
+        }
+
+        bool survived = active.CloseActivePane();
+        if (!survived)
+        {
+            this.tabView.CloseTab(active);
+            return;
+        }
+
+        // Keep the window title in sync with whichever pane is now focused.
+        this.UpdateWindowTitleFromActive();
+        active.FocusInput();
+    }
+
     private void CreateGroupFromActiveTab()
     {
         if (this.tabView.ActiveTab is not { } active)
@@ -640,10 +775,16 @@ public partial class MainWindow : Window
         this.tabView.CloseTab(session);
     }
 
-    private void OnTabBackgroundColorChanged(TabSession source, int color)
+    private void OnPaneBackgroundColorChanged(TabSession source, AeroTerm.Controls.ITabSessionContent paneSource, int color)
     {
-        // Only the active tab's reported background color affects the window's effects material.
+        // Only the active pane of the active tab's reported background color
+        // affects the window's effects material.
         if (!ReferenceEquals(this.tabView.ActiveTab, source))
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(source.Coordinator, paneSource.Coordinator))
         {
             return;
         }

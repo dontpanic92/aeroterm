@@ -137,4 +137,25 @@ public partial class MainWindow : IPaletteHost
 
     /// <inheritdoc />
     void IPaletteHost.UngroupActiveTab() => this.UngroupActiveTab();
+
+    /// <inheritdoc />
+    void IPaletteHost.SplitActivePaneHorizontal() => this.SplitActivePane(AeroTerm.Controls.Panes.PaneOrientation.Horizontal);
+
+    /// <inheritdoc />
+    void IPaletteHost.SplitActivePaneVertical() => this.SplitActivePane(AeroTerm.Controls.Panes.PaneOrientation.Vertical);
+
+    /// <inheritdoc />
+    void IPaletteHost.FocusPaneLeft() => this.FocusActivePane(AeroTerm.Controls.Panes.PaneDirection.Left);
+
+    /// <inheritdoc />
+    void IPaletteHost.FocusPaneRight() => this.FocusActivePane(AeroTerm.Controls.Panes.PaneDirection.Right);
+
+    /// <inheritdoc />
+    void IPaletteHost.FocusPaneUp() => this.FocusActivePane(AeroTerm.Controls.Panes.PaneDirection.Up);
+
+    /// <inheritdoc />
+    void IPaletteHost.FocusPaneDown() => this.FocusActivePane(AeroTerm.Controls.Panes.PaneDirection.Down);
+
+    /// <inheritdoc />
+    void IPaletteHost.CloseActivePane() => this.CloseActivePane();
 }

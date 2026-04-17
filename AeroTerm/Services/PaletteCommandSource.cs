@@ -128,6 +128,84 @@ public static class PaletteCommandSource
                 return ValueTask.CompletedTask;
             }));
 
+        // --- Pane commands --------------------------------------------------
+        list.Add(new PaletteCommand(
+            Id: "pane.split-horizontal",
+            Title: "Split pane horizontally",
+            Subtitle: "Stack the new pane below the active pane.",
+            Category: "Pane",
+            Execute: () =>
+            {
+                host.SplitActivePaneHorizontal();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "pane.split-vertical",
+            Title: "Split pane vertically",
+            Subtitle: "Place the new pane beside the active pane.",
+            Category: "Pane",
+            Execute: () =>
+            {
+                host.SplitActivePaneVertical();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "pane.focus-left",
+            Title: "Focus pane left",
+            Subtitle: null,
+            Category: "Pane",
+            Execute: () =>
+            {
+                host.FocusPaneLeft();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "pane.focus-right",
+            Title: "Focus pane right",
+            Subtitle: null,
+            Category: "Pane",
+            Execute: () =>
+            {
+                host.FocusPaneRight();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "pane.focus-up",
+            Title: "Focus pane up",
+            Subtitle: null,
+            Category: "Pane",
+            Execute: () =>
+            {
+                host.FocusPaneUp();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "pane.focus-down",
+            Title: "Focus pane down",
+            Subtitle: null,
+            Category: "Pane",
+            Execute: () =>
+            {
+                host.FocusPaneDown();
+                return ValueTask.CompletedTask;
+            }));
+
+        list.Add(new PaletteCommand(
+            Id: "pane.close",
+            Title: "Close pane",
+            Subtitle: "Collapses the sibling into the freed slot. Falls back to closing the tab when this was the last pane.",
+            Category: "Pane",
+            Execute: () =>
+            {
+                host.CloseActivePane();
+                return ValueTask.CompletedTask;
+            }));
+
         // --- Group commands --------------------------------------------------
         list.Add(new PaletteCommand(
             Id: "group.new-from-active",

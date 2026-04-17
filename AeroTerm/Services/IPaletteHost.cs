@@ -105,4 +105,25 @@ internal interface IPaletteHost
     /// belongs to (if any).
     /// </summary>
     void UngroupActiveTab();
+
+    /// <summary>Splits the active pane using a horizontal divider.</summary>
+    void SplitActivePaneHorizontal();
+
+    /// <summary>Splits the active pane using a vertical divider.</summary>
+    void SplitActivePaneVertical();
+
+    /// <summary>Moves pane focus one pane to the left.</summary>
+    void FocusPaneLeft();
+
+    /// <summary>Moves pane focus one pane to the right.</summary>
+    void FocusPaneRight();
+
+    /// <summary>Moves pane focus one pane up.</summary>
+    void FocusPaneUp();
+
+    /// <summary>Moves pane focus one pane down.</summary>
+    void FocusPaneDown();
+
+    /// <summary>Closes the active pane (falls back to tab close when it was the last pane).</summary>
+    void CloseActivePane();
 }

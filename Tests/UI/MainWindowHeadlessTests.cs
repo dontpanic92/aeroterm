@@ -5,6 +5,7 @@
 
 namespace AeroTerm.Tests.UI;
 
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using AeroTerm;
@@ -181,6 +182,69 @@ public class MainWindowHeadlessTests
         Assert.That(tabs.Tabs, Has.Count.EqualTo(2));
     }
 
+    /// <summary>
+    /// Splitting the active tab's pane via the public
+    /// <see cref="TabSession.SplitActivePane"/> API grows the tree to
+    /// two leaves and the session's visual is a
+    /// <see cref="AeroTerm.Controls.Panes.PaneTreeView"/> that hosts a
+    /// <see cref="GridSplitter"/> between two pane hosts.
+    /// </summary>
+    [AvaloniaTest]
+    public void SplitActivePane_GrowsPaneTreeAndAddsSplitter()
+    {
+        var window = OpenWindow();
+        var tabs = GetTabView(window);
+        var session = tabs.ActiveTab!;
+        Assert.That(session.PaneCount, Is.EqualTo(1));
+
+        session.SplitActivePane(AeroTerm.Controls.Panes.PaneOrientation.Vertical);
+        PumpJobs();
+
+        Assert.That(session.PaneCount, Is.EqualTo(2));
+        Assert.That(session.Control, Is.InstanceOf<AeroTerm.Controls.Panes.PaneTreeView>());
+        var splitters = DescendantsOfType<GridSplitter>(session.Control).ToList();
+        Assert.That(splitters, Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
+    /// Closing the last surviving pane of the only tab via
+    /// <see cref="TabSession.CloseActivePane"/> returns
+    /// <see langword="false"/>. The window-level handler would then
+    /// remove the tab; the session reports the last-pane-closed state.
+    /// </summary>
+    [AvaloniaTest]
+    public void CloseActivePane_LastPane_ReturnsFalse()
+    {
+        var window = OpenWindow();
+        var session = GetTabView(window).ActiveTab!;
+
+        bool alive = session.CloseActivePane();
+        PumpJobs();
+
+        Assert.That(alive, Is.False);
+    }
+
+    /// <summary>
+    /// After a split, closing the active pane leaves the tab alive
+    /// with a single pane and the splitter is gone.
+    /// </summary>
+    [AvaloniaTest]
+    public void CloseActivePane_AfterSplit_CollapsesToSinglePane()
+    {
+        var window = OpenWindow();
+        var session = GetTabView(window).ActiveTab!;
+        session.SplitActivePane(AeroTerm.Controls.Panes.PaneOrientation.Horizontal);
+        PumpJobs();
+        Assert.That(session.PaneCount, Is.EqualTo(2));
+
+        bool alive = session.CloseActivePane();
+        PumpJobs();
+
+        Assert.That(alive, Is.True);
+        Assert.That(session.PaneCount, Is.EqualTo(1));
+        Assert.That(DescendantsOfType<GridSplitter>(session.Control), Is.Empty);
+    }
+
     private static bool IsMac() => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 
     private static MainWindow OpenWindow()
@@ -210,5 +274,45 @@ public class MainWindowHeadlessTests
         // Flush any pending dispatcher work so Show-driven initial tab
         // creation and keyboard dispatch complete before assertions.
         Dispatcher.UIThread.RunJobs();
+    }
+
+    private static System.Collections.Generic.IEnumerable<T> DescendantsOfType<T>(Control root)
+        where T : Control
+    {
+        var stack = new System.Collections.Generic.Stack<Control>();
+        stack.Push(root);
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            if (current is T typed)
+            {
+                yield return typed;
+            }
+
+            if (current is Panel panel)
+            {
+                foreach (var c in panel.Children)
+                {
+                    if (c is Control cc)
+                    {
+                        stack.Push(cc);
+                    }
+                }
+            }
+            else if (current is ContentControl cc)
+            {
+                if (cc.Content is Control child)
+                {
+                    stack.Push(child);
+                }
+            }
+            else if (current is Decorator dec)
+            {
+                if (dec.Child is Control child)
+                {
+                    stack.Push(child);
+                }
+            }
+        }
     }
 }
