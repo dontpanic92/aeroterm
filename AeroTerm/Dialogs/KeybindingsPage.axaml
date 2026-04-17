@@ -20,6 +20,8 @@
                         <Button Grid.Column="1"
                                 MinWidth="160"
                                 Margin="0,0,6,0"
+                                AutomationProperties.Name="{Binding DisplayName}"
+                                AutomationProperties.HelpText="Click to record a new chord; press Esc to cancel."
                                 Click="ChordButton_Click"
                                 KeyDown="ChordButton_KeyDown">
                             <StackPanel Orientation="Horizontal" Spacing="4">
@@ -31,6 +33,7 @@
                         </Button>
                         <Button Grid.Column="2"
                                 Content="Reset"
+                                AutomationProperties.Name="Reset keybinding"
                                 IsVisible="{Binding IsCustomized}"
                                 Click="ResetRowButton_Click" />
                     </Grid>
@@ -39,6 +42,7 @@
         </ItemsControl>
 
         <Button Content="Reset all to defaults"
+                AutomationProperties.Name="Reset all keybindings to defaults"
                 Margin="0,8,0,0"
                 Click="ResetAllButton_Click"
                 HorizontalAlignment="Left" />

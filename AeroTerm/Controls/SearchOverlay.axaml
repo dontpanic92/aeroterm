@@ -61,6 +61,8 @@
           Padding="6,4">
     <StackPanel Orientation="Horizontal" Spacing="4">
       <TextBox Name="QueryTextBox"
+               AutomationProperties.Name="Search query"
+               AutomationProperties.HelpText="Type to search the terminal buffer; Enter for next match, Shift+Enter for previous, Esc to close."
                Width="220" MinHeight="24"
                Padding="4,2"
                VerticalContentAlignment="Center"
@@ -71,6 +73,8 @@
                FontSize="12" />
 
       <TextBlock Name="StatusText"
+                 AutomationProperties.Name="Match count"
+                 AutomationProperties.LiveSetting="Polite"
                  VerticalAlignment="Center"
                  MinWidth="48"
                  Margin="4,0"
@@ -80,27 +84,33 @@
 
       <ToggleButton Name="CaseToggle"
                     Classes="overlay-toggle"
+                    AutomationProperties.Name="Match case"
                     ToolTip.Tip="Match case (Aa)"
                     Content="Aa" FontSize="11" FontWeight="SemiBold" />
       <ToggleButton Name="RegexToggle"
                     Classes="overlay-toggle"
+                    AutomationProperties.Name="Regular expression"
                     ToolTip.Tip="Regular expression (.*)"
                     Content=".*" FontSize="12" />
       <ToggleButton Name="WordToggle"
                     Classes="overlay-toggle"
+                    AutomationProperties.Name="Whole word"
                     ToolTip.Tip="Whole word (Ab|)"
                     Content="Ab" FontSize="11" FontStyle="Italic" />
 
       <Button Name="PrevButton"
               Classes="overlay-btn"
+              AutomationProperties.Name="Previous match"
               ToolTip.Tip="Previous match (Shift+Enter)"
               Content="↑" FontSize="13" />
       <Button Name="NextButton"
               Classes="overlay-btn"
+              AutomationProperties.Name="Next match"
               ToolTip.Tip="Next match (Enter)"
               Content="↓" FontSize="13" />
       <Button Name="CloseButton"
               Classes="overlay-btn"
+              AutomationProperties.Name="Close search"
               ToolTip.Tip="Close (Esc)"
               Content="×" FontSize="15" />
     </StackPanel>

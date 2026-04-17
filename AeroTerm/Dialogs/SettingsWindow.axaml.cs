@@ -8,6 +8,7 @@ namespace AeroTerm.Dialogs;
 using AeroTerm.Services;
 using AeroTerm.ViewModels;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 
 /// <summary>
@@ -47,6 +48,7 @@ public partial class SettingsWindow : Window
         }
 
         this.Closing += this.OnWindowClosing;
+        this.KeyDown += this.OnKeyDown;
     }
 
     /// <summary>
@@ -86,6 +88,20 @@ public partial class SettingsWindow : Window
         if (this.DataContext is SettingsViewModel vm)
         {
             vm.SearchQuery = string.Empty;
+        }
+    }
+
+    private void OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Esc closes the dialog (treated as Cancel). The default IsCancel
+        // button handles this in theory, but explicitly handling KeyDown
+        // covers focus being anywhere in the window, including the search
+        // box and the sidebar list.
+        if (e.Key == Key.Escape && !e.Handled)
+        {
+            e.Handled = true;
+            this.CloseReason = Result.Cancel;
+            this.Close();
         }
     }
 

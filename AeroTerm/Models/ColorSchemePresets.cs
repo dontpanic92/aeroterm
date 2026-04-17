@@ -141,6 +141,42 @@ public static class ColorSchemePresets
         });
 
     /// <summary>
+    /// Gets the High Contrast (Dark) color scheme.
+    /// </summary>
+    /// <remarks>
+    /// Hand-tuned so that the default foreground achieves a WCAG AAA
+    /// contrast ratio (≥7:1) against the background and every ANSI
+    /// palette entry clears the WCAG AA bar (≥4.5:1). Modelled after
+    /// the Windows High Contrast Black defaults.
+    /// </remarks>
+    public static ColorScheme HighContrastDark { get; } = new(
+        "High Contrast (Dark)",
+        Foreground: 0xFFFFFF,
+        Background: 0x000000,
+        Palette: new[]
+        {
+            0x767676, 0xFF6E6E, 0x3FF23F, 0xFFFF00, 0x5599FF, 0xFF55FF, 0x00FFFF, 0xFFFFFF,
+            0xA6A6A6, 0xFF9999, 0x80FF80, 0xFFFF80, 0x80C0FF, 0xFF99FF, 0x80FFFF, 0xFFFFFF,
+        });
+
+    /// <summary>
+    /// Gets the High Contrast (Light) color scheme.
+    /// </summary>
+    /// <remarks>
+    /// Pure white background with pure black foreground (21:1). Each
+    /// ANSI palette entry is dark enough to meet WCAG AA (≥4.5:1).
+    /// </remarks>
+    public static ColorScheme HighContrastLight { get; } = new(
+        "High Contrast (Light)",
+        Foreground: 0x000000,
+        Background: 0xFFFFFF,
+        Palette: new[]
+        {
+            0x000000, 0xCC0000, 0x006400, 0x707000, 0x0000CC, 0x990099, 0x006666, 0x595959,
+            0x333333, 0xCC3333, 0x007700, 0x8B6914, 0x3333CC, 0xB300B3, 0x008080, 0x000000,
+        });
+
+    /// <summary>
     /// Gets all available color scheme presets.
     /// </summary>
     public static IReadOnlyList<ColorScheme> All { get; } = new[]
@@ -155,6 +191,8 @@ public static class ColorSchemePresets
         OneDark,
         TokyoNight,
         CatppuccinMocha,
+        HighContrastDark,
+        HighContrastLight,
     };
 
     /// <summary>

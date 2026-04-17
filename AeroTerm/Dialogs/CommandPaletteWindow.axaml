@@ -44,6 +44,8 @@
     <Grid RowDefinitions="Auto,*">
       <TextBox Grid.Row="0"
                Name="QueryTextBox"
+               AutomationProperties.Name="Command palette query"
+               AutomationProperties.HelpText="Type to filter commands; use arrow keys to navigate, Enter to run."
                PlaceholderText="Type a command…"
                Background="Transparent"
                Foreground="{DynamicResource PaletteForeground}"
@@ -56,6 +58,8 @@
 
       <ListBox Grid.Row="1"
                Name="Results"
+               AutomationProperties.Name="Command palette results"
+               AutomationProperties.LiveSetting="Polite"
                Background="Transparent"
                BorderThickness="0"
                MaxHeight="410"

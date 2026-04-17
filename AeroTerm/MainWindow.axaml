@@ -95,6 +95,8 @@
 
             <!-- Settings Button -->
             <Button Grid.Column="2" Name="SettingsButton" Content="⚙"
+                    AutomationProperties.Name="Settings"
+                    ToolTip.Tip="Settings"
                     Classes="titlebar-btn"
                     Width="46" Height="28" FontSize="14"
                     CornerRadius="0"
@@ -105,6 +107,8 @@
 
             <!-- Minimize Button -->
             <Button Grid.Column="3" Name="MinimizeButton" Content="&#x1F5D5;"
+                    AutomationProperties.Name="Minimize"
+                    ToolTip.Tip="Minimize"
                     Classes="titlebar-btn"
                     Width="46" Height="28" FontSize="14"
                     CornerRadius="0"
@@ -115,6 +119,8 @@
 
             <!-- Maximize Button -->
             <Button Grid.Column="4" Name="MaximizeButton" Content="&#x1F5D6;"
+                    AutomationProperties.Name="Maximize"
+                    ToolTip.Tip="Maximize"
                     Classes="titlebar-btn"
                     Width="46" Height="28" FontSize="14"
                     CornerRadius="0"
@@ -125,6 +131,8 @@
 
             <!-- Close Button -->
             <Button Grid.Column="5" Name="CloseButton" Content="&#x2715;"
+                    AutomationProperties.Name="Close"
+                    ToolTip.Tip="Close"
                     Classes="titlebar-btn titlebar-close"
                     Width="46" Height="28" FontSize="14"
                     CornerRadius="0"

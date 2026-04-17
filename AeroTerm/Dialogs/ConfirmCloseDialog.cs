@@ -6,6 +6,7 @@
 namespace AeroTerm.Dialogs;
 
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -48,6 +49,7 @@ internal sealed class ConfirmCloseDialog : Window
             IsDefault = false,
             Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x65, 0x5A)),
         };
+        AutomationProperties.SetName(closeButton, "Close all tabs");
         closeButton.Click += (_, _) =>
         {
             this.confirmed = true;
@@ -61,6 +63,7 @@ internal sealed class ConfirmCloseDialog : Window
             IsDefault = true,
             IsCancel = true,
         };
+        AutomationProperties.SetName(cancelButton, "Cancel");
         cancelButton.Click += (_, _) => this.Close(false);
 
         var buttonRow = new StackPanel

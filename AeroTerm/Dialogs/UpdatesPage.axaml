@@ -26,7 +26,8 @@
                     Orientation="Horizontal" Spacing="6"
                     IsEnabled="{Binding SupportsAutoUpdate}">
             <TextBlock Text="Channel:" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <ComboBox SelectedIndex="{Binding SelectedChannelIndex}" Width="140">
+            <ComboBox SelectedIndex="{Binding SelectedChannelIndex}" Width="140"
+                      AutomationProperties.Name="Update channel">
                 <ComboBoxItem Content="Stable" />
                 <ComboBoxItem Content="CI" IsEnabled="{Binding CanSwitchToCI}" />
             </ComboBox>
@@ -76,16 +77,19 @@
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <!-- Download & Install (shown when update found, not yet downloaded) -->
                         <Button Content="Download &amp; Install"
+                                AutomationProperties.Name="Download and install update"
                                 Click="DownloadAndInstall_Click"
                                 IsVisible="{Binding !IsReadyToRestart}"
                                 IsEnabled="{Binding !IsDownloading}" />
 
                         <!-- Restart to Update (shown after download completes) -->
                         <Button Content="Restart to Update"
+                                AutomationProperties.Name="Restart to apply update"
                                 Click="RestartToUpdate_Click"
                                 IsVisible="{Binding IsReadyToRestart}" />
 
                         <Button Content="Skip This Version"
+                                AutomationProperties.Name="Skip this version"
                                 Click="SkipThisVersion_Click"
                                 IsVisible="{Binding !IsDownloading}" />
                     </StackPanel>
@@ -96,6 +100,7 @@
         <!-- Check button -->
         <Button dialogs:SettingsSearch.Label="Check for Updates"
                 Content="Check for Updates"
+                AutomationProperties.Name="Check for updates"
                 Click="CheckForUpdates_Click"
                 IsEnabled="{Binding SupportsAutoUpdate}"
                 HorizontalAlignment="Left" />

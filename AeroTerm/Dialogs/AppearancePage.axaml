@@ -35,9 +35,10 @@
 
                 <StackPanel dialogs:SettingsSearch.Label="Background Opacity"
                             Orientation="Horizontal" Margin="20,0,0,0">
-                    <TextBlock Text="Background Opacity" VerticalAlignment="Center" />
+                    <TextBlock Name="OpacityLabel" Text="Background Opacity" VerticalAlignment="Center" />
                     <Slider Value="{Binding BackgroundOpacity, Mode=TwoWay}" Width="200" Minimum="0.01" Maximum="1"
                             TickFrequency="0.01" IsSnapToTickEnabled="True" Margin="10,0"
+                            AutomationProperties.LabeledBy="{Binding #OpacityLabel}"
                             IsEnabled="{Binding IsOpacityEnabled}" />
                     <TextBlock Text="{Binding OpacityLabel}" Width="40" VerticalAlignment="Center" />
                 </StackPanel>
@@ -52,9 +53,10 @@
 
                 <StackPanel dialogs:SettingsSearch.Label="Font Size"
                             Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Font Size" VerticalAlignment="Center" />
+                    <TextBlock Name="FontSizeLabel" Text="Font Size" VerticalAlignment="Center" />
                     <NumericUpDown Value="{Binding FontSize, Mode=TwoWay}"
                                    Minimum="6" Maximum="72" Increment="0.5"
+                                   AutomationProperties.LabeledBy="{Binding #FontSizeLabel}"
                                    FormatString="F1" Width="100" />
                 </StackPanel>
 
@@ -69,15 +71,20 @@
 
                     <ListBox Grid.Column="0" ItemsSource="{Binding FontItems}"
                              SelectedIndex="{Binding SelectedFontIndex, Mode=TwoWay}"
+                             AutomationProperties.Name="Font priority list"
                              Height="120" Margin="0,0,5,0" />
 
                     <StackPanel Grid.Column="1" Spacing="3">
-                        <Button Content="Add..." Width="76" Click="FontAdd_Click" />
+                        <Button Content="Add..." Width="76" Click="FontAdd_Click"
+                                AutomationProperties.Name="Add font" />
                         <Button Content="Remove" Width="76" Click="FontRemove_Click"
+                                AutomationProperties.Name="Remove font"
                                 IsEnabled="{Binding CanRemoveFont}" />
                         <Button Content="Move Up" Width="76" Click="FontMoveUp_Click"
+                                AutomationProperties.Name="Move font up"
                                 IsEnabled="{Binding CanMoveUp}" />
                         <Button Content="Move Down" Width="76" Click="FontMoveDown_Click"
+                                AutomationProperties.Name="Move font down"
                                 IsEnabled="{Binding CanMoveDown}" />
                     </StackPanel>
                 </Grid>
@@ -119,6 +126,7 @@
                         Spacing="8">
                 <ComboBox ItemsSource="{Binding ColorSchemes}"
                           SelectedItem="{Binding SelectedColorScheme, Mode=TwoWay}"
+                          AutomationProperties.Name="Color scheme"
                           Width="250" HorizontalAlignment="Left">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="models:ColorScheme">
@@ -155,6 +163,7 @@
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
                 <ComboBox ItemsSource="{Binding BellActions}"
                           SelectedItem="{Binding BellAction, Mode=TwoWay}"
+                          AutomationProperties.Name="Bell action"
                           Width="200" HorizontalAlignment="Left" />
             </StackPanel>
         </GroupBox>
@@ -164,9 +173,10 @@
             <StackPanel Spacing="5">
                 <StackPanel dialogs:SettingsSearch.Label="Scrollback lines"
                             Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Scrollback lines" VerticalAlignment="Center" />
+                    <TextBlock Name="ScrollbackLabel" Text="Scrollback lines" VerticalAlignment="Center" />
                     <NumericUpDown Value="{Binding ScrollbackLines, Mode=TwoWay}"
                                    Minimum="0" Maximum="100000" Increment="100"
+                                   AutomationProperties.LabeledBy="{Binding #ScrollbackLabel}"
                                    FormatString="F0" Width="140" />
                 </StackPanel>
                 <TextBlock Text="Number of lines retained off-screen. Set to 0 to disable scrollback."
