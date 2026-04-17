@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    English (invariant) baseline resource file for AeroTerm UI strings.
+    Each entry is looked up by key via AeroTerm.Services.LocalizationHost
+    or the strongly-typed AeroTerm.Resources.Strings accessor.
+
+    When adding a new string:
+      1. Add a <data name="KeyName"> entry here with an <value>.
+      2. (Optional) Add a matching entry to Strings.es.resx (or other
+         culture-specific file) to provide a translation.
+      3. Add a static property to Strings.cs returning the lookup
+         (LocalizationHost.GetString("KeyName")).
+      4. Reference from AXAML via {x:Static strings:Strings.KeyName}
+         or from code via Strings.KeyName.
+
+    See Resources/README.md for the full extraction pattern.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+
+  <!-- Window titles -->
+  <data name="AppTitle" xml:space="preserve">
+    <value>AeroTerm</value>
+  </data>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="CommandPaletteTitle" xml:space="preserve">
+    <value>Command Palette</value>
+  </data>
+  <data name="ConfirmCloseTitle" xml:space="preserve">
+    <value>Close window?</value>
+  </data>
+  <data name="FontPickerTitle" xml:space="preserve">
+    <value>Add Font</value>
+  </data>
+
+  <!-- Buttons / menu labels -->
+  <data name="ButtonOk" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="ButtonCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="ButtonClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="ButtonAdd" xml:space="preserve">
+    <value>Add...</value>
+  </data>
+  <data name="ButtonRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="ButtonMoveUp" xml:space="preserve">
+    <value>Move Up</value>
+  </data>
+  <data name="ButtonMoveDown" xml:space="preserve">
+    <value>Move Down</value>
+  </data>
+
+  <!-- AppearancePage group headers + labels -->
+  <data name="AppearanceWindowHeader" xml:space="preserve">
+    <value>Window</value>
+  </data>
+  <data name="AppearanceFontHeader" xml:space="preserve">
+    <value>Font</value>
+  </data>
+  <data name="AppearanceColorSchemeHeader" xml:space="preserve">
+    <value>Color Scheme</value>
+  </data>
+  <data name="AppearanceBellHeader" xml:space="preserve">
+    <value>Bell</value>
+  </data>
+  <data name="AppearanceScrollbackHeader" xml:space="preserve">
+    <value>Scrollback</value>
+  </data>
+  <data name="AppearanceTabBarHeader" xml:space="preserve">
+    <value>Tab Bar</value>
+  </data>
+  <data name="AppearanceGeneralHeader" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="AppearanceEnableTransparency" xml:space="preserve">
+    <value>Enable Window Transparency</value>
+  </data>
+  <data name="AppearanceEnableLigature" xml:space="preserve">
+    <value>Enable Font Ligature</value>
+  </data>
+  <data name="AppearanceConfirmOnClose" xml:space="preserve">
+    <value>Confirm before closing a window with multiple tabs</value>
+  </data>
+
+  <!-- Command-palette captions -->
+  <data name="PaletteNewTab" xml:space="preserve">
+    <value>New Tab</value>
+  </data>
+  <data name="PaletteCloseTab" xml:space="preserve">
+    <value>Close Tab</value>
+  </data>
+  <data name="PaletteOpenSettings" xml:space="preserve">
+    <value>Open Settings</value>
+  </data>
+
+  <!-- Confirm / error dialog strings -->
+  <data name="ConfirmCloseMessageFormat" xml:space="preserve">
+    <value>{0} tabs are open. Close them all?</value>
+    <comment>{0} is the count of open tabs in the window being closed.</comment>
+  </data>
+  <data name="ConfirmCloseAllTabs" xml:space="preserve">
+    <value>Close all tabs</value>
+  </data>
+</root>

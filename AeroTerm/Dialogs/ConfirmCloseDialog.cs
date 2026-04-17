@@ -5,6 +5,7 @@
 
 namespace AeroTerm.Dialogs;
 
+using AeroTerm.Resources;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -28,7 +29,7 @@ internal sealed class ConfirmCloseDialog : Window
     /// <param name="tabCount">Number of open tabs to include in the message.</param>
     public ConfirmCloseDialog(int tabCount)
     {
-        this.Title = "Close window?";
+        this.Title = Strings.ConfirmCloseTitle;
         this.Width = 380;
         this.SizeToContent = SizeToContent.Height;
         this.CanResize = false;
@@ -37,19 +38,19 @@ internal sealed class ConfirmCloseDialog : Window
 
         var bodyText = new TextBlock
         {
-            Text = $"{tabCount} tabs are open. Close them all?",
+            Text = string.Format(System.Globalization.CultureInfo.CurrentCulture, Strings.ConfirmCloseMessageFormat, tabCount),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 16),
         };
 
         var closeButton = new Button
         {
-            Content = "Close",
+            Content = Strings.ButtonClose,
             Width = 96,
             IsDefault = false,
             Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x65, 0x5A)),
         };
-        AutomationProperties.SetName(closeButton, "Close all tabs");
+        AutomationProperties.SetName(closeButton, Strings.ConfirmCloseAllTabs);
         closeButton.Click += (_, _) =>
         {
             this.confirmed = true;
@@ -58,12 +59,12 @@ internal sealed class ConfirmCloseDialog : Window
 
         var cancelButton = new Button
         {
-            Content = "Cancel",
+            Content = Strings.ButtonCancel,
             Width = 96,
             IsDefault = true,
             IsCancel = true,
         };
-        AutomationProperties.SetName(cancelButton, "Cancel");
+        AutomationProperties.SetName(cancelButton, Strings.ButtonCancel);
         cancelButton.Click += (_, _) => this.Close(false);
 
         var buttonRow = new StackPanel

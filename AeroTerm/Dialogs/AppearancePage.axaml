@@ -3,15 +3,16 @@
              xmlns:vm="using:AeroTerm.ViewModels"
              xmlns:models="using:AeroTerm.Models"
              xmlns:dialogs="using:AeroTerm.Dialogs"
+             xmlns:strings="using:AeroTerm.Resources"
              x:Class="AeroTerm.Dialogs.AppearancePage"
              x:CompileBindings="True"
              x:DataType="vm:AppearancePageViewModel">
     <StackPanel Spacing="10">
         <!-- Window Effects -->
-        <GroupBox Header="Window" Padding="8,8">
+        <GroupBox Header="{x:Static strings:Strings.AppearanceWindowHeader}" Padding="8,8">
             <StackPanel>
                 <CheckBox dialogs:SettingsSearch.Label="Window Transparency"
-                          IsChecked="{Binding EnableBlurBehind, Mode=TwoWay}" Content="Enable Window Transparency" Margin="0,0,0,5" />
+                          IsChecked="{Binding EnableBlurBehind, Mode=TwoWay}" Content="{x:Static strings:Strings.AppearanceEnableTransparency}" Margin="0,0,0,5" />
 
                 <RadioButton dialogs:SettingsSearch.Label="Transparent Blur"
                              Content="Transparent" GroupName="BlurKind" Margin="20,0,0,3"
@@ -46,10 +47,10 @@
         </GroupBox>
 
         <!-- Font -->
-        <GroupBox Header="Font" Padding="8,8">
+        <GroupBox Header="{x:Static strings:Strings.AppearanceFontHeader}" Padding="8,8">
             <StackPanel Spacing="5">
                 <CheckBox dialogs:SettingsSearch.Label="Font Ligature"
-                          IsChecked="{Binding EnableLigature, Mode=TwoWay}" Content="Enable Font Ligature" />
+                          IsChecked="{Binding EnableLigature, Mode=TwoWay}" Content="{x:Static strings:Strings.AppearanceEnableLigature}" />
 
                 <StackPanel dialogs:SettingsSearch.Label="Font Size"
                             Orientation="Horizontal" Spacing="8">
@@ -76,16 +77,16 @@
                              Height="120" Margin="0,0,5,0" />
 
                     <StackPanel Grid.Column="1" Spacing="3">
-                        <Button Content="Add..." Width="76" Click="FontAdd_Click"
+                        <Button Content="{x:Static strings:Strings.ButtonAdd}" Width="76" Click="FontAdd_Click"
                                 AutomationProperties.Name="Add font"
                                 AutomationProperties.HelpText="Add a font to the priority list." />
-                        <Button Content="Remove" Width="76" Click="FontRemove_Click"
+                        <Button Content="{x:Static strings:Strings.ButtonRemove}" Width="76" Click="FontRemove_Click"
                                 AutomationProperties.Name="Remove font"
                                 IsEnabled="{Binding CanRemoveFont}" />
-                        <Button Content="Move Up" Width="76" Click="FontMoveUp_Click"
+                        <Button Content="{x:Static strings:Strings.ButtonMoveUp}" Width="76" Click="FontMoveUp_Click"
                                 AutomationProperties.Name="Move font up"
                                 IsEnabled="{Binding CanMoveUp}" />
-                        <Button Content="Move Down" Width="76" Click="FontMoveDown_Click"
+                        <Button Content="{x:Static strings:Strings.ButtonMoveDown}" Width="76" Click="FontMoveDown_Click"
                                 AutomationProperties.Name="Move font down"
                                 IsEnabled="{Binding CanMoveDown}" />
                     </StackPanel>
@@ -123,7 +124,7 @@
         </GroupBox>
 
         <!-- Color Scheme -->
-        <GroupBox Header="Color Scheme" Padding="8,8">
+        <GroupBox Header="{x:Static strings:Strings.AppearanceColorSchemeHeader}" Padding="8,8">
             <StackPanel dialogs:SettingsSearch.Label="Color Scheme"
                         Spacing="8">
                 <ComboBox ItemsSource="{Binding ColorSchemes}"
@@ -158,7 +159,7 @@
         </GroupBox>
 
         <!-- Bell -->
-        <GroupBox Header="Bell" Padding="8,8">
+        <GroupBox Header="{x:Static strings:Strings.AppearanceBellHeader}" Padding="8,8">
             <StackPanel dialogs:SettingsSearch.Label="Bell"
                         Spacing="5">
                 <TextBlock Text="Action when the terminal sends BEL (Ctrl+G)"
@@ -171,7 +172,7 @@
         </GroupBox>
 
         <!-- Scrollback -->
-        <GroupBox Header="Scrollback" Padding="8,8">
+        <GroupBox Header="{x:Static strings:Strings.AppearanceScrollbackHeader}" Padding="8,8">
             <StackPanel Spacing="5">
                 <StackPanel dialogs:SettingsSearch.Label="Scrollback lines"
                             Orientation="Horizontal" Spacing="8">
@@ -186,7 +187,7 @@
             </StackPanel>
         </GroupBox>
         <!-- Tab Bar -->
-        <GroupBox Header="Tab Bar" Padding="8,8">
+        <GroupBox Header="{x:Static strings:Strings.AppearanceTabBarHeader}" Padding="8,8">
             <StackPanel Spacing="5">
                 <StackPanel dialogs:SettingsSearch.Label="Tab bar orientation"
                             Orientation="Horizontal" Spacing="8">
@@ -203,11 +204,11 @@
         </GroupBox>
 
         <!-- General: settings that don't have a dedicated page yet. -->
-        <GroupBox Header="General" Padding="8,8">
+        <GroupBox Header="{x:Static strings:Strings.AppearanceGeneralHeader}" Padding="8,8">
             <StackPanel Spacing="5">
                 <CheckBox dialogs:SettingsSearch.Label="Confirm on close"
                           IsChecked="{Binding ConfirmOnClose, Mode=TwoWay}"
-                          Content="Confirm before closing a window with multiple tabs" />
+                          Content="{x:Static strings:Strings.AppearanceConfirmOnClose}" />
 
                 <CheckBox dialogs:SettingsSearch.Label="Middle-click paste"
                           IsChecked="{Binding MiddleClickPastes, Mode=TwoWay}"

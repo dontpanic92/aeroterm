@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dialogs="using:AeroTerm.Dialogs"
+        xmlns:strings="using:AeroTerm.Resources"
         x:Class="AeroTerm.Dialogs.CommandPaletteWindow"
         x:CompileBindings="True"
         x:DataType="dialogs:CommandPaletteWindow"
@@ -14,7 +15,7 @@
         Topmost="True"
         TransparencyLevelHint="Transparent"
         Background="Transparent"
-        Title="Command Palette">
+        Title="{x:Static strings:Strings.CommandPaletteTitle}">
   <Window.Resources>
     <SolidColorBrush x:Key="PaletteBackground" Color="#E01E1E22" />
     <SolidColorBrush x:Key="PaletteBorder" Color="#66FFFFFF" />

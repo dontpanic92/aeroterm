@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Spanish (es) stub translations for AeroTerm. This file is a SCAFFOLD
+    intended to prove that satellite-assembly generation works end-to-end;
+    it deliberately translates only a handful of keys. Missing keys fall
+    back to the English baseline (Strings.resx) via ResourceManager's
+    culture lookup chain.
+  -->
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Configuración</value>
+  </data>
+  <data name="ButtonCancel" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="ButtonClose" xml:space="preserve">
+    <value>Cerrar</value>
+  </data>
+</root>
