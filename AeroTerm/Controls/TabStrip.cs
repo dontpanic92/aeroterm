@@ -8,6 +8,7 @@ namespace AeroTerm.Controls;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using AeroTerm.Services;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Automation;
@@ -39,9 +40,11 @@ public sealed class TabStrip : UserControl
     private static readonly IBrush CloseHoverBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
 
     private readonly StackPanel tabsPanel;
-    private readonly Button newTabButton;
+    private readonly SplitButton newTabButton;
+    private readonly MenuFlyout profileFlyout;
     private readonly Dictionary<TabSession, TabHeader> headers = new();
     private TabView? tabView;
+    private IReadOnlyList<Profile> profiles = new List<Profile>();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TabStrip"/> class.
@@ -56,10 +59,10 @@ public sealed class TabStrip : UserControl
             VerticalAlignment = VerticalAlignment.Stretch,
         };
 
-        this.newTabButton = new Button
+        this.newTabButton = new SplitButton
         {
             Content = "+",
-            Width = 32,
+            Width = 48,
             Height = 28,
             Padding = new Thickness(0),
             Margin = new Thickness(4, 0, 4, 0),
@@ -72,8 +75,11 @@ public sealed class TabStrip : UserControl
             FontSize = 16,
             Focusable = false,
         };
+        this.profileFlyout = new MenuFlyout();
+        this.newTabButton.Flyout = this.profileFlyout;
         AutomationProperties.SetName(this.newTabButton, "New tab");
         this.newTabButton.Click += (_, _) => this.NewTabRequested?.Invoke();
+        this.RebuildProfileFlyout();
 
         var rootDock = new DockPanel
         {
@@ -94,10 +100,36 @@ public sealed class TabStrip : UserControl
     public event Action? NewTabRequested;
 
     /// <summary>
+    /// Raised when the user picks a profile from the new-tab dropdown.
+    /// </summary>
+    public event Action<Profile>? NewTabWithProfileRequested;
+
+    /// <summary>
+    /// Raised when the user picks "Manage profiles…" from the new-tab dropdown.
+    /// </summary>
+    public event Action? ManageProfilesRequested;
+
+    /// <summary>
     /// Raised when the user invokes "Duplicate tab" from a header's
     /// right-click context menu.
     /// </summary>
     public event Action<TabSession>? DuplicateTabRequested;
+
+    /// <summary>
+    /// Gets or sets the profile list populated into the "+" button's
+    /// dropdown menu. Setting this rebuilds the flyout items. When
+    /// <c>null</c> or empty, no dropdown arrow items are shown but the
+    /// trailing "Manage profiles…" entry is still offered.
+    /// </summary>
+    public IReadOnlyList<Profile> Profiles
+    {
+        get => this.profiles;
+        set
+        {
+            this.profiles = value ?? new List<Profile>();
+            this.RebuildProfileFlyout();
+        }
+    }
 
     /// <summary>
     /// Gets or sets the <see cref="TabView"/> this strip renders. Setting
@@ -218,6 +250,30 @@ public sealed class TabStrip : UserControl
         {
             header.SetState(ReferenceEquals(tab, active), count);
         }
+    }
+
+    private void RebuildProfileFlyout()
+    {
+        this.profileFlyout.Items.Clear();
+        foreach (var profile in this.profiles)
+        {
+            var captured = profile;
+            var item = new MenuItem
+            {
+                Header = string.IsNullOrWhiteSpace(captured.Name) ? "(unnamed)" : captured.Name,
+            };
+            item.Click += (_, _) => this.NewTabWithProfileRequested?.Invoke(captured);
+            this.profileFlyout.Items.Add(item);
+        }
+
+        if (this.profiles.Count > 0)
+        {
+            this.profileFlyout.Items.Add(new Separator());
+        }
+
+        var manage = new MenuItem { Header = "Manage profiles…" };
+        manage.Click += (_, _) => this.ManageProfilesRequested?.Invoke();
+        this.profileFlyout.Items.Add(manage);
     }
 
     /// <summary>

@@ -5,6 +5,7 @@
 
 namespace AeroTerm.Controls;
 
+using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using AeroTerm.Models;
@@ -33,6 +34,23 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     /// font / color scheme / scrollback configuration.</param>
     public TabSession(AppSettings settings)
         : this(CoordinatorTabContent.FromCoordinator(new TerminalSessionCoordinator(settings), settings))
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TabSession"/> class
+    /// configured from a <see cref="Profile"/>. The profile's launch
+    /// fields are merged with <paramref name="fallback"/> (profile wins
+    /// where set). Profile appearance overrides are applied to the
+    /// resulting <see cref="TerminalControl"/> once it is created.
+    /// </summary>
+    /// <param name="settings">Application settings.</param>
+    /// <param name="profile">The profile driving launch + appearance.</param>
+    /// <param name="fallback">Baseline launch spec used to fill gaps.
+    /// When <c>null</c>, the coordinator's environment-derived defaults
+    /// are used (shell from <c>SHELL</c>, cwd from user home, etc.).</param>
+    internal TabSession(AppSettings settings, Profile profile, LaunchSpec? fallback)
+        : this(BuildProfileContent(settings, profile, fallback))
     {
     }
 
@@ -152,6 +170,32 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
         this.content.TitleChanged -= this.OnContentTitleChanged;
         this.content.ProcessExitedNormally -= this.OnContentProcessExited;
         this.content.Dispose();
+    }
+
+    private static ITabSessionContent BuildProfileContent(AppSettings settings, Profile profile, LaunchSpec? fallback)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(profile);
+
+        // When the profile has no launch overrides and the caller passed no
+        // fallback, let the coordinator compute its own environment-derived
+        // defaults — that preserves exact pre-profile behaviour.
+        bool hasLaunchOverrides = profile.Command is not null
+            || profile.Args is not null
+            || profile.WorkingDirectory is not null
+            || (profile.EnvironmentOverrides is not null && profile.EnvironmentOverrides.Count > 0);
+
+        if (fallback is null && !hasLaunchOverrides)
+        {
+            var plainCoord = new TerminalSessionCoordinator(settings);
+            return CoordinatorTabContent.FromCoordinatorWithProfile(plainCoord, settings, profile);
+        }
+
+        var baseline = fallback ?? ProfileStore.BuildEnvironmentFallback();
+        var merged = ProfileStore.BuildLaunchSpec(profile, baseline);
+
+        var coordinator = new TerminalSessionCoordinator(settings, merged);
+        return CoordinatorTabContent.FromCoordinatorWithProfile(coordinator, settings, profile);
     }
 
     private void OnContentTitleChanged(string newTitle)

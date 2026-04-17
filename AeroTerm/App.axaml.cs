@@ -6,6 +6,7 @@
 namespace AeroTerm;
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -24,12 +25,21 @@ public class App : Application
 {
     private static KeybindingStore? keybindingStore;
     private static KeybindingSet keybindings = KeybindingSet.Defaults;
+    private static ProfileStore? profileStore;
+    private static ProfileStoreData profiles = new(new List<Profile> { ProfileStore.CreateSynthesizedDefault() }, null);
 
     /// <summary>
     /// Raised whenever <see cref="Keybindings"/> has been reloaded from
     /// the store. Consumers that cache the current set should refresh.
     /// </summary>
     public static event Action? KeybindingsChanged;
+
+    /// <summary>
+    /// Raised whenever <see cref="Profiles"/> has been reloaded from the
+    /// profile store (or when profiles are saved through the Settings UI).
+    /// Consumers that cache the profile list should refresh.
+    /// </summary>
+    public static event Action? ProfilesChanged;
 
     /// <summary>
     /// Gets the current application-wide keybinding set.
@@ -48,6 +58,29 @@ public class App : Application
             return keybindingStore;
         }
     }
+
+    /// <summary>
+    /// Gets the process-wide profile store. Created lazily on first
+    /// access so tests can swap it via <see cref="SetProfileStoreForTesting"/>.
+    /// </summary>
+    public static ProfileStore ProfileStore
+    {
+        get
+        {
+            if (profileStore is null)
+            {
+                profileStore = new ProfileStore();
+                profileStore.ProfilesChanged += ReloadProfiles;
+            }
+
+            return profileStore;
+        }
+    }
+
+    /// <summary>
+    /// Gets the current application-wide profile snapshot.
+    /// </summary>
+    public static ProfileStoreData Profiles => profiles;
 
     /// <summary>
     /// Gets or sets a test-only seam. When set, <see cref="MainWindow"/>
@@ -76,6 +109,16 @@ public class App : Application
         KeybindingsChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Reloads the profile list from the current <see cref="ProfileStore"/>
+    /// and raises <see cref="ProfilesChanged"/>.
+    /// </summary>
+    public static void ReloadProfiles()
+    {
+        profiles = ProfileStore.Load();
+        ProfilesChanged?.Invoke();
+    }
+
     /// <inheritdoc />
     public override void Initialize()
     {
@@ -89,6 +132,11 @@ public class App : Application
         // are merged on top of the platform defaults. Missing or malformed
         // keybindings.json falls back to defaults silently.
         ReloadKeybindings();
+
+        // Load the profile list; missing/malformed profiles.json yields a
+        // single synthesized "Default" profile so behaviour matches the
+        // pre-profile build.
+        ReloadProfiles();
 
         if (this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
@@ -129,6 +177,23 @@ public class App : Application
         keybindingStore = store;
         keybindings = (store ?? new KeybindingStore()).Load();
         KeybindingsChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Replaces the process-wide profile store (tests only).
+    /// </summary>
+    /// <param name="store">The replacement store, or <see langword="null"/> to reset.</param>
+    internal static void SetProfileStoreForTesting(ProfileStore? store)
+    {
+        profileStore = store;
+        if (store is not null)
+        {
+            store.ProfilesChanged -= ReloadProfiles;
+            store.ProfilesChanged += ReloadProfiles;
+        }
+
+        profiles = (store ?? new ProfileStore()).Load();
+        ProfilesChanged?.Invoke();
     }
 
     /// <summary>

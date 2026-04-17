@@ -78,6 +78,10 @@ public partial class MainWindow : Window
         this.tabStrip = new TabStrip { View = this.tabView };
         this.tabStrip.NewTabRequested += this.CreateAndActivateNewTab;
         this.tabStrip.DuplicateTabRequested += this.DuplicateTabFromStrip;
+        this.tabStrip.NewTabWithProfileRequested += this.CreateAndActivateNewTabFromProfile;
+        this.tabStrip.ManageProfilesRequested += () => _ = this.ShowSettingsDialogAsync();
+        this.tabStrip.Profiles = App.Profiles.Profiles;
+        App.ProfilesChanged += this.OnProfilesChanged;
         this.tabStripHost.Child = this.tabStrip;
         this.tabView.Tabs.CollectionChanged += (_, _) => this.UpdateTabStripVisibility();
 
@@ -338,6 +342,7 @@ public partial class MainWindow : Window
             {
                 new ViewModels.AppearancePageViewModel(this.settings),
                 new ViewModels.KeybindingsPageViewModel(App.KeybindingStore),
+                new ViewModels.ProfilesPageViewModel(App.ProfileStore),
                 new ViewModels.UpdatesPageViewModel(this.settings, this.updateService),
             };
             var viewModel = new ViewModels.SettingsViewModel(pages);
@@ -371,11 +376,31 @@ public partial class MainWindow : Window
     private TabSession CreateTabSession()
     {
         var factory = App.TestTabContentFactory;
-        var session = factory is not null
-            ? new TabSession(factory(this.settings))
-            : new TabSession(this.settings);
+        TabSession session;
+        if (factory is not null)
+        {
+            session = new TabSession(factory(this.settings));
+        }
+        else
+        {
+            var profile = App.Profiles.DefaultProfile ?? ProfileStore.CreateSynthesizedDefault();
+            session = new TabSession(this.settings, profile, fallback: null);
+        }
 
         // Bell goes to the single window-level BellService regardless of tab.
+        if (session.Coordinator is { } coord)
+        {
+            coord.BellRaised += this.bellService.Handle;
+            coord.BackgroundColorChanged += color => this.OnTabBackgroundColorChanged(session, color);
+        }
+
+        session.ProcessExitedNormally += () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(session));
+        return session;
+    }
+
+    private TabSession CreateTabSessionForProfile(Profile profile)
+    {
+        var session = new TabSession(this.settings, profile, fallback: null);
         if (session.Coordinator is { } coord)
         {
             coord.BellRaised += this.bellService.Handle;
@@ -398,6 +423,24 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.RunJobs();
         session.Start();
         session.FocusInput();
+    }
+
+    private void CreateAndActivateNewTabFromProfile(Profile profile)
+    {
+        var session = this.CreateTabSessionForProfile(profile);
+        this.tabView.AddTab(session);
+        this.tabView.ActivateTab(session);
+        Dispatcher.UIThread.RunJobs();
+        session.Start();
+        session.FocusInput();
+    }
+
+    private void OnProfilesChanged()
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            this.tabStrip.Profiles = App.Profiles.Profiles;
+        });
     }
 
     private void DuplicateActiveTab()

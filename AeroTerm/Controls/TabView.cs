@@ -9,6 +9,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using AeroTerm.Services;
 using Avalonia.Controls;
 
 /// <summary>
@@ -226,6 +227,30 @@ public sealed class TabView : UserControl, INotifyPropertyChanged
         this.Tabs.Insert(sourceIndex + 1, dup);
         this.ActiveTab = dup;
         return dup;
+    }
+
+    /// <summary>
+    /// Creates and adds a new <see cref="TabSession"/> from a
+    /// <see cref="Profile"/>. The profile's launch fields merge with the
+    /// caller-supplied <paramref name="fallback"/> (profile wins) and the
+    /// profile's appearance fields (color scheme, font list, font size)
+    /// override the application defaults on the resulting terminal
+    /// control. The returned session has not yet been started — callers
+    /// activate it, force a layout pass, then call
+    /// <see cref="TabSession.Start"/>.
+    /// </summary>
+    /// <param name="settings">Application settings.</param>
+    /// <param name="profile">Profile to launch.</param>
+    /// <param name="fallback">Optional baseline launch spec that fills
+    /// any fields the profile does not override.</param>
+    /// <returns>The newly-added session.</returns>
+    internal TabSession AddTab(AppSettings settings, Profile profile, LaunchSpec? fallback = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(profile);
+        var session = new TabSession(settings, profile, fallback);
+        this.Tabs.Add(session);
+        return session;
     }
 
     private void OnTabsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
