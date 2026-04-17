@@ -88,6 +88,8 @@ public class VtParser
     /// <param name="writeBack">Optional callback to write response bytes back to the PTY.</param>
     /// <param name="clipboardRead">Optional callback to read system clipboard text.</param>
     /// <param name="clipboardWrite">Optional callback to write text to the system clipboard.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="buffer"/>
+    /// or <paramref name="titleChanged"/> is <see langword="null"/>.</exception>
     public VtParser(
         TerminalBuffer buffer,
         Action<string> titleChanged,
@@ -95,7 +97,9 @@ public class VtParser
         Func<string>? clipboardRead = null,
         Action<string>? clipboardWrite = null)
     {
-        this.buffer = buffer ?? throw new ArgumentNullException(nameof(buffer));
+        ArgumentNullException.ThrowIfNull(buffer);
+        ArgumentNullException.ThrowIfNull(titleChanged);
+        this.buffer = buffer;
         this.titleChanged = titleChanged;
         this.writeBack = writeBack;
         this.clipboardRead = clipboardRead;

@@ -1568,8 +1568,11 @@ public class TerminalBuffer
     /// Overrides the first 16 ANSI palette colors with the given values.
     /// </summary>
     /// <param name="colors">An array of at least 16 RGB color values.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="colors"/>
+    /// is <see langword="null"/>.</exception>
     public void SetAnsiPalette(int[] colors)
     {
+        ArgumentNullException.ThrowIfNull(colors);
         if (colors.Length < 16)
         {
             return;

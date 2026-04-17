@@ -33,8 +33,11 @@ public sealed class PromptMarksRegistry
     /// Appends <paramref name="mark"/> to the registry.
     /// </summary>
     /// <param name="mark">The mark to add.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mark"/>
+    /// is <see langword="null"/>.</exception>
     public void Add(PromptMark mark)
     {
+        ArgumentNullException.ThrowIfNull(mark);
         this.marks.Add(mark);
     }
 

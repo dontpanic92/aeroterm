@@ -30,11 +30,14 @@ internal sealed class NativePtyConnection : IPtyConnection
     /// by spawning a process inside a new PTY.
     /// </summary>
     /// <param name="app">Absolute path to the executable.</param>
-    /// <param name="args">Command-line arguments (excluding argv[0]).</param>
-    /// <param name="environment">Environment variables, or null to inherit.</param>
-    /// <param name="cwd">Working directory, or null to inherit.</param>
+    /// <param name="args">Command-line arguments (excluding argv[0]). Use an empty array when none.</param>
+    /// <param name="environment">Environment variables for the child process.</param>
+    /// <param name="cwd">Working directory for the child process.</param>
     /// <param name="rows">Initial terminal rows.</param>
     /// <param name="cols">Initial terminal columns.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="app"/>,
+    /// <paramref name="args"/>, <paramref name="environment"/>, or <paramref name="cwd"/>
+    /// is <see langword="null"/>.</exception>
     public NativePtyConnection(
         string app,
         string[] args,
@@ -43,6 +46,11 @@ internal sealed class NativePtyConnection : IPtyConnection
         int rows,
         int cols)
     {
+        ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(cwd);
+
         IntPtr appPtr = IntPtr.Zero;
         IntPtr argvPtr = IntPtr.Zero;
         IntPtr envpPtr = IntPtr.Zero;
@@ -53,10 +61,8 @@ internal sealed class NativePtyConnection : IPtyConnection
         {
             appPtr = MarshalString(app, allocations);
             argvPtr = MarshalArgv(app, args, allocations);
-            envpPtr = environment is not null
-                ? MarshalEnvironment(environment, allocations)
-                : IntPtr.Zero;
-            cwdPtr = cwd is not null ? MarshalString(cwd, allocations) : IntPtr.Zero;
+            envpPtr = MarshalEnvironment(environment, allocations);
+            cwdPtr = MarshalString(cwd, allocations);
 
             int masterFd = 0;
             int pid = NativeMethods.SpawnInPty(

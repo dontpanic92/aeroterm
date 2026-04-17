@@ -22,6 +22,9 @@ public interface IPtyConnectionFactory
     /// <param name="rows">Initial terminal row count.</param>
     /// <param name="cols">Initial terminal column count.</param>
     /// <returns>The created PTY connection.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="app"/>,
+    /// <paramref name="args"/>, <paramref name="environment"/>, or <paramref name="cwd"/>
+    /// is <see langword="null"/>.</exception>
     IPtyConnection Create(
         string app,
         string[] args,

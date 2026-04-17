@@ -32,6 +32,9 @@ internal sealed class WindowsPtyConnection : IPtyConnection
     /// <param name="cwd">Working directory for the child process.</param>
     /// <param name="rows">Initial terminal rows.</param>
     /// <param name="cols">Initial terminal columns.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="app"/>,
+    /// <paramref name="args"/>, <paramref name="environment"/>, or <paramref name="cwd"/>
+    /// is <see langword="null"/>.</exception>
     public WindowsPtyConnection(
         string app,
         string[] args,
@@ -40,6 +43,11 @@ internal sealed class WindowsPtyConnection : IPtyConnection
         int rows,
         int cols)
     {
+        ArgumentNullException.ThrowIfNull(app);
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(cwd);
+
         IntPtr ptyInputRead = IntPtr.Zero;
         IntPtr terminalInputWrite = IntPtr.Zero;
         IntPtr terminalOutputRead = IntPtr.Zero;
