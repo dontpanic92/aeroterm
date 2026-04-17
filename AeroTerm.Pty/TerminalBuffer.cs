@@ -910,6 +910,69 @@ public class TerminalBuffer
     }
 
     /// <summary>
+    /// Captures a consistent point-in-time copy of the buffer's scrollback
+    /// ring and live screen under a single acquisition of the internal
+    /// lock. All returned cell arrays are defensive copies. Intended as
+    /// the only safe entry point for background consumers such as the
+    /// scrollback search layer — assembling a corpus from separate calls
+    /// to <see cref="ScrollbackCount"/> / <see cref="GetScrollbackLine(int)"/>
+    /// / <see cref="GetScreen"/> cannot guarantee atomicity w.r.t. the
+    /// reader thread mutating the buffer.
+    /// </summary>
+    /// <returns>An immutable <see cref="BufferSnapshot"/>.</returns>
+    public BufferSnapshot CreateSnapshot()
+    {
+        lock (this.screenLock)
+        {
+            var scrollbackRows = new Cell[this.scrollbackCount][];
+            for (int i = 0; i < this.scrollbackCount; i++)
+            {
+                int slot = (this.scrollbackHead + i) % Math.Max(this.scrollbackLimit, 1);
+                var source = this.scrollbackRing[slot] ?? Array.Empty<Cell>();
+                var copy = new Cell[source.Length];
+                Array.Copy(source, copy, source.Length);
+                scrollbackRows[i] = copy;
+            }
+
+            int rows = this.Rows;
+            int cols = this.Cols;
+            Cell[,] liveCells;
+            (int Row, int Col) cursorPos;
+            int detectedBgLocal = this.detectedBg;
+            if (this.cells is null)
+            {
+                liveCells = new Cell[rows, cols];
+                cursorPos = (0, 0);
+            }
+            else
+            {
+                liveCells = (Cell[,])this.cells.Clone();
+                cursorPos = (this.cursorRow, this.cursorCol);
+            }
+
+            var liveScreen = new Screen
+            {
+                Cells = liveCells,
+                CursorPosition = cursorPos,
+                BackgroundColor = detectedBgLocal,
+                ForegroundColor = ColorUtility.DeriveReadableForeground(detectedBgLocal),
+                AllDirty = true,
+                DirtyRows = null,
+            };
+
+            return new BufferSnapshot
+            {
+                IsUsingAltBuffer = this.usingAltBuffer,
+                ScrollbackCount = this.scrollbackCount,
+                ScrollbackRows = scrollbackRows,
+                LiveScreen = liveScreen,
+                Rows = rows,
+                Cols = cols,
+            };
+        }
+    }
+
+    /// <summary>
     /// Scroll up n lines within the scroll region.
     /// </summary>
     /// <param name="n">Number of lines to scroll.</param>

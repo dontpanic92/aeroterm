@@ -33,6 +33,8 @@ internal sealed class TerminalRenderer : IDisposable
     private readonly List<TextCellSpan> runCellSpans = new();
     private readonly List<TextCellSpan> allCellSpans = new();
     private readonly SKPaint selectionPaint = new() { IsAntialias = false, Style = SKPaintStyle.Fill };
+    private readonly SKPaint searchMatchPaint = new() { IsAntialias = false, Style = SKPaintStyle.Fill };
+    private readonly SKPaint searchActiveBorderPaint = new() { IsAntialias = false, Style = SKPaintStyle.Stroke, StrokeWidth = 1 };
     private SKFont textFont = new() { Subpixel = true, LinearMetrics = false };
     private bool isDisposed;
 
@@ -65,6 +67,9 @@ internal sealed class TerminalRenderer : IDisposable
     /// <param name="selection">Optional active text selection to overlay, or <c>null</c>.</param>
     /// <param name="selectionColor">Fill color for the selection overlay. Ignored when <paramref name="selection"/> is null or empty.</param>
     /// <param name="hyperlinkRun">Optional OSC 8 hyperlink run to underline as a hover affordance, or <c>null</c>.</param>
+    /// <param name="searchMatches">Optional visible search-overlay matches
+    /// to highlight (projected into <see cref="Pty.Screen"/> row coords).
+    /// Only on-screen matches should be passed.</param>
     public void Render(
         SKCanvas canvas,
         Screen screen,
@@ -75,7 +80,8 @@ internal sealed class TerminalRenderer : IDisposable
         bool shouldDrawCursor,
         TerminalSelection? selection = null,
         SKColor selectionColor = default,
-        HyperlinkRun? hyperlinkRun = null)
+        HyperlinkRun? hyperlinkRun = null,
+        IReadOnlyList<VisibleMatch>? searchMatches = null)
     {
         canvas.Clear(GetSkColor(screen.BackgroundColor, backgroundAlpha));
 
@@ -124,6 +130,44 @@ internal sealed class TerminalRenderer : IDisposable
                 float y = i * textParam.LineHeight;
                 float w = (endCol - startCol + 1) * textParam.CharWidth;
                 canvas.DrawRect(x, y, w, textParam.LineHeight, this.selectionPaint);
+            }
+        }
+
+        // Paint search match overlays. Inactive matches get a translucent
+        // tint; the active match gets a stronger tint plus a 1px border
+        // in the screen foreground color. Drawn before text so glyphs
+        // stay legible.
+        if (searchMatches is not null && searchMatches.Count > 0)
+        {
+            SKColor baseTint = selectionColor.Alpha > 0
+                ? selectionColor
+                : new SKColor(0x39, 0x66, 0xCC, 0x50);
+            var inactiveFill = new SKColor(baseTint.Red, baseTint.Green, baseTint.Blue, 60);
+            var activeFill = new SKColor(baseTint.Red, baseTint.Green, baseTint.Blue, 130);
+            var borderColor = GetSkColor(screen.ForegroundColor);
+
+            for (int idx = 0; idx < searchMatches.Count; idx++)
+            {
+                var m = searchMatches[idx];
+                if (m.ScreenRow < 0 || m.ScreenRow >= rows || m.CellLength <= 0)
+                {
+                    continue;
+                }
+
+                int startCol = Math.Clamp(m.StartCol, 0, cols - 1);
+                int endCol = Math.Clamp(m.StartCol + m.CellLength - 1, startCol, cols - 1);
+                float x = startCol * textParam.CharWidth;
+                float y = m.ScreenRow * textParam.LineHeight;
+                float w = (endCol - startCol + 1) * textParam.CharWidth;
+
+                this.searchMatchPaint.Color = m.IsActive ? activeFill : inactiveFill;
+                canvas.DrawRect(x, y, w, textParam.LineHeight, this.searchMatchPaint);
+
+                if (m.IsActive)
+                {
+                    this.searchActiveBorderPaint.Color = borderColor;
+                    canvas.DrawRect(x + 0.5f, y + 0.5f, w - 1, textParam.LineHeight - 1, this.searchActiveBorderPaint);
+                }
             }
         }
 
@@ -216,6 +260,8 @@ internal sealed class TerminalRenderer : IDisposable
             this.cursorPaint.Dispose();
             this.preeditUnderlinePaint.Dispose();
             this.selectionPaint.Dispose();
+            this.searchMatchPaint.Dispose();
+            this.searchActiveBorderPaint.Dispose();
             this.textFont.Dispose();
             this.undercurlPath.Dispose();
             this.isDisposed = true;

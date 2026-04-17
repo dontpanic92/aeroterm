@@ -38,6 +38,8 @@ public class TerminalControl : Control, IDisposable
     private readonly TerminalDrawOperation drawOperation;
     private readonly IPtyConnectionFactory ptyFactory;
     private readonly TerminalSelection selection = new();
+    private readonly SearchOverlay searchOverlay = new();
+    private readonly DispatcherTimer searchRecomputeTimer;
 
     private TextLayoutParameters textParam;
     private IPtyConnection? ptyConnection;
@@ -58,6 +60,12 @@ public class TerminalControl : Control, IDisposable
     private Cursor? handCursor;
     private HyperlinkRun? currentHyperlinkRun;
     private int viewportOffset;
+    private bool searchOverlayOpen;
+    private bool searchUsingAltBufferSnapshot;
+    private IReadOnlyList<SearchMatch> searchMatches = Array.Empty<SearchMatch>();
+    private int activeMatchIndex = -1;
+    private int searchSnapshotScrollbackCount;
+    private int searchSnapshotRows;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -107,6 +115,23 @@ public class TerminalControl : Control, IDisposable
 
         this.RebuildFontChain(FontPriorityList.GetDefaultPlatformFonts().ToList());
         this.textParam = new TextLayoutParameters(this.fontChain.PrimaryFontName, 11);
+
+        // Scrollback-search overlay. Hosted by the caller (see
+        // <see cref="SearchOverlayVisual"/>) — TerminalControl is a
+        // plain Control, not a Panel, so it can't hold visual children
+        // of its own. The overlay is owned here because its lifetime,
+        // state, and wiring are terminal-specific.
+        this.searchOverlay.QueryChanged += this.OnSearchQueryOrOptionsChanged;
+        this.searchOverlay.NavigateRequested += this.OnSearchNavigateRequested;
+        this.searchOverlay.CloseRequested += (_, _) => this.HideSearchOverlay();
+
+        // 50 ms debounce: streaming PTY output shouldn't thrash the
+        // matcher, but interactive edits should feel immediate.
+        this.searchRecomputeTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(50),
+        };
+        this.searchRecomputeTimer.Tick += this.OnSearchRecomputeTick;
     }
 
     /// <summary>
@@ -166,6 +191,17 @@ public class TerminalControl : Control, IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Gets the visual (a <see cref="SearchOverlay"/>) that should be
+    /// laid out on top of the terminal — top-right anchored — by the
+    /// hosting container. Because <see cref="TerminalControl"/> derives
+    /// from <see cref="Control"/> (not <see cref="Panel"/>) it cannot
+    /// carry its own children; the caller is responsible for placing
+    /// this visual as a sibling of the terminal within a
+    /// <see cref="Grid"/> or similar panel.
+    /// </summary>
+    public Control SearchOverlayVisual => this.searchOverlay;
 
     /// <summary>
     /// Gets the current primary font family name.
@@ -340,6 +376,46 @@ public class TerminalControl : Control, IDisposable
         this.InvalidateVisual();
     }
 
+    /// <summary>
+    /// Opens the scrollback-search overlay and focuses its text box.
+    /// Clears any active text selection so the two overlays don't fight
+    /// for the same visual channel. Idempotent if already open.
+    /// </summary>
+    public void ShowSearchOverlay()
+    {
+        this.searchOverlayOpen = true;
+        if (!this.selection.IsEmpty)
+        {
+            this.selection.Clear();
+        }
+
+        this.searchOverlay.Open();
+        this.RecomputeSearchMatchesNow();
+        this.InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Closes the search overlay, clears the current match set, and
+    /// returns focus to the terminal. Query text and toggles are
+    /// preserved for the next open.
+    /// </summary>
+    public void HideSearchOverlay()
+    {
+        if (!this.searchOverlayOpen)
+        {
+            return;
+        }
+
+        this.searchOverlayOpen = false;
+        this.searchRecomputeTimer.Stop();
+        this.searchOverlay.Close();
+        this.searchMatches = Array.Empty<SearchMatch>();
+        this.activeMatchIndex = -1;
+        this.searchOverlay.SetStatus(0, 0);
+        this.Focus();
+        this.InvalidateVisual();
+    }
+
     /// <inheritdoc />
     public override void Render(DrawingContext context)
     {
@@ -450,6 +526,15 @@ public class TerminalControl : Control, IDisposable
         if (e.Key == Key.V && IsPasteModifier(e.KeyModifiers))
         {
             this.PasteFromClipboard();
+            e.Handled = true;
+            return;
+        }
+
+        // Cmd+F / Ctrl+F: open the scrollback search overlay. Intercepted
+        // before the input handler so it never reaches the shell.
+        if (e.Key == Key.F && IsSearchModifier(e.KeyModifiers))
+        {
+            this.ShowSearchOverlay();
             e.Handled = true;
             return;
         }
@@ -718,6 +803,7 @@ public class TerminalControl : Control, IDisposable
 
             if (disposing)
             {
+                this.searchRecomputeTimer.Stop();
                 if (this.ptyConnection is not null)
                 {
                     this.ptyConnection.ProcessExited -= this.OnProcessExited;
@@ -747,6 +833,24 @@ public class TerminalControl : Control, IDisposable
     }
 
     private static bool IsPasteModifier(KeyModifiers modifiers) => IsCopyModifier(modifiers);
+
+    private static bool IsSearchModifier(KeyModifiers modifiers)
+    {
+        // Same modifier used for hyperlink activation: Cmd on macOS,
+        // Ctrl on Windows/Linux, with no extras.
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return modifiers.HasFlag(KeyModifiers.Meta)
+                && !modifiers.HasFlag(KeyModifiers.Shift)
+                && !modifiers.HasFlag(KeyModifiers.Control)
+                && !modifiers.HasFlag(KeyModifiers.Alt);
+        }
+
+        return modifiers.HasFlag(KeyModifiers.Control)
+            && !modifiers.HasFlag(KeyModifiers.Shift)
+            && !modifiers.HasFlag(KeyModifiers.Alt)
+            && !modifiers.HasFlag(KeyModifiers.Meta);
+    }
 
     private static bool IsHyperlinkModifier(KeyModifiers modifiers)
     {
@@ -978,6 +1082,7 @@ public class TerminalControl : Control, IDisposable
                         {
                             this.UpdateModeInfoFromBuffer();
                             this.ApplyTerminalUiState();
+                            this.ScheduleSearchRecompute();
                             this.InvalidateVisual();
                         }
 
@@ -1079,6 +1184,191 @@ public class TerminalControl : Control, IDisposable
         }
     }
 
+    private void OnSearchQueryOrOptionsChanged(object? sender, System.EventArgs e)
+    {
+        if (!this.searchOverlayOpen)
+        {
+            return;
+        }
+
+        // Recompute immediately on user edit; only PTY-stream updates go
+        // through the debounce timer.
+        this.searchRecomputeTimer.Stop();
+        this.RecomputeSearchMatchesNow();
+        this.InvalidateVisual();
+    }
+
+    private void OnSearchNavigateRequested(object? sender, bool forward)
+    {
+        if (!this.searchOverlayOpen || this.searchMatches.Count == 0)
+        {
+            return;
+        }
+
+        int n = this.searchMatches.Count;
+        int idx = this.activeMatchIndex < 0 ? (forward ? 0 : n - 1) : (forward ? (this.activeMatchIndex + 1) % n : (this.activeMatchIndex - 1 + n) % n);
+        this.activeMatchIndex = idx;
+        this.ScrollToMatch(this.searchMatches[idx]);
+        this.searchOverlay.SetStatus(idx + 1, n);
+        this.InvalidateVisual();
+    }
+
+    private void OnSearchRecomputeTick(object? sender, System.EventArgs e)
+    {
+        this.searchRecomputeTimer.Stop();
+        if (!this.searchOverlayOpen)
+        {
+            return;
+        }
+
+        this.RecomputeSearchMatchesNow();
+        this.InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Called from the reader thread (via UI-thread Post) when new output
+    /// arrives. Schedules a debounced recompute — streaming output won't
+    /// thrash the matcher but a single batch of edits settles within
+    /// ~50&#160;ms.
+    /// </summary>
+    private void ScheduleSearchRecompute()
+    {
+        if (!this.searchOverlayOpen)
+        {
+            return;
+        }
+
+        if (!this.searchRecomputeTimer.IsEnabled)
+        {
+            this.searchRecomputeTimer.Start();
+        }
+    }
+
+    private void RecomputeSearchMatchesNow()
+    {
+        string query = this.searchOverlay.Query;
+        var options = this.searchOverlay.CurrentOptions;
+
+        var snapshot = this.buffer.CreateSnapshot();
+        this.searchSnapshotScrollbackCount = snapshot.IsUsingAltBuffer ? 0 : snapshot.ScrollbackCount;
+        this.searchSnapshotRows = snapshot.Rows;
+        this.searchUsingAltBufferSnapshot = snapshot.IsUsingAltBuffer;
+
+        // Alt-buffer mode: search the live alt screen only, never
+        // scrollback (per spec). Also force viewport to the bottom so
+        // the alt grid is always on screen.
+        if (snapshot.IsUsingAltBuffer && this.viewportOffset != 0)
+        {
+            this.viewportOffset = 0;
+        }
+
+        // Stash the currently-active match's (row, startCol) so we can
+        // attempt to keep it selected after the recompute.
+        SearchMatch? stickyAnchor = (this.activeMatchIndex >= 0 && this.activeMatchIndex < this.searchMatches.Count)
+            ? this.searchMatches[this.activeMatchIndex]
+            : null;
+
+        var corpus = new List<Cell[]>();
+        if (!snapshot.IsUsingAltBuffer)
+        {
+            for (int i = 0; i < snapshot.ScrollbackRows.Length; i++)
+            {
+                corpus.Add(snapshot.ScrollbackRows[i]);
+            }
+        }
+
+        var live = snapshot.LiveScreen.Cells;
+        int liveRows = live.GetLength(0);
+        int liveCols = live.GetLength(1);
+        for (int r = 0; r < liveRows; r++)
+        {
+            var rowArr = new Cell[liveCols];
+            for (int c = 0; c < liveCols; c++)
+            {
+                rowArr[c] = live[r, c];
+            }
+
+            corpus.Add(rowArr);
+        }
+
+        this.searchMatches = ScrollbackSearch.FindMatches(corpus, snapshot.Cols, query, options);
+
+        if (this.searchMatches.Count == 0)
+        {
+            this.activeMatchIndex = -1;
+        }
+        else if (stickyAnchor is SearchMatch anchor)
+        {
+            // Re-select the sticky match if it's still in the list.
+            int newIdx = -1;
+            for (int i = 0; i < this.searchMatches.Count; i++)
+            {
+                if (this.searchMatches[i].AbsoluteRow == anchor.AbsoluteRow
+                    && this.searchMatches[i].StartCol == anchor.StartCol)
+                {
+                    newIdx = i;
+                    break;
+                }
+            }
+
+            this.activeMatchIndex = newIdx >= 0 ? newIdx : 0;
+            if (newIdx < 0)
+            {
+                this.ScrollToMatch(this.searchMatches[0]);
+            }
+        }
+        else
+        {
+            this.activeMatchIndex = 0;
+            this.ScrollToMatch(this.searchMatches[0]);
+        }
+
+        int display = this.activeMatchIndex < 0 ? 0 : this.activeMatchIndex + 1;
+        this.searchOverlay.SetStatus(display, this.searchMatches.Count);
+    }
+
+    /// <summary>
+    /// Scrolls the viewport by the minimum amount needed to make
+    /// <paramref name="match"/>'s row visible (matches top of viewport if
+    /// above, bottom if below, no-op if already visible). Clamped to
+    /// <c>[0, ScrollbackCount]</c>.
+    /// </summary>
+    private void ScrollToMatch(SearchMatch match)
+    {
+        if (this.searchUsingAltBufferSnapshot)
+        {
+            this.viewportOffset = 0;
+            return;
+        }
+
+        int s = this.searchSnapshotScrollbackCount;
+        int r = this.searchSnapshotRows;
+        if (r <= 0)
+        {
+            return;
+        }
+
+        int m = match.AbsoluteRow;
+        int topAbs = s - this.viewportOffset;
+        int bottomAbs = topAbs + r - 1;
+
+        int newOffset = this.viewportOffset;
+        if (m < topAbs)
+        {
+            newOffset = s - m;
+        }
+        else if (m > bottomAbs)
+        {
+            newOffset = Math.Max(0, s - m + r - 1);
+        }
+
+        int clamped = Math.Clamp(newOffset, 0, this.buffer.ScrollbackCount);
+        if (clamped != this.viewportOffset)
+        {
+            this.viewportOffset = clamped;
+        }
+    }
+
     private void RenderWithSkia(SKCanvas canvas)
     {
         if (this.isDisposed)
@@ -1132,6 +1422,8 @@ public class TerminalControl : Control, IDisposable
             selectionForRender = null;
         }
 
+        IReadOnlyList<VisibleMatch>? visibleMatches = this.ProjectVisibleMatches(renderScreen);
+
         this.renderer.Render(
             canvas,
             renderScreen,
@@ -1142,7 +1434,75 @@ public class TerminalControl : Control, IDisposable
             drawCursor,
             selectionForRender,
             this.selectionColor,
-            hyperlinkForRender);
+            hyperlinkForRender,
+            visibleMatches);
+    }
+
+    /// <summary>
+    /// Maps the (absolute-row) <see cref="searchMatches"/> list into
+    /// screen-row coordinates for the currently composed frame. Returns
+    /// <see langword="null"/> when the overlay is closed or no matches
+    /// are on-screen. In alt-buffer mode the absolute-row space is just
+    /// the live grid (no scrollback); otherwise scrollback rows occupy
+    /// absolute rows <c>[0, ScrollbackCount)</c> and live rows follow.
+    /// </summary>
+    private IReadOnlyList<VisibleMatch>? ProjectVisibleMatches(Pty.Screen renderScreen)
+    {
+        if (!this.searchOverlayOpen || this.searchMatches.Count == 0)
+        {
+            return null;
+        }
+
+        int screenRows = renderScreen.Cells.GetLength(0);
+        int screenCols = renderScreen.Cells.GetLength(1);
+
+        int scrollbackCount = this.searchSnapshotScrollbackCount;
+        bool altBuffer = this.searchUsingAltBufferSnapshot;
+
+        // Absolute row of the top-most visible row.
+        int topAbsolute;
+        if (altBuffer)
+        {
+            topAbsolute = 0;
+        }
+        else
+        {
+            topAbsolute = scrollbackCount - this.viewportOffset;
+        }
+
+        int bottomAbsolute = topAbsolute + screenRows - 1;
+
+        var projected = new List<VisibleMatch>();
+        for (int i = 0; i < this.searchMatches.Count; i++)
+        {
+            var m = this.searchMatches[i];
+            if (m.AbsoluteRow < topAbsolute || m.AbsoluteRow > bottomAbsolute)
+            {
+                continue;
+            }
+
+            int screenRow = m.AbsoluteRow - topAbsolute;
+            int startCol = Math.Min(m.StartCol, screenCols - 1);
+            if (startCol < 0)
+            {
+                continue;
+            }
+
+            int cellLength = m.CellLength;
+            if (startCol + cellLength > screenCols)
+            {
+                cellLength = screenCols - startCol;
+            }
+
+            if (cellLength <= 0)
+            {
+                continue;
+            }
+
+            projected.Add(new VisibleMatch(screenRow, startCol, cellLength, i == this.activeMatchIndex));
+        }
+
+        return projected.Count == 0 ? null : projected;
     }
 
     private Pty.Screen ComposeScrollbackScreen(Pty.Screen live, int viewportOffset)

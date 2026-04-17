@@ -168,7 +168,13 @@ public partial class MainWindow : Window
 
     private void OnTerminalReady(TerminalControl control)
     {
-        this.terminalBorder.Child = control;
+        // Host the terminal plus its (top-right anchored) search overlay
+        // as siblings inside a Grid so Cmd/Ctrl+F can reveal the overlay
+        // without the terminal having to inherit from Panel.
+        var host = new Grid();
+        host.Children.Add(control);
+        host.Children.Add(control.SearchOverlayVisual);
+        this.terminalBorder.Child = host;
         control.Focus();
     }
 

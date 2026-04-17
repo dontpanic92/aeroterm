@@ -1,0 +1,108 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="AeroTerm.Controls.SearchOverlay"
+             HorizontalAlignment="Right"
+             VerticalAlignment="Top"
+             Margin="0,8,12,0"
+             IsVisible="False">
+  <UserControl.Resources>
+    <SolidColorBrush x:Key="SearchOverlayBackground" Color="#E01E1E22" />
+    <SolidColorBrush x:Key="SearchOverlayBorder" Color="#66FFFFFF" />
+    <SolidColorBrush x:Key="SearchOverlayForeground" Color="#F0FFFFFF" />
+    <SolidColorBrush x:Key="SearchOverlayMuted" Color="#90FFFFFF" />
+    <SolidColorBrush x:Key="SearchOverlayButtonHover" Color="#25FFFFFF" />
+    <SolidColorBrush x:Key="SearchOverlayButtonPressed" Color="#40FFFFFF" />
+    <SolidColorBrush x:Key="SearchOverlayToggleOn" Color="#4C6CB6FF" />
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <Style Selector="Button.overlay-btn">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource SearchOverlayForeground}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Width" Value="24" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Focusable" Value="False" />
+    </Style>
+    <Style Selector="Button.overlay-btn:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SearchOverlayButtonHover}" />
+    </Style>
+    <Style Selector="Button.overlay-btn:pressed">
+      <Setter Property="Background" Value="{DynamicResource SearchOverlayButtonPressed}" />
+    </Style>
+    <Style Selector="ToggleButton.overlay-toggle">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource SearchOverlayForeground}" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Width" Value="24" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Focusable" Value="False" />
+    </Style>
+    <Style Selector="ToggleButton.overlay-toggle:pointerover">
+      <Setter Property="Background" Value="{DynamicResource SearchOverlayButtonHover}" />
+    </Style>
+    <Style Selector="ToggleButton.overlay-toggle:checked">
+      <Setter Property="Background" Value="{DynamicResource SearchOverlayToggleOn}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Border Background="{DynamicResource SearchOverlayBackground}"
+          BorderBrush="{DynamicResource SearchOverlayBorder}"
+          BorderThickness="1"
+          CornerRadius="4"
+          Padding="6,4">
+    <StackPanel Orientation="Horizontal" Spacing="4">
+      <TextBox Name="QueryTextBox"
+               Width="220" MinHeight="24"
+               Padding="4,2"
+               VerticalContentAlignment="Center"
+               BorderThickness="0"
+               Background="Transparent"
+               Foreground="{DynamicResource SearchOverlayForeground}"
+               CaretBrush="{DynamicResource SearchOverlayForeground}"
+               FontSize="12" />
+
+      <TextBlock Name="StatusText"
+                 VerticalAlignment="Center"
+                 MinWidth="48"
+                 Margin="4,0"
+                 FontSize="11"
+                 Foreground="{DynamicResource SearchOverlayMuted}"
+                 Text="0 / 0" />
+
+      <ToggleButton Name="CaseToggle"
+                    Classes="overlay-toggle"
+                    ToolTip.Tip="Match case (Aa)"
+                    Content="Aa" FontSize="11" FontWeight="SemiBold" />
+      <ToggleButton Name="RegexToggle"
+                    Classes="overlay-toggle"
+                    ToolTip.Tip="Regular expression (.*)"
+                    Content=".*" FontSize="12" />
+      <ToggleButton Name="WordToggle"
+                    Classes="overlay-toggle"
+                    ToolTip.Tip="Whole word (Ab|)"
+                    Content="Ab" FontSize="11" FontStyle="Italic" />
+
+      <Button Name="PrevButton"
+              Classes="overlay-btn"
+              ToolTip.Tip="Previous match (Shift+Enter)"
+              Content="↑" FontSize="13" />
+      <Button Name="NextButton"
+              Classes="overlay-btn"
+              ToolTip.Tip="Next match (Enter)"
+              Content="↓" FontSize="13" />
+      <Button Name="CloseButton"
+              Classes="overlay-btn"
+              ToolTip.Tip="Close (Esc)"
+              Content="×" FontSize="15" />
+    </StackPanel>
+  </Border>
+</UserControl>
