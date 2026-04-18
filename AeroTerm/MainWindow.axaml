@@ -78,6 +78,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- Logo -->
@@ -87,19 +88,29 @@
                        Foreground="{DynamicResource TitleBarForegroundBrush}"
                        FontSize="12" FontWeight="Bold" />
 
-            <!-- Title -->
-            <TextBlock Grid.Column="1" Name="TitleText" Text=""
+            <!-- Tab strip host (used when TabBarOrientation == Horizontal).
+                 Stretches across the titlebar; blank trailing area still
+                 bubbles pointer presses up to TitleBar_PointerPressed for
+                 window dragging. -->
+            <Border Grid.Column="1" Name="TitleBarTabHost"
+                    Background="Transparent"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch" />
+
+            <!-- Title (shown when TabBarOrientation == Vertical; the
+                 horizontal tab strip occupies the same visual slot). -->
+            <TextBlock Grid.Column="2" Name="TitleText" Text=""
                        VerticalAlignment="Center" HorizontalAlignment="Right"
                        Margin="8,0" TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource TitleBarForegroundBrush}"
                        FontSize="12" />
 
             <!-- Settings Button -->
-            <Button Grid.Column="2" Name="SettingsButton" Content="⚙"
+            <Button Grid.Column="3" Name="SettingsButton" Content="⚙"
                     AutomationProperties.Name="Settings"
                     ToolTip.Tip="Settings"
                     Classes="titlebar-btn"
-                    Width="46" Height="28" FontSize="14"
+                    Width="46" VerticalAlignment="Stretch" FontSize="14"
                     CornerRadius="0"
                     HorizontalContentAlignment="Center"
                     VerticalContentAlignment="Center"
@@ -107,11 +118,11 @@
                     Click="SettingsButton_Click" />
 
             <!-- Minimize Button -->
-            <Button Grid.Column="3" Name="MinimizeButton" Content="&#x1F5D5;"
+            <Button Grid.Column="4" Name="MinimizeButton" Content="&#x1F5D5;"
                     AutomationProperties.Name="Minimize"
                     ToolTip.Tip="Minimize"
                     Classes="titlebar-btn"
-                    Width="46" Height="28" FontSize="14"
+                    Width="46" VerticalAlignment="Stretch" FontSize="14"
                     CornerRadius="0"
                     HorizontalContentAlignment="Center"
                     VerticalContentAlignment="Center"
@@ -119,11 +130,11 @@
                     Click="MinimizeButton_Click" />
 
             <!-- Maximize Button -->
-            <Button Grid.Column="4" Name="MaximizeButton" Content="&#x1F5D6;"
+            <Button Grid.Column="5" Name="MaximizeButton" Content="&#x1F5D6;"
                     AutomationProperties.Name="Maximize"
                     ToolTip.Tip="Maximize"
                     Classes="titlebar-btn"
-                    Width="46" Height="28" FontSize="14"
+                    Width="46" VerticalAlignment="Stretch" FontSize="14"
                     CornerRadius="0"
                     HorizontalContentAlignment="Center"
                     VerticalContentAlignment="Center"
@@ -131,11 +142,11 @@
                     Click="MaximizeButton_Click" />
 
             <!-- Close Button -->
-            <Button Grid.Column="5" Name="CloseButton" Content="&#x2715;"
+            <Button Grid.Column="6" Name="CloseButton" Content="&#x2715;"
                     AutomationProperties.Name="Close"
                     ToolTip.Tip="Close"
                     Classes="titlebar-btn titlebar-close"
-                    Width="46" Height="28" FontSize="14"
+                    Width="46" VerticalAlignment="Stretch" FontSize="14"
                     CornerRadius="0"
                     HorizontalContentAlignment="Center"
                     VerticalContentAlignment="Center"
@@ -150,7 +161,11 @@
             the tab rail at runtime without touching the title bar chrome.
         -->
         <DockPanel Name="ContentDock" LastChildFill="True">
-            <Border Name="TabStripHost" Background="Transparent" IsVisible="False" />
+            <!-- Side tab host (used when TabBarOrientation == Vertical).
+                 Hidden in Horizontal mode; the strip is re-parented into
+                 TitleBarTabHost instead. -->
+            <Border Name="SideTabHost" DockPanel.Dock="Left"
+                    Background="Transparent" IsVisible="False" />
             <Border Name="TerminalBorder" Background="Transparent" />
         </DockPanel>
     </DockPanel>

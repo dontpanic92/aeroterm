@@ -140,19 +140,20 @@ public class TabStripOrientationHeadlessTests
 
     private static StackPanel? FindTabsPanel(TabStrip strip)
     {
-        // The tab strip hosts exactly one StackPanel that holds the tab
-        // headers (plus a sibling SplitButton for "+"); filter by parent
-        // type (DockPanel) to pick it unambiguously.
+        // The tab strip hosts a root StackPanel layout panel whose direct
+        // StackPanel child holds the tab headers; its sibling is the "+"
+        // SplitButton. Identify the inner panel as the StackPanel whose
+        // logical parent is itself a Panel and that is not the root.
         return strip.GetLogicalDescendants()
             .OfType<StackPanel>()
-            .FirstOrDefault(sp => sp.GetLogicalParent() is DockPanel);
+            .FirstOrDefault(sp => sp.GetLogicalParent() is Panel p && !ReferenceEquals(p, strip));
     }
 
     private static System.Collections.Generic.IEnumerable<Border> FindTabHeaderBorders(TabStrip strip)
     {
         // Tab headers are Borders whose logical parent is the tabs StackPanel.
-        // We identify the panel by its DockPanel parent so this helper works
-        // in either orientation.
+        // We identify the panel by the fact that it contains Border children
+        // (the headers themselves), so this helper works in either orientation.
         var panel = FindTabsPanel(strip);
         if (panel is null)
         {

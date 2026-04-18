@@ -49,21 +49,47 @@ public sealed class TabStrip : UserControl
     /// </summary>
     private const double VerticalRailWidth = 180;
 
-    private static readonly IBrush ActiveTabBrush = Brushes.Transparent;
-    private static readonly IBrush InactiveTabBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x2A, 0x2A, 0x2E));
-    private static readonly IBrush InactiveHoverBrush = new SolidColorBrush(Color.FromArgb(0x60, 0x40, 0x40, 0x48));
-    private static readonly IBrush TabForeground = new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF));
-    private static readonly IBrush MutedForeground = new SolidColorBrush(Color.FromArgb(0x90, 0xFF, 0xFF, 0xFF));
+    private const byte TabForegroundAlpha = 0xF0;
+    private const byte MutedForegroundAlpha = 0x90;
+    private const byte InactiveTintAlpha = 0x10;
+    private const byte InactiveHoverTintAlpha = 0x22;
+    private const byte ActiveTintAlpha = 0x30;
+    private const byte ActiveHoverTintAlpha = 0x45;
+
     private static readonly IBrush DividerBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
     private static readonly IBrush CloseHoverBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
     private static readonly IBrush ActiveAccentBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF));
+
+    // Instance brushes so the strip can recolor itself when the active
+    // color scheme changes. Mutating SolidColorBrush.Color propagates to
+    // every consumer automatically via Avalonia's property notification.
+    // All four background tints are derived from the scheme's foreground
+    // colour at varying alphas so the strip works on both dark and light
+    // backgrounds (the scheme guarantees foreground contrasts with bg).
+    private readonly SolidColorBrush tabForegroundBrush =
+        new(Color.FromArgb(TabForegroundAlpha, 0xFF, 0xFF, 0xFF));
+
+    private readonly SolidColorBrush mutedForegroundBrush =
+        new(Color.FromArgb(MutedForegroundAlpha, 0xFF, 0xFF, 0xFF));
+
+    private readonly SolidColorBrush inactiveTabBrush =
+        new(Color.FromArgb(InactiveTintAlpha, 0xFF, 0xFF, 0xFF));
+
+    private readonly SolidColorBrush inactiveHoverBrush =
+        new(Color.FromArgb(InactiveHoverTintAlpha, 0xFF, 0xFF, 0xFF));
+
+    private readonly SolidColorBrush activeTabBrush =
+        new(Color.FromArgb(ActiveTintAlpha, 0xFF, 0xFF, 0xFF));
+
+    private readonly SolidColorBrush activeHoverBrush =
+        new(Color.FromArgb(ActiveHoverTintAlpha, 0xFF, 0xFF, 0xFF));
 
     private readonly StackPanel tabsPanel;
     private readonly SplitButton newTabButton;
     private readonly MenuFlyout profileFlyout;
     private readonly Dictionary<TabSession, TabHeader> headers = new();
     private readonly Rectangle dropIndicator;
-    private readonly DockPanel rootDock;
+    private readonly StackPanel rootDock;
     private TabView? tabView;
     private IReadOnlyList<Profile> profiles = new List<Profile>();
     private TabGroupStore? groupStore;
@@ -90,7 +116,7 @@ public sealed class TabStrip : UserControl
             Padding = new Thickness(0),
             Margin = new Thickness(4, 0, 4, 0),
             Background = Brushes.Transparent,
-            Foreground = TabForeground,
+            Foreground = this.tabForegroundBrush,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(4),
             HorizontalContentAlignment = HorizontalAlignment.Center,
@@ -114,10 +140,14 @@ public sealed class TabStrip : UserControl
             VerticalAlignment = VerticalAlignment.Stretch,
         };
 
-        this.rootDock = new DockPanel
+        // StackPanel root keeps the tab-list panel and the trailing +
+        // button in deterministic visual order regardless of DockPanel
+        // measurement quirks when one of them is empty.
+        this.rootDock = new StackPanel
         {
-            LastChildFill = false,
+            Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Left,
         };
         this.rootDock.Children.Add(this.tabsPanel);
         this.rootDock.Children.Add(this.newTabButton);
@@ -127,10 +157,14 @@ public sealed class TabStrip : UserControl
 
         // Drag handling — bubble so TabHeader still activates on press,
         // then we see the event and track movement for potential drag.
+        // PointerReleased / CaptureLost subscribe with handledEventsToo so
+        // child controls (terminal, buttons) marking the event Handled
+        // don't strand the drag state and leave the drop indicator on
+        // screen.
         this.AddHandler(PointerPressedEvent, this.OnStripPointerPressed, RoutingStrategies.Bubble);
         this.AddHandler(PointerMovedEvent, this.OnStripPointerMoved, RoutingStrategies.Bubble);
-        this.AddHandler(PointerReleasedEvent, this.OnStripPointerReleased, RoutingStrategies.Bubble);
-        this.AddHandler(PointerCaptureLostEvent, this.OnStripPointerCaptureLost, RoutingStrategies.Bubble);
+        this.AddHandler(PointerReleasedEvent, this.OnStripPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
+        this.AddHandler(PointerCaptureLostEvent, this.OnStripPointerCaptureLost, RoutingStrategies.Bubble, handledEventsToo: true);
     }
 
     /// <summary>
@@ -296,6 +330,30 @@ public sealed class TabStrip : UserControl
         }
     }
 
+    /// <summary>
+    /// Updates every tab text + background tint so the strip blends with
+    /// the active terminal color scheme. The supplied colour is treated
+    /// as the scheme's foreground (contrast partner of its background)
+    /// and reused at varying alphas for the active / inactive / hover
+    /// background tints — that way the tabs read correctly on both dark
+    /// and light schemes without needing a separate dark-mode branch.
+    /// </summary>
+    /// <param name="rgb">Foreground colour as a 24-bit RGB integer
+    /// (<c>0x00RRGGBB</c>).</param>
+    public void ApplyForegroundColor(int rgb)
+    {
+        byte r = (byte)((rgb >> 16) & 0xFF);
+        byte g = (byte)((rgb >> 8) & 0xFF);
+        byte b = (byte)(rgb & 0xFF);
+
+        this.tabForegroundBrush.Color = Color.FromArgb(TabForegroundAlpha, r, g, b);
+        this.mutedForegroundBrush.Color = Color.FromArgb(MutedForegroundAlpha, r, g, b);
+        this.inactiveTabBrush.Color = Color.FromArgb(InactiveTintAlpha, r, g, b);
+        this.inactiveHoverBrush.Color = Color.FromArgb(InactiveHoverTintAlpha, r, g, b);
+        this.activeTabBrush.Color = Color.FromArgb(ActiveTintAlpha, r, g, b);
+        this.activeHoverBrush.Color = Color.FromArgb(ActiveHoverTintAlpha, r, g, b);
+    }
+
     private static TabHeader? FindHeaderFromSource(object? source)
     {
         var visual = source as Visual;
@@ -320,15 +378,14 @@ public sealed class TabStrip : UserControl
         {
             this.Width = VerticalRailWidth;
             this.Height = double.NaN;
+            this.rootDock.Orientation = Orientation.Vertical;
+            this.rootDock.HorizontalAlignment = HorizontalAlignment.Stretch;
             this.tabsPanel.Orientation = Orientation.Vertical;
-            DockPanel.SetDock(this.tabsPanel, Dock.Top);
-            DockPanel.SetDock(this.newTabButton, Dock.Top);
             this.newTabButton.Width = VerticalRailWidth - 8;
             this.newTabButton.Height = 28;
             this.newTabButton.HorizontalAlignment = HorizontalAlignment.Stretch;
 
-            // Docks are applied in child order, so we ensure newTabButton
-            // sits above tabsPanel in the rail by making it the first child.
+            // The new-tab button sits above the tab list in vertical mode.
             this.EnsureNewTabButtonFirst();
 
             this.dropIndicator.Width = double.NaN;
@@ -341,13 +398,14 @@ public sealed class TabStrip : UserControl
         {
             this.Width = double.NaN;
             this.Height = 28;
+            this.rootDock.Orientation = Orientation.Horizontal;
+            this.rootDock.HorizontalAlignment = HorizontalAlignment.Left;
             this.tabsPanel.Orientation = Orientation.Horizontal;
-            DockPanel.SetDock(this.tabsPanel, Dock.Left);
-            DockPanel.SetDock(this.newTabButton, Dock.Left);
             this.newTabButton.Width = 48;
             this.newTabButton.Height = 28;
             this.newTabButton.HorizontalAlignment = HorizontalAlignment.Left;
 
+            // Tab list comes before the trailing + button in horizontal mode.
             this.EnsureTabsPanelFirst();
 
             this.dropIndicator.Width = 3;
@@ -504,6 +562,16 @@ public sealed class TabStrip : UserControl
     {
         if (this.drag is null)
         {
+            return;
+        }
+
+        // Defensive: if the left button is no longer down (e.g., a release
+        // event was swallowed by a child handler), abandon the drag so we
+        // never paint the drop indicator on a plain hover.
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            this.drag = null;
+            this.RemoveDropIndicator();
             return;
         }
 
@@ -753,7 +821,7 @@ public sealed class TabStrip : UserControl
         {
             this.tab = tab;
             this.owner = owner;
-            this.Background = InactiveTabBrush;
+            this.Background = owner.inactiveTabBrush;
             this.Transitions = new Transitions
             {
                 new BrushTransition
@@ -762,7 +830,6 @@ public sealed class TabStrip : UserControl
                     Duration = TimeSpan.FromMilliseconds(150),
                 },
             };
-            this.Cursor = new Cursor(StandardCursorType.Hand);
 
             this.layoutGrid = new Grid
             {
@@ -806,7 +873,7 @@ public sealed class TabStrip : UserControl
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(10, 0, 6, 0),
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                Foreground = TabForeground,
+                Foreground = owner.tabForegroundBrush,
                 FontSize = 12,
                 Text = tab.Title,
             };
@@ -822,7 +889,7 @@ public sealed class TabStrip : UserControl
                 Margin = new Thickness(0, 0, 6, 0),
                 Padding = new Thickness(0),
                 Background = Brushes.Transparent,
-                Foreground = MutedForeground,
+                Foreground = owner.mutedForegroundBrush,
                 BorderThickness = new Thickness(0),
                 CornerRadius = new CornerRadius(3),
                 HorizontalContentAlignment = HorizontalAlignment.Center,
@@ -896,10 +963,10 @@ public sealed class TabStrip : UserControl
         {
             this.isActive = active;
             this.hasMultipleTabs = tabCount > 1;
-            this.Background = active ? ActiveTabBrush : InactiveTabBrush;
-            this.divider.IsVisible = active && this.hasMultipleTabs && this.owner.orientation == Orientation.Horizontal;
+            this.Background = this.PickBackgroundBrush();
+            this.divider.IsVisible = false;
             this.closeButton.IsVisible = this.hasMultipleTabs && (active || this.IsPointerOver);
-            this.activeIndicator.IsVisible = active;
+            this.activeIndicator.IsVisible = false;
         }
 
         /// <summary>
@@ -939,10 +1006,10 @@ public sealed class TabStrip : UserControl
             else
             {
                 this.Width = 160;
-                this.Height = 28;
+                this.Height = 32;
                 this.HorizontalAlignment = HorizontalAlignment.Left;
-                this.CornerRadius = new CornerRadius(6, 6, 0, 0);
-                this.Margin = new Thickness(0);
+                this.CornerRadius = new CornerRadius(6);
+                this.Margin = new Thickness(2, 3, 2, 3);
 
                 this.groupPill.HorizontalAlignment = HorizontalAlignment.Stretch;
                 this.groupPill.VerticalAlignment = VerticalAlignment.Top;
@@ -950,7 +1017,8 @@ public sealed class TabStrip : UserControl
                 this.groupPill.Width = double.NaN;
                 this.groupPill.Margin = new Thickness(6, 0, 6, 0);
 
-                // Active accent: 2px bottom bar, full width.
+                // Active accent (kept for layout symmetry but hidden by
+                // SetState — active state is now signalled by background fill).
                 this.activeIndicator.HorizontalAlignment = HorizontalAlignment.Stretch;
                 this.activeIndicator.VerticalAlignment = VerticalAlignment.Bottom;
                 this.activeIndicator.Width = double.NaN;
@@ -992,6 +1060,17 @@ public sealed class TabStrip : UserControl
             this.AttachContextMenu();
         }
 
+        private IBrush PickBackgroundBrush()
+        {
+            bool hover = this.IsPointerOver;
+            if (this.isActive)
+            {
+                return hover ? this.owner.activeHoverBrush : this.owner.activeTabBrush;
+            }
+
+            return hover ? this.owner.inactiveHoverBrush : this.owner.inactiveTabBrush;
+        }
+
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             var props = e.GetCurrentPoint(this).Properties;
@@ -1010,10 +1089,7 @@ public sealed class TabStrip : UserControl
 
         private void OnPointerEntered(object? sender, PointerEventArgs e)
         {
-            if (!this.isActive)
-            {
-                this.Background = InactiveHoverBrush;
-            }
+            this.Background = this.PickBackgroundBrush();
 
             if (this.hasMultipleTabs)
             {
@@ -1023,10 +1099,7 @@ public sealed class TabStrip : UserControl
 
         private void OnPointerExited(object? sender, PointerEventArgs e)
         {
-            if (!this.isActive)
-            {
-                this.Background = InactiveTabBrush;
-            }
+            this.Background = this.PickBackgroundBrush();
 
             if (this.hasMultipleTabs && !this.isActive)
             {

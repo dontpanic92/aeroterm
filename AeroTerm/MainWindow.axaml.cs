@@ -35,7 +35,8 @@ public partial class MainWindow : Window
     private readonly Grid titleBar;
     private readonly TextBlock titleText;
     private readonly Border terminalBorder;
-    private readonly Border tabStripHost;
+    private readonly Border titleBarTabHost;
+    private readonly Border sideTabHost;
     private readonly BellService bellService;
     private readonly TabView tabView;
     private readonly TabStrip tabStrip;
@@ -71,7 +72,8 @@ public partial class MainWindow : Window
         this.titleBar = this.FindControl<Grid>("TitleBar")!;
         this.titleText = this.FindControl<TextBlock>("TitleText")!;
         this.terminalBorder = this.FindControl<Border>("TerminalBorder")!;
-        this.tabStripHost = this.FindControl<Border>("TabStripHost")!;
+        this.titleBarTabHost = this.FindControl<Border>("TitleBarTabHost")!;
+        this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
 
         this.effectsService = new WindowEffectsService(this, settings, AppLogger.Factory.CreateLogger<WindowEffectsService>());
         this.effectsService.CurrentBackgroundColor = settings.BackgroundColor;
@@ -93,7 +95,6 @@ public partial class MainWindow : Window
         this.tabStrip.Profiles = App.Profiles.Profiles;
         this.tabStrip.GroupStore = App.TabGroupStore;
         App.ProfilesChanged += this.OnProfilesChanged;
-        this.tabStripHost.Child = this.tabStrip;
         this.ApplyTabBarOrientation();
         this.tabView.Tabs.CollectionChanged += this.OnTabsCollectionChanged;
 
@@ -107,6 +108,7 @@ public partial class MainWindow : Window
         this.AddHandler(InputElement.KeyDownEvent, this.OnTunnelKeyDown, RoutingStrategies.Tunnel);
 
         this.UpdateTitleBarForeground(settings.ForegroundColor);
+        this.ApplyTabForegroundFromColorScheme();
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
@@ -844,12 +846,16 @@ public partial class MainWindow : Window
 
     private void UpdateTabStripVisibility()
     {
-        bool multi = this.tabView.Tabs.Count > 1;
-        this.tabStripHost.IsVisible = multi;
+        // The tab strip is always visible (even with a single tab). When
+        // horizontal it lives in the titlebar; when vertical it lives in
+        // the side rail. ApplyTabBarOrientation owns which host is shown
+        // and parents the strip; here we only sync the title-text label.
+        bool horizontal = this.settings.TabBarOrientation != TabBarOrientation.Vertical;
 
-        // When multiple tabs are open, the tab strip is the canonical place
-        // to read titles from; collapse the (now-redundant) title text.
-        this.titleText.IsVisible = !multi;
+        // Horizontal: tabs in the titlebar already convey the active title,
+        // so collapse the redundant TitleText. Vertical: titlebar has no
+        // tabs, so show the title.
+        this.titleText.IsVisible = !horizontal;
     }
 
     private void OnTabsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -975,6 +981,10 @@ public partial class MainWindow : Window
         {
             Dispatcher.UIThread.Post(() => this.UpdateTitleBarForeground(this.settings.ForegroundColor));
         }
+        else if (e.PropertyName == nameof(AppSettings.ColorSchemeName))
+        {
+            Dispatcher.UIThread.Post(this.ApplyTabForegroundFromColorScheme);
+        }
         else if (e.PropertyName == nameof(AppSettings.TabBarOrientation))
         {
             Dispatcher.UIThread.Post(this.ApplyTabBarOrientation);
@@ -992,7 +1002,31 @@ public partial class MainWindow : Window
     {
         bool vertical = this.settings.TabBarOrientation == TabBarOrientation.Vertical;
         this.tabStrip.Orientation = vertical ? Avalonia.Layout.Orientation.Vertical : Avalonia.Layout.Orientation.Horizontal;
-        DockPanel.SetDock(this.tabStripHost, vertical ? Dock.Left : Dock.Top);
+
+        // Horizontal mode hosts the tab strip inside the titlebar, so the
+        // bar needs more vertical room for the rounded pill tabs. Vertical
+        // mode shows only the window title there and stays compact.
+        this.titleBar.Height = vertical ? 28 : 36;
+
+        // Re-parent the single TabStrip into the orientation-appropriate
+        // host. Horizontal => inside the custom titlebar; Vertical =>
+        // docked Left in the content area.
+        if (vertical)
+        {
+            this.titleBarTabHost.Child = null;
+            this.sideTabHost.Child = this.tabStrip;
+            this.titleBarTabHost.IsVisible = false;
+            this.sideTabHost.IsVisible = true;
+        }
+        else
+        {
+            this.sideTabHost.Child = null;
+            this.titleBarTabHost.Child = this.tabStrip;
+            this.sideTabHost.IsVisible = false;
+            this.titleBarTabHost.IsVisible = true;
+        }
+
+        this.UpdateTabStripVisibility();
     }
 
     private void UpdateTitleBarForeground(int rgb)
@@ -1003,6 +1037,13 @@ public partial class MainWindow : Window
         var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
 
         this.Resources["TitleBarForegroundBrush"] = brush;
+    }
+
+    private void ApplyTabForegroundFromColorScheme()
+    {
+        var scheme = Models.ColorSchemePresets.FindByName(this.settings.ColorSchemeName)
+            ?? Models.ColorSchemePresets.Default;
+        this.tabStrip.ApplyForegroundColor(scheme.Foreground);
     }
 
     private void CloseButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
