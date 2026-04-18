@@ -222,10 +222,15 @@ internal sealed class PaneTreeView : UserControl
 
     private void ApplyActiveHighlight()
     {
-        var accent = this.GetActiveAccentBrush();
+        // The focus accent only makes sense when the user actually has multiple
+        // panes to disambiguate. With a single leaf there is nothing to compare
+        // against, so painting the accent reads as a stray border around the
+        // whole terminal. Keep every leaf transparent in that case.
+        bool showAccent = this.leafBorders.Count > 1;
+        var accent = showAccent ? this.GetActiveAccentBrush() : Brushes.Transparent;
         foreach (var kv in this.leafBorders)
         {
-            bool active = ReferenceEquals(kv.Key, this.tree.ActiveLeaf);
+            bool active = showAccent && ReferenceEquals(kv.Key, this.tree.ActiveLeaf);
             kv.Value.BorderBrush = active ? accent : Brushes.Transparent;
         }
     }
