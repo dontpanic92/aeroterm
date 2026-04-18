@@ -574,6 +574,64 @@ public class TerminalBufferTests
         Assert.That(screen.Cells[0, 2].Character, Is.EqualTo("A"));
     }
 
+    /// <summary>
+    /// EraseInDisplay(2) issued immediately after a primary-buffer resize
+    /// must clear the live grid. Skipping the clear (a previous "anti-flash"
+    /// optimization) leaves stale cells from before the resize visible
+    /// after a TUI repaints, which manifests as garbled box-drawing
+    /// characters in apps that do clear+redraw on SIGWINCH.
+    /// </summary>
+    [Test]
+    public void EraseInDisplay_AfterResize_ClearsLiveGrid()
+    {
+        var buffer = new TerminalBuffer(4, 3);
+        FillRow(buffer, 0, 'A');
+        FillRow(buffer, 1, 'B');
+        FillRow(buffer, 2, 'C');
+
+        buffer.Resize(5, 4);
+
+        buffer.SetCursorPosition(0, 0);
+        buffer.EraseInDisplay(2);
+
+        var screen = buffer.GetScreen();
+        for (int r = 0; r < 4; r++)
+        {
+            for (int c = 0; c < 5; c++)
+            {
+                Assert.That(screen!.Cells[r, c].Character, Is.EqualTo(" "), $"cell ({r},{c}) should be blank after ED 2 post-resize");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Same as above but for the alternate buffer (truncate/pad path):
+    /// a TUI like vim/htop sends ED 2 on SIGWINCH and the buffer must
+    /// honour it.
+    /// </summary>
+    [Test]
+    public void EraseInDisplay_AfterResize_ClearsAltBuffer()
+    {
+        var buffer = new TerminalBuffer(4, 3);
+        buffer.SwitchToAlternateBuffer();
+        FillRow(buffer, 0, 'X');
+        FillRow(buffer, 1, 'Y');
+
+        buffer.Resize(5, 4);
+
+        buffer.SetCursorPosition(0, 0);
+        buffer.EraseInDisplay(2);
+
+        var screen = buffer.GetScreen();
+        for (int r = 0; r < 4; r++)
+        {
+            for (int c = 0; c < 5; c++)
+            {
+                Assert.That(screen!.Cells[r, c].Character, Is.EqualTo(" "), $"alt cell ({r},{c}) should be blank after ED 2 post-resize");
+            }
+        }
+    }
+
     private static void FillRow(TerminalBuffer buffer, int row, char value)
     {
         buffer.SetCursorPosition(row, 0);

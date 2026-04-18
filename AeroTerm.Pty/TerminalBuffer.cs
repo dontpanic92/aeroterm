@@ -80,7 +80,6 @@ public class TerminalBuffer
 
     private bool[] dirtyRows;
     private bool allDirty;
-    private bool suppressNextErase;
 
     private int defaultFg = 0x000000;
     private int defaultBg = 0xFFFFFF;
@@ -776,19 +775,7 @@ public class TerminalBuffer
                     break;
                 case 2:
                 case 3:
-                    if (this.suppressNextErase)
-                    {
-                        // After a resize, skip the full-screen clear so old
-                        // text remains visible while Vim redraws over it.
-                        // This prevents the blank-screen flash that occurs
-                        // when the erase and redraw arrive in separate chunks.
-                        this.suppressNextErase = false;
-                    }
-                    else
-                    {
-                        this.ClearRegion(0, 0, this.Rows - 1, this.Cols - 1);
-                    }
-
+                    this.ClearRegion(0, 0, this.Rows - 1, this.Cols - 1);
                     this.allDirty = true;
                     break;
             }
@@ -2328,7 +2315,6 @@ public class TerminalBuffer
         this.scrollBottom = rows - 1;
         this.allDirty = true;
         this.bgHistogramValid = false;
-        this.suppressNextErase = true;
 
         if (this.cursorRow >= rows)
         {
@@ -2653,7 +2639,6 @@ public class TerminalBuffer
         this.scrollBottom = newRows - 1;
         this.allDirty = true;
         this.bgHistogramValid = false;
-        this.suppressNextErase = true;
         this.PendingWrap = false;
 
         int cursorLive = Math.Max(0, newCursorRow - liveStart);

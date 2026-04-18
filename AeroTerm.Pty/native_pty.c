@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/wait.h>
+#include <sys/ioctl.h>
 
 /*
  * spawn_in_pty — Create a PTY and spawn a process inside it.
@@ -135,4 +136,40 @@ int wait_for_exit(int pid, int *exit_code, int *exit_signal)
         *exit_signal = 0;
     }
     return 1; /* exited */
+}
+
+/*
+ * pty_set_winsize — Resize the PTY via TIOCSWINSZ.
+ *
+ * Wrapping ioctl() in a fixed-signature function avoids the Apple
+ * arm64 variadic-ABI mismatch that breaks .NET P/Invoke on
+ * variadic libc calls.
+ *
+ * Returns 0 on success or -1 on error (errno is set).
+ */
+int pty_set_winsize(int fd, unsigned short rows, unsigned short cols)
+{
+    struct winsize ws;
+    memset(&ws, 0, sizeof(ws));
+    ws.ws_row = rows;
+    ws.ws_col = cols;
+    return ioctl(fd, TIOCSWINSZ, &ws);
+}
+
+/*
+ * pty_get_winsize — Query the PTY size via TIOCGWINSZ.
+ *
+ * Returns 0 on success or -1 on error (errno is set).
+ */
+int pty_get_winsize(int fd, unsigned short *rows, unsigned short *cols)
+{
+    struct winsize ws;
+    memset(&ws, 0, sizeof(ws));
+    int rc = ioctl(fd, TIOCGWINSZ, &ws);
+    if (rc == 0)
+    {
+        if (rows != NULL) *rows = ws.ws_row;
+        if (cols != NULL) *cols = ws.ws_col;
+    }
+    return rc;
 }

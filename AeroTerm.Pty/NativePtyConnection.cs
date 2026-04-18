@@ -310,25 +310,12 @@ internal sealed class NativePtyConnection : IPtyConnection
         [DllImport(LibC, EntryPoint = "close")]
         public static extern int Close(int fd);
 
-        public static void SetWinSize(int fd, ushort rows, ushort cols)
+        public static int SetWinSize(int fd, ushort rows, ushort cols)
         {
-            var ws = new WinSize { Rows = rows, Cols = cols };
-            ulong tiocswinsz = RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-                ? 0x80087467UL
-                : 0x5414UL;
-            Ioctl(fd, tiocswinsz, ref ws);
+            return PtySetWinSize(fd, rows, cols);
         }
 
-        [DllImport(LibC, EntryPoint = "ioctl")]
-        private static extern int Ioctl(int fd, ulong request, ref WinSize ws);
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct WinSize
-        {
-            public ushort Rows;
-            public ushort Cols;
-            public ushort XPixel;
-            public ushort YPixel;
-        }
+        [DllImport(LibName, EntryPoint = "pty_set_winsize", SetLastError = true)]
+        private static extern int PtySetWinSize(int fd, ushort rows, ushort cols);
     }
 }
