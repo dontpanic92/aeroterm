@@ -8,6 +8,7 @@
         Background="Transparent"
         TransparencyBackgroundFallback="Transparent"
         ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="38"
         WindowDecorations="Full">
 
     <Window.Resources>
@@ -69,8 +70,7 @@
 
     <DockPanel LastChildFill="True">
         <!-- Custom Title Bar -->
-        <Grid DockPanel.Dock="Top" Height="28" Name="TitleBar" IsHitTestVisible="True"
-              PointerPressed="TitleBar_PointerPressed">
+        <Grid DockPanel.Dock="Top" Name="TitleBar" IsHitTestVisible="True">
             <Grid.ColumnDefinitions>
                 <!-- Reservation for the macOS native traffic-light cluster.
                      Width is set to ~78px in code-behind on macOS so the

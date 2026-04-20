@@ -14,6 +14,12 @@ using System.Runtime.InteropServices;
 public static class MacOSInterop
 {
     /// <summary>
+    /// <c>NSWindowToolbarStyleUnifiedCompact</c> — gives a slim (~38pt)
+    /// unified titlebar with vertically centered traffic-light buttons.
+    /// </summary>
+    private const long NSWindowToolbarStyleUnifiedCompact = 4;
+
+    /// <summary>
     /// Configures the NSWindow for a fully transparent background while
     /// preserving native traffic light buttons. Sets the window as non-opaque
     /// with a clear background color, makes the titlebar transparent with a
@@ -51,6 +57,101 @@ public static class MacOSInterop
         // Ensure native traffic light buttons are visible since we use
         // a custom window template (Avalonia won't manage them for us).
         ShowTrafficLightButtons(nsWindow);
+    }
+
+    /// <summary>
+    /// Enables macOS's "unified compact" titlebar style by attaching an empty
+    /// <c>NSToolbar</c> and setting <c>NSWindowToolbarStyleUnifiedCompact</c>
+    /// on the window. AppKit grows the titlebar region (~38pt) and centers
+    /// the native traffic-light cluster vertically inside it, which is what
+    /// Safari / Terminal.app / iTerm2 use to align traffic lights with their
+    /// own tab strip / toolbar content. With <c>FullSizeContentView</c> our
+    /// custom chrome continues to draw across the entire titlebar area, so
+    /// the empty toolbar contributes only the height effect.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    public static void EnableUnifiedTitleBar(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // -[NSWindow toolbar] returns the current toolbar (or nil). Skip if
+        // we've already installed one — re-attaching on every activation
+        // would leak NSToolbar instances and reset user-visible state.
+        IntPtr existingToolbar = NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("toolbar"));
+        if (existingToolbar != IntPtr.Zero)
+        {
+            // Re-assert the style in case Avalonia reset it during a
+            // window-state transition.
+            NativeMethods.ObjCMsgSendLong(
+                nsWindow,
+                NativeMethods.SelRegisterName("setToolbarStyle:"),
+                NSWindowToolbarStyleUnifiedCompact);
+            return;
+        }
+
+        IntPtr toolbarClass = NativeMethods.ObjCGetClass("NSToolbar");
+        if (toolbarClass == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // [[NSToolbar alloc] init] via the +new shortcut. Returns retained.
+        IntPtr toolbar = NativeMethods.ObjCMsgSend(
+            toolbarClass,
+            NativeMethods.SelRegisterName("new"));
+        if (toolbar == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // Hide the baseline separator (no-op on Big Sur+, harmless before).
+        NativeMethods.ObjCMsgSendBool(
+            toolbar,
+            NativeMethods.SelRegisterName("setShowsBaselineSeparator:"),
+            false);
+
+        // [window setToolbar:toolbar] — window retains the toolbar.
+        NativeMethods.ObjCMsgSendIntPtr(
+            nsWindow,
+            NativeMethods.SelRegisterName("setToolbar:"),
+            toolbar);
+
+        // [window setToolbarStyle:NSWindowToolbarStyleUnifiedCompact]
+        NativeMethods.ObjCMsgSendLong(
+            nsWindow,
+            NativeMethods.SelRegisterName("setToolbarStyle:"),
+            NSWindowToolbarStyleUnifiedCompact);
+
+        // Balance the +1 retain from +new now that the window owns it.
+        NativeMethods.ObjCMsgSend(toolbar, NativeMethods.SelRegisterName("release"));
+    }
+
+    /// <summary>
+    /// Removes any <c>NSToolbar</c> previously attached by
+    /// <see cref="EnableUnifiedTitleBar(IntPtr)"/>. Required when entering
+    /// macOS native full-screen: the unified-style toolbar otherwise renders
+    /// its own <c>NSVisualEffectView</c> material across the top of the
+    /// window, making the (transparent) custom tab bar look opaque.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    public static void DetachToolbar(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // [window setToolbar:nil] — the window releases its toolbar
+        // reference, taking the toolbar's material backdrop with it.
+        NativeMethods.ObjCMsgSendIntPtr(
+            nsWindow,
+            NativeMethods.SelRegisterName("setToolbar:"),
+            IntPtr.Zero);
     }
 
     /// <summary>

@@ -36,6 +36,14 @@ public partial class MainWindow : Window
     /// </summary>
     private const double MacChromeReservationWidth = 78.0;
 
+    /// <summary>
+    /// Unified custom titlebar height in DIPs. Chosen to match the macOS
+    /// "unified / thick" titlebar (Safari, Terminal.app, iTerm2) so the
+    /// native traffic-light cluster sits vertically centered against our
+    /// tab strip. Identical on Windows / Linux for a consistent look.
+    /// </summary>
+    private const double TitleBarHeight = 38.0;
+
     private readonly AppSettings settings;
     private readonly WindowEffectsService effectsService;
     private readonly ILogger log;
@@ -46,6 +54,8 @@ public partial class MainWindow : Window
     private readonly Border titleBarTabHost;
     private readonly Border sideTabHost;
     private readonly Border macChromeReservation;
+    private readonly Border titleBarDragHandle;
+    private readonly DockPanel titleBarTabDock;
     private readonly BellService bellService;
     private readonly TabView tabView;
     private readonly TabStrip tabStrip;
@@ -84,6 +94,20 @@ public partial class MainWindow : Window
         this.titleBarTabHost = this.FindControl<Border>("TitleBarTabHost")!;
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
         this.macChromeReservation = this.FindControl<Border>("MacChromeReservation")!;
+
+        // Transparent drag handle that fills the title-bar slot to the right
+        // of the tab strip (or the entire slot in vertical mode). Hosts the
+        // window-move-drag gesture so presses on tab pills no longer kick
+        // off a window drag and steal pointer capture from the TabStrip's
+        // own reorder/detach handlers.
+        this.titleBarDragHandle = new Border
+        {
+            Background = Brushes.Transparent,
+            Focusable = false,
+        };
+        this.titleBarDragHandle.PointerPressed += this.TitleBar_PointerPressed;
+        this.titleBarDragHandle.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
+        this.titleBarTabDock = new DockPanel { LastChildFill = true };
 
         this.effectsService = new WindowEffectsService(this, settings, AppLogger.Factory.CreateLogger<WindowEffectsService>());
         this.effectsService.CurrentBackgroundColor = settings.BackgroundColor;
@@ -933,6 +957,16 @@ public partial class MainWindow : Window
         }
     }
 
+    private void TitleBarDragHandle_DoubleTapped(object? sender, TappedEventArgs e)
+    {
+        // Mirror the OS convention: double-click on the title-bar drag
+        // region toggles maximize, matching the MaximizeButton click path.
+        this.WindowState = this.WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
+        e.Handled = true;
+    }
+
     private void SettingsButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
         _ = this.ShowSettingsDialogAsync();
@@ -997,6 +1031,13 @@ public partial class MainWindow : Window
         if (e.Property == WindowStateProperty)
         {
             this.UpdateMacChromeReservation();
+
+            // Defer until AppKit finishes its full-screen animation so the
+            // toolbar detach / reattach lands on a stable NSWindow state.
+            bool fullscreen = this.WindowState == WindowState.FullScreen;
+            Dispatcher.UIThread.Post(
+                () => this.effectsService.HandleMacOSFullScreenTransition(fullscreen),
+                DispatcherPriority.Background);
         }
     }
 
@@ -1036,25 +1077,35 @@ public partial class MainWindow : Window
         bool vertical = this.settings.TabBarOrientation == TabBarOrientation.Vertical;
         this.tabStrip.Orientation = vertical ? Avalonia.Layout.Orientation.Vertical : Avalonia.Layout.Orientation.Horizontal;
 
-        // Horizontal mode hosts the tab strip inside the titlebar, so the
-        // bar needs more vertical room for the rounded pill tabs. Vertical
-        // mode shows only the window title there and stays compact.
-        this.titleBar.Height = vertical ? 28 : 36;
+        // Single titlebar height for both orientations so the macOS native
+        // traffic-light cluster (centered by AppKit inside the unified
+        // titlebar region) lines up with our tab strip / title text on
+        // every platform.
+        this.titleBar.Height = TitleBarHeight;
 
         // Re-parent the single TabStrip into the orientation-appropriate
-        // host. Horizontal => inside the custom titlebar; Vertical =>
-        // docked Left in the content area.
+        // host. Horizontal => inside the custom titlebar (alongside a
+        // transparent drag handle that fills the trailing space);
+        // Vertical => docked Left in the content area, with the drag
+        // handle alone occupying the title-bar slot so the user can still
+        // grab the title bar to move the window.
+        this.titleBarTabDock.Children.Clear();
         if (vertical)
         {
-            this.titleBarTabHost.Child = null;
             this.sideTabHost.Child = this.tabStrip;
-            this.titleBarTabHost.IsVisible = false;
+            DockPanel.SetDock(this.titleBarDragHandle, Dock.Left);
+            this.titleBarTabDock.Children.Add(this.titleBarDragHandle);
+            this.titleBarTabHost.Child = this.titleBarTabDock;
+            this.titleBarTabHost.IsVisible = true;
             this.sideTabHost.IsVisible = true;
         }
         else
         {
             this.sideTabHost.Child = null;
-            this.titleBarTabHost.Child = this.tabStrip;
+            DockPanel.SetDock(this.tabStrip, Dock.Left);
+            this.titleBarTabDock.Children.Add(this.tabStrip);
+            this.titleBarTabDock.Children.Add(this.titleBarDragHandle);
+            this.titleBarTabHost.Child = this.titleBarTabDock;
             this.sideTabHost.IsVisible = false;
             this.titleBarTabHost.IsVisible = true;
         }

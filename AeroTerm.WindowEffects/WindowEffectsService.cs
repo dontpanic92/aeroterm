@@ -110,6 +110,7 @@ public sealed class WindowEffectsService
 
                 MacOSInterop.SetTransparentTitlebar(nsWindow);
                 MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
+                MacOSInterop.EnableUnifiedTitleBar(nsWindow);
             },
             DispatcherPriority.Background);
     }
@@ -139,6 +140,7 @@ public sealed class WindowEffectsService
 
             MacOSInterop.SetTransparentTitlebar(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
+            MacOSInterop.EnableUnifiedTitleBar(nsWindow);
         }
         catch (Exception ex)
         {
@@ -149,6 +151,14 @@ public sealed class WindowEffectsService
     /// <summary>
     /// Handles macOS full-screen state transitions by configuring native
     /// window properties and updating background opacity.
+    /// </summary>
+    /// <summary>
+    /// Reacts to a macOS full-screen state transition. On entering full
+    /// screen the unified-style <c>NSToolbar</c> is detached so its
+    /// translucent material no longer renders behind our custom tab bar.
+    /// On leaving full screen the transparent-titlebar configuration and
+    /// the unified toolbar are reapplied so the in-window appearance
+    /// matches the pre-fullscreen state.
     /// </summary>
     /// <param name="isFullScreen"><c>true</c> when entering full screen.</param>
     public void HandleMacOSFullScreenTransition(bool isFullScreen)
@@ -164,12 +174,13 @@ public sealed class WindowEffectsService
 
         if (isFullScreen)
         {
-            MacOSInterop.ConfigureForFullScreen(nsWindow);
+            MacOSInterop.DetachToolbar(nsWindow);
         }
         else
         {
             MacOSInterop.SetTransparentTitlebar(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
+            MacOSInterop.EnableUnifiedTitleBar(nsWindow);
         }
 
         this.UpdateBackgroundOpacity();
@@ -280,8 +291,9 @@ public sealed class WindowEffectsService
     /// </summary>
     public void UpdateBackgroundOpacity()
     {
-        float opacity = this.isMacFullScreen ? 1f :
-            this.settings.EnableBlurBehind ? (float)this.settings.BackgroundOpacity : 1f;
+        float opacity = this.settings.EnableBlurBehind
+            ? (float)this.settings.BackgroundOpacity
+            : 1f;
         IBrush backgroundBrush = new SolidColorBrush(PlatformHelper.GetAvaloniaColor(this.CurrentBackgroundColor, opacity));
 
         this.BackgroundBrushChanged?.Invoke(backgroundBrush);
