@@ -182,14 +182,10 @@ public class App : Application
             {
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 MacOSWindowMenu.SetNewWindowHandler(() => this.CreateNewWindow());
+                this.HookMacOSDockQuit(desktop);
             }
 
             desktop.MainWindow = this.CreateNewWindow();
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            {
-                this.SetupMacOSActivation();
-            }
 
             this.InitializeQuakeMode(desktop);
         }
@@ -287,26 +283,6 @@ public class App : Application
     }
 
     /// <summary>
-    /// On macOS, reopens a window when the app is activated with no windows
-    /// (e.g. clicking the dock icon).
-    /// </summary>
-    private void SetupMacOSActivation()
-    {
-        if (this.ApplicationLifetime is IActivatableLifetime activatable)
-        {
-            activatable.Activated += (_, args) =>
-            {
-                if (args.Kind == ActivationKind.Reopen
-                    && this.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d
-                    && !d.Windows.OfType<MainWindow>().Any())
-                {
-                    this.CreateNewWindow();
-                }
-            };
-        }
-    }
-
-    /// <summary>
     /// Creates the Quake-mode service, registers the configured global
     /// hotkey (if any), subscribes to setting changes, and disposes the
     /// registration on desktop shutdown.
@@ -335,5 +311,30 @@ public class App : Application
         };
 
         desktop.ShutdownRequested += (_, _) => quakeModeService?.Dispose();
+    }
+
+    /// <summary>
+    /// On macOS, intercepts the OS-initiated shutdown request that fires when the
+    /// user picks "Quit" from the dock context menu (or presses Cmd+Q). Avalonia's
+    /// native delegate would otherwise return <c>NSTerminateNow</c>, causing AppKit
+    /// to call <c>exit()</c> directly. <c>exit()</c> runs C++ global destructors
+    /// in <c>libAvaloniaNative.dylib</c> that call back into already-finalized
+    /// managed code, aborting the process. By cancelling the OS request and posting
+    /// an explicit Avalonia shutdown, the dispatcher loop unwinds cleanly and the
+    /// process exits via <see cref="Program.Main"/> returning normally.
+    /// </summary>
+    /// <param name="desktop">The classic desktop application lifetime.</param>
+    private void HookMacOSDockQuit(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        desktop.ShutdownRequested += (_, e) =>
+        {
+            if (e.Cancel)
+            {
+                return;
+            }
+
+            e.Cancel = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown());
+        };
     }
 }

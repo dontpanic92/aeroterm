@@ -172,6 +172,21 @@ public static class MacOSWindowMenu
                 (IntPtr)imp,
                 "@@:@");
         }
+
+        // Install -applicationShouldHandleReopen:hasVisibleWindows: so that
+        // clicking the Dock icon while no windows are open creates a new
+        // window instead of being silently ignored. AppKit calls this
+        // selector whenever the user activates an already-running app.
+        IntPtr reopenSel = NativeMethods.SelRegisterName("applicationShouldHandleReopen:hasVisibleWindows:");
+        unsafe
+        {
+            delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte, byte> imp = &ReopenCallback;
+            NativeMethods.ClassReplaceMethod(
+                delegateClass,
+                reopenSel,
+                (IntPtr)imp,
+                "c@:@c");
+        }
     }
 
     private static void CreateMenuTargetClassIfNeeded()
@@ -227,6 +242,49 @@ public static class MacOSWindowMenu
         {
             return IntPtr.Zero;
         }
+    }
+
+    [UnmanagedCallersOnly]
+    private static byte ReopenCallback(IntPtr self, IntPtr sel, IntPtr sender, byte hasVisibleWindows)
+    {
+        _ = self;
+        _ = sel;
+        _ = sender;
+
+        // If AppKit reports visible windows, defer to its default behaviour
+        // (deminiaturize / order-front) by returning YES.
+        if (hasVisibleWindows != 0)
+        {
+            return 1;
+        }
+
+        Action? handler;
+        lock (SyncRoot)
+        {
+            handler = newWindowHandler;
+        }
+
+        if (handler is null)
+        {
+            return 1;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                handler();
+            }
+            catch
+            {
+                // Swallow to avoid an unhandled exception propagating back
+                // through the Objective-C runtime.
+            }
+        });
+
+        // Return NO so AppKit takes no further action; the new window we
+        // post above is sufficient to satisfy the user's reopen intent.
+        return 0;
     }
 
     [UnmanagedCallersOnly]
