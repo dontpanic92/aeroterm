@@ -72,6 +72,12 @@
         <Grid DockPanel.Dock="Top" Height="28" Name="TitleBar" IsHitTestVisible="True"
               PointerPressed="TitleBar_PointerPressed">
             <Grid.ColumnDefinitions>
+                <!-- Reservation for the macOS native traffic-light cluster.
+                     Width is set to ~78px in code-behind on macOS so the
+                     trailing tab strip / title text never sits under the
+                     close / minimize / zoom buttons. Zero-width on every
+                     other platform and in macOS fullscreen mode. -->
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
@@ -81,8 +87,13 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
+            <!-- macOS traffic-light reservation (see column comment). -->
+            <Border Grid.Column="0" Name="MacChromeReservation"
+                    Width="0" Background="Transparent"
+                    IsHitTestVisible="False" />
+
             <!-- Logo -->
-            <TextBlock Grid.Column="0" Name="LogoText"
+            <TextBlock Grid.Column="1" Name="LogoText"
                        Text="AeroTerm" VerticalAlignment="Center"
                        Margin="12,0,8,0"
                        Foreground="{DynamicResource TitleBarForegroundBrush}"
@@ -92,21 +103,21 @@
                  Stretches across the titlebar; blank trailing area still
                  bubbles pointer presses up to TitleBar_PointerPressed for
                  window dragging. -->
-            <Border Grid.Column="1" Name="TitleBarTabHost"
+            <Border Grid.Column="2" Name="TitleBarTabHost"
                     Background="Transparent"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Stretch" />
 
             <!-- Title (shown when TabBarOrientation == Vertical; the
                  horizontal tab strip occupies the same visual slot). -->
-            <TextBlock Grid.Column="2" Name="TitleText" Text=""
+            <TextBlock Grid.Column="3" Name="TitleText" Text=""
                        VerticalAlignment="Center" HorizontalAlignment="Right"
                        Margin="8,0" TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource TitleBarForegroundBrush}"
                        FontSize="12" />
 
             <!-- Settings Button -->
-            <Button Grid.Column="3" Name="SettingsButton" Content="⚙"
+            <Button Grid.Column="4" Name="SettingsButton" Content="⚙"
                     AutomationProperties.Name="Settings"
                     ToolTip.Tip="Settings"
                     Classes="titlebar-btn"
@@ -118,7 +129,7 @@
                     Click="SettingsButton_Click" />
 
             <!-- Minimize Button -->
-            <Button Grid.Column="4" Name="MinimizeButton" Content="&#x1F5D5;"
+            <Button Grid.Column="5" Name="MinimizeButton" Content="&#x1F5D5;"
                     AutomationProperties.Name="Minimize"
                     ToolTip.Tip="Minimize"
                     Classes="titlebar-btn"
@@ -130,7 +141,7 @@
                     Click="MinimizeButton_Click" />
 
             <!-- Maximize Button -->
-            <Button Grid.Column="5" Name="MaximizeButton" Content="&#x1F5D6;"
+            <Button Grid.Column="6" Name="MaximizeButton" Content="&#x1F5D6;"
                     AutomationProperties.Name="Maximize"
                     ToolTip.Tip="Maximize"
                     Classes="titlebar-btn"
@@ -142,7 +153,7 @@
                     Click="MaximizeButton_Click" />
 
             <!-- Close Button -->
-            <Button Grid.Column="6" Name="CloseButton" Content="&#x2715;"
+            <Button Grid.Column="7" Name="CloseButton" Content="&#x2715;"
                     AutomationProperties.Name="Close"
                     ToolTip.Tip="Close"
                     Classes="titlebar-btn titlebar-close"

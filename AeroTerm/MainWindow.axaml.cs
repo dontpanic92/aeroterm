@@ -28,6 +28,14 @@ using Microsoft.Extensions.Logging;
 /// </summary>
 public partial class MainWindow : Window
 {
+    /// <summary>
+    /// Width in DIPs reserved at the leading edge of the custom titlebar
+    /// for the macOS native traffic-light cluster (close / minimize / zoom).
+    /// Standard Aqua geometry: three 12px buttons, 8px gaps, ~20px left
+    /// padding, plus a small visual breathing slot before the next element.
+    /// </summary>
+    private const double MacChromeReservationWidth = 78.0;
+
     private readonly AppSettings settings;
     private readonly WindowEffectsService effectsService;
     private readonly ILogger log;
@@ -37,6 +45,7 @@ public partial class MainWindow : Window
     private readonly Border terminalBorder;
     private readonly Border titleBarTabHost;
     private readonly Border sideTabHost;
+    private readonly Border macChromeReservation;
     private readonly BellService bellService;
     private readonly TabView tabView;
     private readonly TabStrip tabStrip;
@@ -74,6 +83,7 @@ public partial class MainWindow : Window
         this.terminalBorder = this.FindControl<Border>("TerminalBorder")!;
         this.titleBarTabHost = this.FindControl<Border>("TitleBarTabHost")!;
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
+        this.macChromeReservation = this.FindControl<Border>("MacChromeReservation")!;
 
         this.effectsService = new WindowEffectsService(this, settings, AppLogger.Factory.CreateLogger<WindowEffectsService>());
         this.effectsService.CurrentBackgroundColor = settings.BackgroundColor;
@@ -973,6 +983,29 @@ public partial class MainWindow : Window
         {
             logoText.IsVisible = false;
         }
+
+        // Reserve leading space so the tab strip / title text never sits
+        // underneath the OS-drawn traffic-light cluster. Re-evaluated on
+        // every WindowState change because macOS hides the cluster in
+        // fullscreen and the reservation should collapse with it.
+        this.UpdateMacChromeReservation();
+        this.PropertyChanged += this.OnWindowPropertyChangedForMacChrome;
+    }
+
+    private void OnWindowPropertyChangedForMacChrome(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == WindowStateProperty)
+        {
+            this.UpdateMacChromeReservation();
+        }
+    }
+
+    private void UpdateMacChromeReservation()
+    {
+        // No traffic lights to dodge in fullscreen — they are hidden by the
+        // OS — so let the tab strip reclaim the full titlebar width.
+        bool fullscreen = this.WindowState == WindowState.FullScreen;
+        this.macChromeReservation.Width = fullscreen ? 0 : MacChromeReservationWidth;
     }
 
     private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

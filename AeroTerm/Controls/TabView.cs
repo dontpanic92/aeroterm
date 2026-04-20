@@ -16,8 +16,8 @@ using Avalonia.Controls;
 /// Content host for <see cref="TabSession"/> instances. Does NOT render the
 /// tab strip itself — the strip (<see cref="TabStrip"/>) is placed by the
 /// hosting window wherever is platform-appropriate (e.g. inside the title
-/// bar row on Windows / Linux, below the traffic-light reservation on
-/// macOS).
+/// bar row on Windows / Linux, or to the right of the traffic-light
+/// reservation in the macOS titlebar).
 /// <para>
 /// All tab visuals are kept simultaneously attached to the content area
 /// with <c>IsVisible</c> toggled — the "hidden but attached" strategy.

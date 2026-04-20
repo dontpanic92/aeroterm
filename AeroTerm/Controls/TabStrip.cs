@@ -28,7 +28,7 @@ using Avalonia.VisualTree;
 /// <para>
 /// The strip is deliberately a separate control from <see cref="TabView"/>
 /// so the hosting window can place it inside its title bar row on Windows /
-/// Linux or below the traffic-light reservation on macOS.
+/// Linux, or just past the traffic-light reservation in the macOS titlebar.
 /// </para>
 /// </summary>
 public sealed class TabStrip : UserControl
