@@ -290,6 +290,92 @@ public static class MacOSInterop
     }
 
     /// <summary>
+    /// Forces <c>NSApplication</c>'s <c>applicationIconImage</c> to the
+    /// <c>.icns</c> file shipped in the running app bundle. Avalonia's
+    /// macOS backend bypasses AppKit's automatic <c>CFBundleIconFile</c>
+    /// loading on <c>NSApp finishLaunching</c>, leaving the running
+    /// process with the generic placeholder icon — which is what Stage
+    /// Manager (台前调度), Cmd+Tab, and the Dock then display. Calling
+    /// <c>[NSApp setApplicationIconImage:]</c> explicitly with an
+    /// <c>NSImage</c> loaded from the bundle's icon resource fixes all
+    /// three surfaces. No-op when not running on macOS, when the process
+    /// is not running inside an <c>.app</c> bundle (e.g. <c>dotnet run</c>
+    /// during development), or when the bundle does not contain a
+    /// matching <c>&lt;resourceName&gt;.icns</c> file.
+    /// </summary>
+    /// <param name="resourceName">
+    /// The base name of the icon resource (without extension) as
+    /// declared by the bundle's <c>CFBundleIconFile</c> key. Defaults
+    /// to <c>aeroterm</c>, matching this app's <c>Info.plist</c>.
+    /// </param>
+    public static void SetApplicationIconFromBundle(string resourceName = "aeroterm")
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return;
+        }
+
+        // path = [[NSBundle mainBundle] pathForResource:resourceName ofType:@"icns"]
+        IntPtr nsBundleClass = NativeMethods.ObjCGetClass("NSBundle");
+        IntPtr mainBundle = NativeMethods.ObjCMsgSend(
+            nsBundleClass,
+            NativeMethods.SelRegisterName("mainBundle"));
+        if (mainBundle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr nsName = CreateNSString(resourceName);
+        IntPtr nsType = CreateNSString("icns");
+        if (nsName == IntPtr.Zero || nsType == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr path = NativeMethods.ObjCMsgSendPtrPtrRetPtr(
+            mainBundle,
+            NativeMethods.SelRegisterName("pathForResource:ofType:"),
+            nsName,
+            nsType);
+        if (path == IntPtr.Zero)
+        {
+            // Not running from a bundle, or icon resource missing.
+            return;
+        }
+
+        // NSImage *img = [[NSImage alloc] initWithContentsOfFile:path]
+        IntPtr nsImageClass = NativeMethods.ObjCGetClass("NSImage");
+        IntPtr img = NativeMethods.ObjCMsgSend(
+            nsImageClass,
+            NativeMethods.SelRegisterName("alloc"));
+        img = NativeMethods.ObjCMsgSendPtrRetPtr(
+            img,
+            NativeMethods.SelRegisterName("initWithContentsOfFile:"),
+            path);
+        if (img == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // [NSApp setApplicationIconImage:img]
+        IntPtr nsAppClass = NativeMethods.ObjCGetClass("NSApplication");
+        IntPtr nsApp = NativeMethods.ObjCMsgSend(
+            nsAppClass,
+            NativeMethods.SelRegisterName("sharedApplication"));
+        if (nsApp != IntPtr.Zero)
+        {
+            NativeMethods.ObjCMsgSendIntPtr(
+                nsApp,
+                NativeMethods.SelRegisterName("setApplicationIconImage:"),
+                img);
+        }
+
+        // Balance the +alloc/-initWithContentsOfFile: ownership; NSApp
+        // retains the image internally for as long as it needs it.
+        NativeMethods.ObjCMsgSend(img, NativeMethods.SelRegisterName("release"));
+    }
+
+    /// <summary>
     /// Walks the NSView hierarchy from the window's content view and sets
     /// the <c>state</c> property on every <c>NSVisualEffectView</c> found.
     /// </summary>
@@ -381,6 +467,29 @@ public static class MacOSInterop
                     state);
             }
         }
+    }
+
+    /// <summary>
+    /// Allocates an autoreleased <c>NSString</c> from a managed UTF-8
+    /// string by invoking <c>+[NSString stringWithUTF8String:]</c>.
+    /// </summary>
+    /// <param name="value">The managed string to wrap.</param>
+    /// <returns>
+    /// The autoreleased <c>NSString</c> pointer, or <see cref="IntPtr.Zero"/>
+    /// when class lookup fails.
+    /// </returns>
+    private static IntPtr CreateNSString(string value)
+    {
+        IntPtr nsStringClass = NativeMethods.ObjCGetClass("NSString");
+        if (nsStringClass == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        return NativeMethods.ObjCMsgSendStringRetPtr(
+            nsStringClass,
+            NativeMethods.SelRegisterName("stringWithUTF8String:"),
+            value);
     }
 
     /// <summary>
@@ -495,5 +604,28 @@ public static class MacOSInterop
         [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool ObjCMsgSendPtrRetBool(IntPtr receiver, IntPtr selector, IntPtr arg);
+
+        /// <summary>
+        /// Sends a message with two pointer arguments to an Objective-C
+        /// object and returns a pointer result.
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <param name="arg1">The first pointer argument.</param>
+        /// <param name="arg2">The second pointer argument.</param>
+        /// <returns>The return value as a pointer.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern IntPtr ObjCMsgSendPtrPtrRetPtr(IntPtr receiver, IntPtr selector, IntPtr arg1, IntPtr arg2);
+
+        /// <summary>
+        /// Sends a message with a UTF-8 string argument to an Objective-C
+        /// object and returns a pointer result.
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <param name="arg">The UTF-8 string argument, marshalled to a C string.</param>
+        /// <returns>The return value as a pointer.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern IntPtr ObjCMsgSendStringRetPtr(IntPtr receiver, IntPtr selector, [MarshalAs(UnmanagedType.LPUTF8Str)] string arg);
     }
 }

@@ -183,6 +183,13 @@ public class App : Application
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 MacOSWindowMenu.SetNewWindowHandler(() => this.CreateNewWindow());
                 this.HookMacOSDockQuit(desktop);
+
+                // Avalonia.Native does not honour the bundle's
+                // CFBundleIconFile when initialising NSApplication, so the
+                // running process keeps the generic placeholder icon in
+                // Stage Manager (台前调度), Cmd+Tab and the Dock. Force-load
+                // the bundled icns and assign it to NSApp here.
+                MacOSInterop.SetApplicationIconFromBundle();
             }
 
             desktop.MainWindow = this.CreateNewWindow();
