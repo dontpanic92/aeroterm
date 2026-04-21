@@ -315,43 +315,7 @@ public static class MacOSInterop
             return;
         }
 
-        // path = [[NSBundle mainBundle] pathForResource:resourceName ofType:@"icns"]
-        IntPtr nsBundleClass = NativeMethods.ObjCGetClass("NSBundle");
-        IntPtr mainBundle = NativeMethods.ObjCMsgSend(
-            nsBundleClass,
-            NativeMethods.SelRegisterName("mainBundle"));
-        if (mainBundle == IntPtr.Zero)
-        {
-            return;
-        }
-
-        IntPtr nsName = CreateNSString(resourceName);
-        IntPtr nsType = CreateNSString("icns");
-        if (nsName == IntPtr.Zero || nsType == IntPtr.Zero)
-        {
-            return;
-        }
-
-        IntPtr path = NativeMethods.ObjCMsgSendPtrPtrRetPtr(
-            mainBundle,
-            NativeMethods.SelRegisterName("pathForResource:ofType:"),
-            nsName,
-            nsType);
-        if (path == IntPtr.Zero)
-        {
-            // Not running from a bundle, or icon resource missing.
-            return;
-        }
-
-        // NSImage *img = [[NSImage alloc] initWithContentsOfFile:path]
-        IntPtr nsImageClass = NativeMethods.ObjCGetClass("NSImage");
-        IntPtr img = NativeMethods.ObjCMsgSend(
-            nsImageClass,
-            NativeMethods.SelRegisterName("alloc"));
-        img = NativeMethods.ObjCMsgSendPtrRetPtr(
-            img,
-            NativeMethods.SelRegisterName("initWithContentsOfFile:"),
-            path);
+        IntPtr img = LoadBundleIconImage(resourceName);
         if (img == IntPtr.Zero)
         {
             return;
@@ -373,6 +337,102 @@ public static class MacOSInterop
         // Balance the +alloc/-initWithContentsOfFile: ownership; NSApp
         // retains the image internally for as long as it needs it.
         NativeMethods.ObjCMsgSend(img, NativeMethods.SelRegisterName("release"));
+    }
+
+    /// <summary>
+    /// Sets the supplied <see cref="IntPtr"/> NSWindow's
+    /// <c>miniwindowImage</c> to the bundled <c>.icns</c> icon. AppKit uses
+    /// this image when it needs a per-window icon representation outside the
+    /// regular content render — minimised Dock tile, Mission Control window
+    /// list, and (most importantly for us) the Stage Manager / 台前调度
+    /// window strip overlay. Without it, Stage Manager falls back to its
+    /// generic placeholder even when <c>NSApp applicationIconImage</c> is
+    /// correctly assigned, because Stage Manager reads from the per-window
+    /// image rather than from the running app icon. No-op on non-macOS,
+    /// when <paramref name="nsWindow"/> is null, or when the bundle does
+    /// not contain a matching icon resource.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <param name="resourceName">
+    /// The base name of the icon resource (without extension) as
+    /// declared by the bundle's <c>CFBundleIconFile</c> key. Defaults
+    /// to <c>aeroterm</c>, matching this app's <c>Info.plist</c>.
+    /// </param>
+    public static void SetWindowIconFromBundle(IntPtr nsWindow, string resourceName = "aeroterm")
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr img = LoadBundleIconImage(resourceName);
+        if (img == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // [window setMiniwindowImage:img]
+        NativeMethods.ObjCMsgSendIntPtr(
+            nsWindow,
+            NativeMethods.SelRegisterName("setMiniwindowImage:"),
+            img);
+
+        // Balance the +alloc/-initWithContentsOfFile: ownership; NSWindow
+        // retains the image internally for as long as it needs it.
+        NativeMethods.ObjCMsgSend(img, NativeMethods.SelRegisterName("release"));
+    }
+
+    /// <summary>
+    /// Loads the bundled <c>.icns</c> icon resource and returns a retained
+    /// <c>NSImage</c> pointer. The caller owns one reference and is
+    /// responsible for releasing it after assigning it to its target.
+    /// Returns <see cref="IntPtr.Zero"/> when not running on macOS, when
+    /// the process is not running inside an <c>.app</c> bundle (e.g.
+    /// <c>dotnet run</c> during development), or when the bundle does not
+    /// contain a matching <c>&lt;resourceName&gt;.icns</c> file.
+    /// </summary>
+    /// <param name="resourceName">The icon resource base name.</param>
+    /// <returns>A retained NSImage pointer, or zero on failure.</returns>
+    private static IntPtr LoadBundleIconImage(string resourceName)
+    {
+        // path = [[NSBundle mainBundle] pathForResource:resourceName ofType:@"icns"]
+        IntPtr nsBundleClass = NativeMethods.ObjCGetClass("NSBundle");
+        IntPtr mainBundle = NativeMethods.ObjCMsgSend(
+            nsBundleClass,
+            NativeMethods.SelRegisterName("mainBundle"));
+        if (mainBundle == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        IntPtr nsName = CreateNSString(resourceName);
+        IntPtr nsType = CreateNSString("icns");
+        if (nsName == IntPtr.Zero || nsType == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        IntPtr path = NativeMethods.ObjCMsgSendPtrPtrRetPtr(
+            mainBundle,
+            NativeMethods.SelRegisterName("pathForResource:ofType:"),
+            nsName,
+            nsType);
+        if (path == IntPtr.Zero)
+        {
+            // Not running from a bundle, or icon resource missing.
+            return IntPtr.Zero;
+        }
+
+        // NSImage *img = [[NSImage alloc] initWithContentsOfFile:path]
+        IntPtr nsImageClass = NativeMethods.ObjCGetClass("NSImage");
+        IntPtr img = NativeMethods.ObjCMsgSend(
+            nsImageClass,
+            NativeMethods.SelRegisterName("alloc"));
+        img = NativeMethods.ObjCMsgSendPtrRetPtr(
+            img,
+            NativeMethods.SelRegisterName("initWithContentsOfFile:"),
+            path);
+        return img;
     }
 
     /// <summary>

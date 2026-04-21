@@ -111,6 +111,7 @@ public sealed class WindowEffectsService
                 MacOSInterop.SetTransparentTitlebar(nsWindow);
                 MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
                 MacOSInterop.EnableUnifiedTitleBar(nsWindow);
+                MacOSInterop.SetWindowIconFromBundle(nsWindow);
             },
             DispatcherPriority.Background);
     }
