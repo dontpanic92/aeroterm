@@ -71,9 +71,13 @@ public class VtParser
     private int currentSubParam = -1;
     private bool inSubParam;
 
-    // UTF-8 decoding state
+    // UTF-8 decoding state (ground mode)
     private int utf8BytesRemaining;
     private int utf8CodePoint;
+
+    // UTF-8 decoding state (OSC strings — titles, hyperlinks, etc.)
+    private int oscUtf8BytesRemaining;
+    private int oscUtf8CodePoint;
 
     // Last printed character for REP (CSI b) support
     private int lastPrintedCodePoint;
@@ -445,6 +449,7 @@ public class VtParser
                 break;
             case 0x5D: // ']'
                 this.oscString.Clear();
+                this.oscUtf8BytesRemaining = 0;
                 this.state = VtState.OscString;
                 break;
             case (byte)'P': // DCS — device control string
@@ -630,6 +635,25 @@ public class VtParser
 
     private void ProcessOscString(byte b)
     {
+        // Handle UTF-8 continuation bytes first.
+        if (this.oscUtf8BytesRemaining > 0)
+        {
+            if (b >= 0x80 && b <= 0xBF)
+            {
+                this.oscUtf8CodePoint = (this.oscUtf8CodePoint << 6) | (b & 0x3F);
+                this.oscUtf8BytesRemaining--;
+                if (this.oscUtf8BytesRemaining == 0)
+                {
+                    this.AppendOscCodePoint(this.oscUtf8CodePoint);
+                }
+
+                return;
+            }
+
+            // Invalid continuation — reset and fall through.
+            this.oscUtf8BytesRemaining = 0;
+        }
+
         if (b == 0x07)
         {
             // BEL — string terminator
@@ -640,9 +664,37 @@ public class VtParser
         {
             this.state = VtState.OscStringEsc;
         }
+        else if (b >= 0xC0 && b <= 0xDF)
+        {
+            this.oscUtf8CodePoint = b & 0x1F;
+            this.oscUtf8BytesRemaining = 1;
+        }
+        else if (b >= 0xE0 && b <= 0xEF)
+        {
+            this.oscUtf8CodePoint = b & 0x0F;
+            this.oscUtf8BytesRemaining = 2;
+        }
+        else if (b >= 0xF0 && b <= 0xF7)
+        {
+            this.oscUtf8CodePoint = b & 0x07;
+            this.oscUtf8BytesRemaining = 3;
+        }
         else
         {
             this.oscString.Append((char)b);
+        }
+    }
+
+    private void AppendOscCodePoint(int codePoint)
+    {
+        if (codePoint <= 0xFFFF)
+        {
+            this.oscString.Append((char)codePoint);
+        }
+        else
+        {
+            // Encode as UTF-16 surrogate pair for code points above BMP.
+            this.oscString.Append(char.ConvertFromUtf32(codePoint));
         }
     }
 

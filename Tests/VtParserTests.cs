@@ -47,6 +47,35 @@ public class VtParserTests
     }
 
     /// <summary>
+    /// OSC title containing emoji (multi-byte UTF-8) should be decoded correctly.
+    /// </summary>
+    [Test]
+    public void Process_TitleOsc_WithEmoji_DecodesUtf8()
+    {
+        string? title = null;
+        var parser = new VtParser(new TerminalBuffer(2, 2), value => title = value);
+
+        parser.Process(Encoding.UTF8.GetBytes("\x1B]2;hello 🚀 world\x07"));
+
+        Assert.That(title, Is.EqualTo("hello 🚀 world"));
+    }
+
+    /// <summary>
+    /// OSC title containing a non-BMP emoji split across multiple UTF-8 bytes
+    /// followed by BEL should decode the entire title correctly.
+    /// </summary>
+    [Test]
+    public void Process_TitleOsc_WithMultipleEmoji_DecodesUtf8()
+    {
+        string? title = null;
+        var parser = new VtParser(new TerminalBuffer(2, 2), value => title = value);
+
+        parser.Process(Encoding.UTF8.GetBytes("\x1B]0;📂 src — 🐱 terminal\x1B\\"));
+
+        Assert.That(title, Is.EqualTo("📂 src — 🐱 terminal"));
+    }
+
+    /// <summary>
     /// Foreground-color queries should be answered with the current default color.
     /// </summary>
     [Test]
