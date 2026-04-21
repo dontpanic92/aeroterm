@@ -275,6 +275,34 @@ public class TabViewTests
     }
 
     /// <summary>
+    /// Regression: <see cref="TabView.MoveTab"/> must keep every tab's
+    /// content control attached to the visual tree. A previous bug let
+    /// the <c>Move</c> notification fall through the
+    /// <c>OldItems</c> branch of the collection-changed handler,
+    /// detaching the moved tab's control and leaving the tab visually
+    /// empty after a drag-reorder.
+    /// </summary>
+    [AvaloniaTest]
+    public void MoveTab_KeepsAllTabContentsAttached()
+    {
+        var view = new TabView();
+        var a = new TabSession(new FakeTabContent("a"));
+        var b = new TabSession(new FakeTabContent("b"));
+        var c = new TabSession(new FakeTabContent("c"));
+        view.AddTab(a);
+        view.AddTab(b);
+        view.AddTab(c);
+
+        view.MoveTab(0, 2);
+
+        Assert.That(a.Control.Parent, Is.Not.Null, "moved tab content was detached");
+        Assert.That(b.Control.Parent, Is.Not.Null);
+        Assert.That(c.Control.Parent, Is.Not.Null);
+        Assert.That(a.Control.Parent, Is.SameAs(b.Control.Parent));
+        Assert.That(a.Control.Parent, Is.SameAs(c.Control.Parent));
+    }
+
+    /// <summary>
     /// <see cref="TabView.MoveTab"/> is a no-op when indices are equal or out of range.
     /// </summary>
     [AvaloniaTest]

@@ -102,11 +102,14 @@
             <!-- Tab strip host (used when TabBarOrientation == Horizontal).
                  Stretches across the titlebar; blank trailing area still
                  bubbles pointer presses up to TitleBar_PointerPressed for
-                 window dragging. -->
+                 window dragging. ClipToBounds keeps any transient overflow
+                 (e.g., during a tab insertion measure pass) from painting
+                 over the trailing system buttons. -->
             <Border Grid.Column="2" Name="TitleBarTabHost"
                     Background="Transparent"
                     HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch" />
+                    VerticalAlignment="Stretch"
+                    ClipToBounds="True" />
 
             <!-- Title (shown when TabBarOrientation == Vertical; the
                  horizontal tab strip occupies the same visual slot). -->

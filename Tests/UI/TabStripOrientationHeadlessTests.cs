@@ -140,13 +140,13 @@ public class TabStripOrientationHeadlessTests
 
     private static StackPanel? FindTabsPanel(TabStrip strip)
     {
-        // The tab strip hosts a root StackPanel layout panel whose direct
-        // StackPanel child holds the tab headers; its sibling is the "+"
-        // SplitButton. Identify the inner panel as the StackPanel whose
-        // logical parent is itself a Panel and that is not the root.
+        // The tab strip hosts a single inner StackPanel descendant — the
+        // TabHeaderPanel that lays out the tab headers. It now sits
+        // inside a ScrollViewer (so its logical parent is no longer a
+        // Panel), but it is still the only StackPanel in the visual tree.
         return strip.GetLogicalDescendants()
             .OfType<StackPanel>()
-            .FirstOrDefault(sp => sp.GetLogicalParent() is Panel p && !ReferenceEquals(p, strip));
+            .FirstOrDefault();
     }
 
     private static System.Collections.Generic.IEnumerable<Border> FindTabHeaderBorders(TabStrip strip)

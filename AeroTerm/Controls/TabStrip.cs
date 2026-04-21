@@ -13,6 +13,7 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -49,6 +50,27 @@ public sealed class TabStrip : UserControl
     /// </summary>
     private const double VerticalRailWidth = 180;
 
+    /// <summary>
+    /// Maximum width of a single tab header in horizontal mode, used
+    /// when the strip has plenty of room. Matches the historical
+    /// fixed-width tab look.
+    /// </summary>
+    private const double MaxTabWidth = 160;
+
+    /// <summary>
+    /// Minimum width a tab header can shrink to before the strip falls
+    /// back to horizontal scrolling. Picked so the close glyph and a
+    /// few title characters remain readable.
+    /// </summary>
+    private const double MinTabWidth = 80;
+
+    /// <summary>
+    /// Horizontal margin reserved around the trailing "+" / profile
+    /// SplitButton when computing the tab-area extent. Mirrors the
+    /// button's visual margin so tabs never crowd the SplitButton.
+    /// </summary>
+    private const double NewTabButtonReservedMargin = 8;
+
     private const byte TabForegroundAlpha = 0xF0;
     private const byte MutedForegroundAlpha = 0x90;
     private const byte InactiveTintAlpha = 0x10;
@@ -84,12 +106,13 @@ public sealed class TabStrip : UserControl
     private readonly SolidColorBrush activeHoverBrush =
         new(Color.FromArgb(ActiveHoverTintAlpha, 0xFF, 0xFF, 0xFF));
 
-    private readonly StackPanel tabsPanel;
+    private readonly TabHeaderPanel tabsPanel;
     private readonly SplitButton newTabButton;
     private readonly MenuFlyout profileFlyout;
     private readonly Dictionary<TabSession, TabHeader> headers = new();
     private readonly Rectangle dropIndicator;
-    private readonly StackPanel rootDock;
+    private readonly DockPanel rootDock;
+    private readonly ScrollViewer tabsScroller;
     private TabView? tabView;
     private IReadOnlyList<Profile> profiles = new List<Profile>();
     private TabGroupStore? groupStore;
@@ -102,7 +125,7 @@ public sealed class TabStrip : UserControl
     public TabStrip()
     {
         this.Focusable = false;
-        this.tabsPanel = new StackPanel
+        this.tabsPanel = new TabHeaderPanel
         {
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Stretch,
@@ -140,17 +163,31 @@ public sealed class TabStrip : UserControl
             VerticalAlignment = VerticalAlignment.Stretch,
         };
 
-        // StackPanel root keeps the tab-list panel and the trailing +
-        // button in deterministic visual order regardless of DockPanel
-        // measurement quirks when one of them is empty.
-        this.rootDock = new StackPanel
+        // ScrollViewer wraps the tab list so it can shrink-then-scroll
+        // once tabs hit MinTabWidth. Vertical wheel events are translated
+        // to horizontal scroll in horizontal mode (see OnTabsScrollerWheel).
+        this.tabsScroller = new ScrollViewer
         {
-            Orientation = Orientation.Horizontal,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            Content = this.tabsPanel,
         };
-        this.rootDock.Children.Add(this.tabsPanel);
+        this.tabsScroller.AddHandler(PointerWheelChangedEvent, this.OnTabsScrollerWheel, RoutingStrategies.Tunnel);
+
+        // DockPanel keeps the SplitButton pinned to the trailing edge
+        // (right in horizontal, top in vertical) so the "+" / profile
+        // menu can never overflow outside the strip's allocated column.
+        this.rootDock = new DockPanel
+        {
+            LastChildFill = true,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        DockPanel.SetDock(this.newTabButton, Dock.Right);
         this.rootDock.Children.Add(this.newTabButton);
+        this.rootDock.Children.Add(this.tabsScroller);
 
         this.Content = this.rootDock;
         this.ApplyOrientation();
@@ -354,6 +391,45 @@ public sealed class TabStrip : UserControl
         this.activeHoverBrush.Color = Color.FromArgb(ActiveHoverTintAlpha, r, g, b);
     }
 
+    /// <summary>
+    /// Propagates the strip's actual available extent (minus the
+    /// trailing "+" SplitButton) down to the inner
+    /// <see cref="TabHeaderPanel"/> so it can shrink-to-fit before the
+    /// wrapping <see cref="ScrollViewer"/> hands it infinite space and
+    /// every tab snaps back to <see cref="MaxTabWidth"/>.
+    /// </summary>
+    /// <param name="availableSize">Size offered by the parent layout.
+    /// </param>
+    /// <returns>Desired size determined by the base UserControl
+    /// implementation.</returns>
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        bool horizontal = this.orientation == Orientation.Horizontal;
+        if (horizontal)
+        {
+            double avail = availableSize.Width;
+            if (double.IsInfinity(avail) || double.IsNaN(avail))
+            {
+                this.tabsPanel.AvailableTabExtent = double.PositiveInfinity;
+            }
+            else
+            {
+                double reserved = this.newTabButton.Width
+                    + this.newTabButton.Margin.Left + this.newTabButton.Margin.Right
+                    + NewTabButtonReservedMargin;
+                this.tabsPanel.AvailableTabExtent = Math.Max(0, avail - reserved);
+            }
+        }
+        else
+        {
+            // Vertical mode: tabs keep their natural height; the
+            // wrapping ScrollViewer scrolls the rail when overflowed.
+            this.tabsPanel.AvailableTabExtent = double.PositiveInfinity;
+        }
+
+        return base.MeasureOverride(availableSize);
+    }
+
     private static TabHeader? FindHeaderFromSource(object? source)
     {
         var visual = source as Visual;
@@ -378,15 +454,17 @@ public sealed class TabStrip : UserControl
         {
             this.Width = VerticalRailWidth;
             this.Height = double.NaN;
-            this.rootDock.Orientation = Orientation.Vertical;
-            this.rootDock.HorizontalAlignment = HorizontalAlignment.Stretch;
+            this.HorizontalAlignment = HorizontalAlignment.Left;
             this.tabsPanel.Orientation = Orientation.Vertical;
             this.newTabButton.Width = VerticalRailWidth - 8;
             this.newTabButton.Height = 28;
             this.newTabButton.HorizontalAlignment = HorizontalAlignment.Stretch;
 
-            // The new-tab button sits above the tab list in vertical mode.
-            this.EnsureNewTabButtonFirst();
+            // The new-tab button sits above the tab list in vertical mode;
+            // the scroller fills the remainder so a tall list scrolls.
+            DockPanel.SetDock(this.newTabButton, Dock.Top);
+            this.tabsScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            this.tabsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
 
             this.dropIndicator.Width = double.NaN;
             this.dropIndicator.Height = 3;
@@ -398,15 +476,17 @@ public sealed class TabStrip : UserControl
         {
             this.Width = double.NaN;
             this.Height = 28;
-            this.rootDock.Orientation = Orientation.Horizontal;
-            this.rootDock.HorizontalAlignment = HorizontalAlignment.Left;
+            this.HorizontalAlignment = HorizontalAlignment.Stretch;
             this.tabsPanel.Orientation = Orientation.Horizontal;
             this.newTabButton.Width = 48;
             this.newTabButton.Height = 28;
-            this.newTabButton.HorizontalAlignment = HorizontalAlignment.Left;
+            this.newTabButton.HorizontalAlignment = HorizontalAlignment.Center;
 
-            // Tab list comes before the trailing + button in horizontal mode.
-            this.EnsureTabsPanelFirst();
+            // Trailing "+" stays pinned at the right edge so it can never
+            // overflow past the tab strip's allocated column.
+            DockPanel.SetDock(this.newTabButton, Dock.Right);
+            this.tabsScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
+            this.tabsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
 
             this.dropIndicator.Width = 3;
             this.dropIndicator.Height = double.NaN;
@@ -416,26 +496,38 @@ public sealed class TabStrip : UserControl
         }
     }
 
-    private void EnsureTabsPanelFirst()
+    private void OnTabsScrollerWheel(object? sender, PointerWheelEventArgs e)
     {
-        int tabsIdx = this.rootDock.Children.IndexOf(this.tabsPanel);
-        int btnIdx = this.rootDock.Children.IndexOf(this.newTabButton);
-        if (tabsIdx > btnIdx)
+        // In horizontal mode, funnel both vertical (Y) and horizontal
+        // (X) wheel deltas into horizontal scrolling of the tab list —
+        // a trackpad swipe sideways or a mouse-wheel scroll should both
+        // pan the row. Skip when the content fits entirely so wheel
+        // events bubble to whatever else cares about them.
+        if (this.orientation != Orientation.Horizontal)
         {
-            this.rootDock.Children.Remove(this.tabsPanel);
-            this.rootDock.Children.Insert(0, this.tabsPanel);
+            return;
         }
-    }
 
-    private void EnsureNewTabButtonFirst()
-    {
-        int tabsIdx = this.rootDock.Children.IndexOf(this.tabsPanel);
-        int btnIdx = this.rootDock.Children.IndexOf(this.newTabButton);
-        if (btnIdx > tabsIdx)
+        if (this.tabsScroller.Extent.Width <= this.tabsScroller.Viewport.Width)
         {
-            this.rootDock.Children.Remove(this.newTabButton);
-            this.rootDock.Children.Insert(0, this.newTabButton);
+            return;
         }
+
+        // Sum both axes so a two-finger diagonal trackpad gesture still
+        // scrolls. Sign convention matches ScrollViewer's own handler:
+        // positive delta -> offset decreases (content moves right).
+        double delta = e.Delta.Y + e.Delta.X;
+        if (delta == 0)
+        {
+            return;
+        }
+
+        const double Step = 48;
+        var offset = this.tabsScroller.Offset;
+        double maxX = Math.Max(0, this.tabsScroller.Extent.Width - this.tabsScroller.Viewport.Width);
+        double newX = Math.Clamp(offset.X - (delta * Step), 0, maxX);
+        this.tabsScroller.Offset = new Vector(newX, offset.Y);
+        e.Handled = true;
     }
 
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -661,9 +753,15 @@ public sealed class TabStrip : UserControl
     private int ComputeDropIndex(Point stripPoint)
     {
         bool vertical = this.orientation == Orientation.Vertical;
+
+        // tabsPanel sits inside a ScrollViewer, so its Bounds are
+        // expressed relative to the scroller's content presenter, not
+        // the strip itself. TranslatePoint gives us the panel origin in
+        // strip coordinates while also accounting for any scroll offset.
+        var origin = this.tabsPanel.TranslatePoint(default, this) ?? default;
         double panelCoord = vertical
-            ? stripPoint.Y - this.tabsPanel.Bounds.Y
-            : stripPoint.X - this.tabsPanel.Bounds.X;
+            ? stripPoint.Y - origin.Y
+            : stripPoint.X - origin.X;
         int headerCount = 0;
         for (int i = 0; i < this.tabsPanel.Children.Count; i++)
         {
@@ -769,6 +867,169 @@ public sealed class TabStrip : UserControl
         foreach (var header in this.headers.Values)
         {
             header.RefreshGroup();
+        }
+    }
+
+    /// <summary>
+    /// Custom <see cref="StackPanel"/> for tab headers that shrinks
+    /// every <see cref="TabHeader"/> uniformly between
+    /// <see cref="TabStrip.MinTabWidth"/> and
+    /// <see cref="TabStrip.MaxTabWidth"/> in horizontal mode based on
+    /// the strip's actual available extent (set via
+    /// <see cref="AvailableTabExtent"/>). Once headers reach the
+    /// minimum, the panel reports its full natural width so the
+    /// wrapping <see cref="ScrollViewer"/> activates and lets the user
+    /// scroll the overflow.
+    /// <para>
+    /// Non-<see cref="TabHeader"/> children (e.g. the drop indicator)
+    /// are measured / arranged at their natural size, preserving the
+    /// existing reorder-drag visuals.
+    /// </para>
+    /// </summary>
+    private sealed class TabHeaderPanel : StackPanel
+    {
+        /// <summary>
+        /// Gets or sets the soft maximum tab-area extent published by
+        /// the owning <see cref="TabStrip"/>. Used in place of
+        /// <see cref="MeasureOverride"/>'s incoming width when a
+        /// <see cref="ScrollViewer"/> ancestor passes infinity in the
+        /// scrolled axis.
+        /// </summary>
+        public double AvailableTabExtent { get; set; } = double.PositiveInfinity;
+
+        /// <inheritdoc />
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            bool horizontal = this.Orientation == Orientation.Horizontal;
+            int headerCount = 0;
+            foreach (var child in this.Children)
+            {
+                if (child is TabHeader)
+                {
+                    headerCount++;
+                }
+            }
+
+            double perHeader = MaxTabWidth;
+            if (horizontal && headerCount > 0)
+            {
+                double soft = availableSize.Width;
+                if (double.IsInfinity(soft) || double.IsNaN(soft))
+                {
+                    soft = this.AvailableTabExtent;
+                }
+
+                if (!double.IsInfinity(soft))
+                {
+                    perHeader = Math.Clamp(soft / headerCount, MinTabWidth, MaxTabWidth);
+                }
+            }
+
+            double totalMain = 0;
+            double maxCross = 0;
+            foreach (var child in this.Children)
+            {
+                Size childAvail;
+                if (child is TabHeader)
+                {
+                    if (horizontal)
+                    {
+                        childAvail = new Size(perHeader, availableSize.Height);
+                    }
+                    else
+                    {
+                        childAvail = new Size(availableSize.Width, double.PositiveInfinity);
+                    }
+                }
+                else
+                {
+                    childAvail = availableSize;
+                }
+
+                child.Measure(childAvail);
+                var ds = child.DesiredSize;
+
+                if (horizontal)
+                {
+                    double w = child is TabHeader ? perHeader : ds.Width;
+                    totalMain += w;
+                    maxCross = Math.Max(maxCross, ds.Height);
+                }
+                else
+                {
+                    totalMain += ds.Height;
+                    maxCross = Math.Max(maxCross, ds.Width);
+                }
+            }
+
+            return horizontal
+                ? new Size(totalMain, maxCross)
+                : new Size(maxCross, totalMain);
+        }
+
+        /// <inheritdoc />
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            bool horizontal = this.Orientation == Orientation.Horizontal;
+            int headerCount = 0;
+            foreach (var child in this.Children)
+            {
+                if (child is TabHeader)
+                {
+                    headerCount++;
+                }
+            }
+
+            double perHeader = MaxTabWidth;
+            if (horizontal && headerCount > 0)
+            {
+                // finalSize.Width is whatever the ScrollViewer decided to
+                // give us — either the viewport (no scroll) or our full
+                // desired width (scroll active). Either way, share-of-
+                // viewport is the right way to compute per-tab width.
+                double soft = this.AvailableTabExtent;
+                if (double.IsInfinity(soft))
+                {
+                    soft = finalSize.Width;
+                }
+
+                perHeader = Math.Clamp(soft / headerCount, MinTabWidth, MaxTabWidth);
+            }
+
+            double pos = 0;
+            foreach (var child in this.Children)
+            {
+                if (child is TabHeader)
+                {
+                    if (horizontal)
+                    {
+                        child.Arrange(new Rect(pos, 0, perHeader, finalSize.Height));
+                        pos += perHeader;
+                    }
+                    else
+                    {
+                        double h = child.DesiredSize.Height;
+                        child.Arrange(new Rect(0, pos, finalSize.Width, h));
+                        pos += h;
+                    }
+                }
+                else
+                {
+                    var ds = child.DesiredSize;
+                    if (horizontal)
+                    {
+                        child.Arrange(new Rect(pos, 0, ds.Width, finalSize.Height));
+                        pos += ds.Width;
+                    }
+                    else
+                    {
+                        child.Arrange(new Rect(0, pos, finalSize.Width, ds.Height));
+                        pos += ds.Height;
+                    }
+                }
+            }
+
+            return finalSize;
         }
     }
 
@@ -982,6 +1243,8 @@ public sealed class TabStrip : UserControl
             if (vertical)
             {
                 this.Width = double.NaN;
+                this.MinWidth = 0;
+                this.MaxWidth = double.PositiveInfinity;
                 this.Height = 40;
                 this.HorizontalAlignment = HorizontalAlignment.Stretch;
                 this.CornerRadius = new CornerRadius(0, 6, 6, 0);
@@ -1005,9 +1268,17 @@ public sealed class TabStrip : UserControl
             }
             else
             {
-                this.Width = 160;
+                // Width is driven by the owning TabHeaderPanel which
+                // shrinks all tabs uniformly between MinTabWidth and
+                // MaxTabWidth based on available room. The header
+                // intentionally has no MinWidth/MaxWidth of its own so
+                // the panel's slot size is the sole source of truth and
+                // adjacent tabs never visually overlap.
+                this.Width = double.NaN;
+                this.MinWidth = 0;
+                this.MaxWidth = double.PositiveInfinity;
                 this.Height = 32;
-                this.HorizontalAlignment = HorizontalAlignment.Left;
+                this.HorizontalAlignment = HorizontalAlignment.Stretch;
                 this.CornerRadius = new CornerRadius(6);
                 this.Margin = new Thickness(2, 3, 2, 3);
 

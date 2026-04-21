@@ -100,7 +100,140 @@ public class TabStripHeadlessTests
         Assert.Pass();
     }
 
-    private static (Window Window, TabStrip Strip, TabView View) BuildHostedStrip()
+    /// <summary>
+    /// When the strip has plenty of horizontal room, every tab header
+    /// is laid out at the maximum tab slot width. Each TabHeader has a
+    /// 2px horizontal margin, so a 160px slot renders a 156px Border.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_WithAmpleSpace_HeadersUseMaxWidth()
+    {
+        var (window, strip, view) = BuildHostedStrip(width: 1200);
+        try
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                view.AddTab(new TabSession(new FakeTabContent($"t{i}")));
+            }
+
+            Dispatcher.UIThread.RunJobs();
+
+            var headers = FindHeaders(strip).ToList();
+            Assert.That(headers.Count, Is.EqualTo(3));
+            foreach (var h in headers)
+            {
+                Assert.That(h.Bounds.Width, Is.EqualTo(156).Within(0.5));
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// When the strip is narrow, headers shrink uniformly between the
+    /// minimum (80px) and maximum (160px) tab widths instead of pushing
+    /// the trailing "+" SplitButton off-screen.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_WhenCrowded_HeadersShrinkAndButtonStaysInside()
+    {
+        var (window, strip, view) = BuildHostedStrip(width: 600);
+        try
+        {
+            // 6 tabs * 160px = 960px desired, but the strip only has
+            // ~600px (minus +button) — every header should fall between
+            // 80px and 160px.
+            for (int i = 0; i < 6; i++)
+            {
+                view.AddTab(new TabSession(new FakeTabContent($"t{i}")));
+            }
+
+            Dispatcher.UIThread.RunJobs();
+
+            var headers = FindHeaders(strip).ToList();
+            Assert.That(headers.Count, Is.EqualTo(6));
+            double w0 = headers[0].Bounds.Width;
+
+            // Slot width should be between Min (80) and Max (160). With a
+            // 2px header margin per side, observed widths are 4px less.
+            Assert.That(w0, Is.GreaterThanOrEqualTo(76).And.LessThan(156));
+            foreach (var h in headers)
+            {
+                Assert.That(h.Bounds.Width, Is.EqualTo(w0).Within(0.5));
+            }
+
+            var addBtn = FindNewTabButton(strip);
+            Assert.That(addBtn, Is.Not.Null);
+            var addOriginInStrip = addBtn!.TranslatePoint(default, strip) ?? default;
+            double addRight = addOriginInStrip.X + addBtn!.Bounds.Width;
+            Assert.That(
+                addRight,
+                Is.LessThanOrEqualTo(strip.Bounds.Width + 0.5),
+                "+ button must remain inside the tab strip when many tabs are open.");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// When tab count exceeds what fits even at the minimum tab width,
+    /// the wrapping ScrollViewer activates (its extent exceeds the
+    /// viewport), and the "+" SplitButton is still inside the strip.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_WhenOverflowing_ScrollerActivates()
+    {
+        var (window, strip, view) = BuildHostedStrip(width: 400);
+        try
+        {
+            // 20 tabs * 80px (min) = 1600px desired, far more than the
+            // ~400px viewport — the scroller should kick in.
+            for (int i = 0; i < 20; i++)
+            {
+                view.AddTab(new TabSession(new FakeTabContent($"t{i}")));
+            }
+
+            Dispatcher.UIThread.RunJobs();
+
+            var headers = FindHeaders(strip).ToList();
+            Assert.That(headers.Count, Is.EqualTo(20));
+            foreach (var h in headers)
+            {
+                Assert.That(
+                    h.Bounds.Width,
+                    Is.EqualTo(76).Within(0.5),
+                    "headers should be clamped to the minimum width once overflowing.");
+            }
+
+            var scroller = strip.GetLogicalDescendants()
+                .OfType<ScrollViewer>()
+                .FirstOrDefault();
+            Assert.That(scroller, Is.Not.Null, "TabStrip should host a ScrollViewer for the tab list.");
+            Assert.That(
+                scroller!.Extent.Width,
+                Is.GreaterThan(scroller.Viewport.Width),
+                "ScrollViewer should report content overflow so horizontal scrolling activates.");
+
+            var addBtn = FindNewTabButton(strip);
+            Assert.That(addBtn, Is.Not.Null);
+            var addOriginInStrip = addBtn!.TranslatePoint(default, strip) ?? default;
+            double addRight = addOriginInStrip.X + addBtn!.Bounds.Width;
+            Assert.That(
+                addRight,
+                Is.LessThanOrEqualTo(strip.Bounds.Width + 0.5),
+                "+ button must stay pinned inside the strip even when tabs overflow.");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    private static (Window Window, TabStrip Strip, TabView View) BuildHostedStrip(int width = 800)
     {
         var view = new TabView();
         var strip = new TabStrip { View = view };
@@ -112,7 +245,7 @@ public class TabStripHeadlessTests
 
         var window = new Window
         {
-            Width = 800,
+            Width = width,
             Height = 600,
             Content = root,
         };
@@ -135,5 +268,14 @@ public class TabStripHeadlessTests
         return strip.GetLogicalDescendants()
             .OfType<Border>()
             .Where(b => b.GetLogicalParent() is StackPanel sp && sp.Orientation == Avalonia.Layout.Orientation.Horizontal);
+    }
+
+    private static SplitButton? FindNewTabButton(TabStrip strip)
+    {
+        // The trailing "+" / profile-menu control is the only SplitButton
+        // in the strip's visual subtree.
+        return strip.GetLogicalDescendants()
+            .OfType<SplitButton>()
+            .FirstOrDefault();
     }
 }

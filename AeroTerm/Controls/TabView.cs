@@ -358,6 +358,17 @@ public sealed class TabView : UserControl, INotifyPropertyChanged
 
     private void OnTabsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        // ObservableCollection.Move raises a Move action with both
+        // OldItems and NewItems containing the moved tab. The visual tree
+        // doesn't need any change (z-order in contentArea is irrelevant
+        // — only IsVisible drives which tab is shown), but processing
+        // OldItems below would erroneously detach the moved tab's
+        // control, leaving the tab visually empty.
+        if (e.Action == NotifyCollectionChangedAction.Move)
+        {
+            return;
+        }
+
         if (e.NewItems is not null)
         {
             foreach (TabSession tab in e.NewItems)
