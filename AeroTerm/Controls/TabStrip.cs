@@ -133,20 +133,27 @@ public sealed class TabStrip : UserControl
 
         this.newTabButton = new SplitButton
         {
-            Content = "+",
+            Content = BuildPlusIcon(),
             Width = 48,
             Height = 28,
             Padding = new Thickness(0),
             Margin = new Thickness(4, 0, 4, 0),
             Background = Brushes.Transparent,
             Foreground = this.tabForegroundBrush,
+            BorderBrush = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(4),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
-            FontSize = 16,
             Focusable = false,
         };
+
+        // Re-skin the SimpleTheme SplitButton's per-state brushes (which
+        // normally come from the global SimpleTheme palette) so the "+"
+        // primary button and the chevron secondary button track the
+        // tab strip's own foreground / hover / pressed brushes.
+        this.RefreshNewTabButtonStateBrushes();
+
         this.profileFlyout = new MenuFlyout();
         this.newTabButton.Flyout = this.profileFlyout;
         AutomationProperties.SetName(this.newTabButton, "New tab");
@@ -389,6 +396,13 @@ public sealed class TabStrip : UserControl
         this.inactiveHoverBrush.Color = Color.FromArgb(InactiveHoverTintAlpha, r, g, b);
         this.activeTabBrush.Color = Color.FromArgb(ActiveTintAlpha, r, g, b);
         this.activeHoverBrush.Color = Color.FromArgb(ActiveHoverTintAlpha, r, g, b);
+
+        // The SimpleTheme SplitButton template resolves its per-state
+        // background and foreground via theme Color resources rather than
+        // brushes, so a plain brush mutation does not propagate. Refresh
+        // the locally-scoped resource overrides whenever the palette
+        // changes so the "+" / menu button keeps tracking the tabs.
+        this.RefreshNewTabButtonStateBrushes();
     }
 
     /// <summary>
@@ -444,6 +458,55 @@ public sealed class TabStrip : UserControl
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Builds the vector "+" glyph used as the <see cref="SplitButton"/>'s
+    /// primary content. Sized to match the chevron the SimpleTheme
+    /// template hardcodes on the secondary side (12 × 12) so the two
+    /// glyphs read as a balanced pair.
+    /// </summary>
+    /// <returns>A new <see cref="PathIcon"/> instance.</returns>
+    private static PathIcon BuildPlusIcon()
+    {
+        return new PathIcon
+        {
+            Width = 12,
+            Height = 12,
+            Data = Geometry.Parse(
+                "M484,128 H540 V484 H896 V540 H540 V896 H484 V540 H128 V484 H484 Z"),
+        };
+    }
+
+    /// <summary>
+    /// Overrides the SimpleTheme color tokens consumed by the
+    /// <see cref="SplitButton"/> template at the button's local
+    /// resource scope so the trailing "+" / menu button paints with
+    /// the tab strip's own foreground / hover / pressed brushes
+    /// instead of the global theme palette.
+    /// </summary>
+    private void RefreshNewTabButtonStateBrushes()
+    {
+        var resources = this.newTabButton.Resources;
+
+        // Hover background — SimpleTheme inner-button :pointerover binds
+        // ContentPresenter.Background to ThemeControlMidColor.
+        resources["ThemeControlMidColor"] = this.inactiveHoverBrush.Color;
+
+        // Pressed / flyout-open / checked background — SimpleTheme inner
+        // button binds those states' ContentPresenter.Background to
+        // ThemeBorderHighColor.
+        resources["ThemeBorderHighColor"] = this.inactiveTabBrush.Color;
+
+        // Foreground in every interactive state.
+        resources["ThemeForegroundColor"] = this.tabForegroundBrush.Color;
+
+        // Suppress the SimpleTheme borders on the inner buttons —
+        // BorderThickness is already zero on the outer SplitButton, but
+        // the inner buttons re-resolve these tokens for their own
+        // ContentPresenter borders.
+        resources["ThemeBorderLowColor"] = Colors.Transparent;
+        resources["ThemeBorderMidColor"] = Colors.Transparent;
     }
 
     private void ApplyOrientation()
