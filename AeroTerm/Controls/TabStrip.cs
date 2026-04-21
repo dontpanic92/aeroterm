@@ -11,6 +11,7 @@ using System.ComponentModel;
 using AeroTerm.Services;
 using Avalonia;
 using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -19,6 +20,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 
@@ -134,7 +136,6 @@ public sealed class TabStrip : UserControl
     private readonly RepeatButton scrollRightButton;
     private readonly MenuFlyout profileFlyout;
     private readonly Dictionary<TabSession, TabHeader> headers = new();
-    private readonly Rectangle dropIndicator;
     private readonly DockPanel rootDock;
     private readonly ScrollViewer tabsScroller;
     private DispatcherTimer? scrollAnimTimer;
@@ -145,6 +146,7 @@ public sealed class TabStrip : UserControl
     private IReadOnlyList<Profile> profiles = new List<Profile>();
     private TabGroupStore? groupStore;
     private DragState? drag;
+    private DispatcherTimer? dragSettleTimer;
     private Orientation orientation = Orientation.Horizontal;
 
     /// <summary>
@@ -187,16 +189,6 @@ public sealed class TabStrip : UserControl
         AutomationProperties.SetName(this.newTabButton, "New tab");
         this.newTabButton.Click += (_, _) => this.NewTabRequested?.Invoke();
         this.RebuildProfileFlyout();
-
-        this.dropIndicator = new Rectangle
-        {
-            Width = 3,
-            Margin = new Thickness(1, 4, 1, 4),
-            Fill = ActiveAccentBrush,
-            IsVisible = false,
-            IsHitTestVisible = false,
-            VerticalAlignment = VerticalAlignment.Stretch,
-        };
 
         // ScrollViewer wraps the tab list so it can shrink-then-scroll
         // once tabs hit MinTabWidth. Vertical wheel events are translated
@@ -748,12 +740,6 @@ public sealed class TabStrip : UserControl
             this.tabsScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             this.tabsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
 
-            this.dropIndicator.Width = double.NaN;
-            this.dropIndicator.Height = 3;
-            this.dropIndicator.Margin = new Thickness(4, 1, 4, 1);
-            this.dropIndicator.HorizontalAlignment = HorizontalAlignment.Stretch;
-            this.dropIndicator.VerticalAlignment = VerticalAlignment.Top;
-
             // Scroll buttons are not used in vertical rail mode.
             this.scrollLeftButton.IsVisible = false;
             this.scrollRightButton.IsVisible = false;
@@ -773,12 +759,6 @@ public sealed class TabStrip : UserControl
             DockPanel.SetDock(this.newTabButton, Dock.Right);
             this.tabsScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
             this.tabsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
-
-            this.dropIndicator.Width = 3;
-            this.dropIndicator.Height = double.NaN;
-            this.dropIndicator.Margin = new Thickness(1, 4, 1, 4);
-            this.dropIndicator.HorizontalAlignment = HorizontalAlignment.Left;
-            this.dropIndicator.VerticalAlignment = VerticalAlignment.Stretch;
 
             this.UpdateScrollButtonVisibility();
         }
@@ -820,6 +800,14 @@ public sealed class TabStrip : UserControl
 
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        // Cancel any in-progress drag when the tab collection changes
+        // (except for Move, which is fired by our own reorder).
+        if (this.drag is not null && e.Action != NotifyCollectionChangedAction.Move)
+        {
+            this.drag = null;
+            this.ClearAllDragTransforms();
+        }
+
         if (e.Action == NotifyCollectionChangedAction.Reset)
         {
             foreach (var h in this.headers.Values)
@@ -935,7 +923,7 @@ public sealed class TabStrip : UserControl
             return;
         }
 
-        this.drag = new DragState(header.Session, from, e.GetPosition(this), e.Pointer);
+        this.drag = new DragState(header.Session, from, e.GetPosition(this), e.Pointer, header);
     }
 
     private void OnStripPointerMoved(object? sender, PointerEventArgs e)
@@ -947,11 +935,11 @@ public sealed class TabStrip : UserControl
 
         // Defensive: if the left button is no longer down (e.g., a release
         // event was swallowed by a child handler), abandon the drag so we
-        // never paint the drop indicator on a plain hover.
+        // never leave transforms on a plain hover.
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
         {
             this.drag = null;
-            this.RemoveDropIndicator();
+            this.ClearAllDragTransforms();
             return;
         }
 
@@ -965,11 +953,11 @@ public sealed class TabStrip : UserControl
             }
 
             this.drag.Moved = true;
-            this.EnsureDropIndicatorInserted();
+            this.BeginDragVisuals();
             e.Pointer.Capture(this);
         }
 
-        this.UpdateDropIndicator(pt);
+        this.UpdateDragPosition(pt);
     }
 
     private void OnStripPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -981,7 +969,6 @@ public sealed class TabStrip : UserControl
 
         var snapshot = this.drag;
         this.drag = null;
-        this.RemoveDropIndicator();
 
         if (!snapshot.Moved)
         {
@@ -991,6 +978,11 @@ public sealed class TabStrip : UserControl
         e.Pointer.Capture(null);
 
         var strippt = e.GetPosition(this);
+
+        // Clear all drag visuals before committing the reorder so the
+        // headers land at their new layout positions immediately.
+        this.ClearAllDragTransforms();
+
         if (this.IsOutsideWindow(strippt))
         {
             var screen = this.PointToScreen(strippt);
@@ -1000,9 +992,10 @@ public sealed class TabStrip : UserControl
 
         int to = this.ComputeDropIndex(strippt);
 
-        // StackPanel insert index is "before item N"; when we remove the
-        // source first, everything to its right shifts down by one, so we
-        // subtract one when dropping further right than the source.
+        // ComputeDropIndex returns a full-list insertion index. When
+        // dropping further right than the source, subtract one because
+        // ObservableCollection.Move removes the source first, shifting
+        // everything to its right down by one.
         if (to > snapshot.FromIndex)
         {
             to -= 1;
@@ -1020,7 +1013,180 @@ public sealed class TabStrip : UserControl
         if (this.drag is not null)
         {
             this.drag = null;
-            this.RemoveDropIndicator();
+            this.ClearAllDragTransforms();
+        }
+    }
+
+    /// <summary>
+    /// Sets up the initial drag visuals: lifts the dragged tab and adds
+    /// displacement transitions to all neighbour headers so they can
+    /// slide out of the way smoothly.
+    /// </summary>
+    private void BeginDragVisuals()
+    {
+        var d = this.drag!;
+        bool vertical = this.orientation == Orientation.Vertical;
+        double slotSize = vertical
+            ? d.Header.Bounds.Height + d.Header.Margin.Top + d.Header.Margin.Bottom
+            : d.Header.Bounds.Width + d.Header.Margin.Left + d.Header.Margin.Right;
+        d.SlotSize = slotSize;
+
+        // Lift the dragged tab above its siblings.
+        d.Header.Opacity = 0.85;
+        d.Header.ZIndex = 1;
+
+        // Pre-cache the displacement transforms used by neighbours.
+        if (vertical)
+        {
+            d.ShiftPositive = TransformOperations.Parse(
+                FormattableString.Invariant($"translate(0px,{(int)Math.Round(slotSize)}px)"));
+            d.ShiftNegative = TransformOperations.Parse(
+                FormattableString.Invariant($"translate(0px,{-(int)Math.Round(slotSize)}px)"));
+        }
+        else
+        {
+            d.ShiftPositive = TransformOperations.Parse(
+                FormattableString.Invariant($"translate({(int)Math.Round(slotSize)}px,0px)"));
+            d.ShiftNegative = TransformOperations.Parse(
+                FormattableString.Invariant($"translate({-(int)Math.Round(slotSize)}px,0px)"));
+        }
+
+        // Add the displacement transition to every non-dragged header and
+        // set a baseline identity transform so the first shift animates
+        // from (0,0) instead of from null.
+        foreach (var (tab, header) in this.headers)
+        {
+            if (ReferenceEquals(tab, d.Tab))
+            {
+                continue;
+            }
+
+            header.Transitions ??= new Transitions();
+            if (!header.Transitions.Contains(DragState.DisplacementTransition))
+            {
+                header.Transitions.Add(DragState.DisplacementTransition);
+            }
+
+            header.RenderTransform = DragState.IdentityTranslate;
+        }
+    }
+
+    /// <summary>
+    /// Updates the dragged tab's position under the cursor and computes
+    /// displacement offsets for neighbouring headers.
+    /// </summary>
+    /// <param name="stripPoint">Current pointer position in strip
+    /// coordinates.</param>
+    private void UpdateDragPosition(Point stripPoint)
+    {
+        var d = this.drag!;
+        bool vertical = this.orientation == Orientation.Vertical;
+
+        // Move the dragged header to follow the cursor.
+        double pointerDelta = vertical
+            ? stripPoint.Y - d.Origin.Y
+            : stripPoint.X - d.Origin.X;
+        if (vertical)
+        {
+            d.Header.RenderTransform = TransformOperations.Parse(
+                FormattableString.Invariant($"translate(0px,{(int)Math.Round(pointerDelta)}px)"));
+        }
+        else
+        {
+            d.Header.RenderTransform = TransformOperations.Parse(
+                FormattableString.Invariant($"translate({(int)Math.Round(pointerDelta)}px,0px)"));
+        }
+
+        // When outside the window bounds, reset neighbour displacements
+        // (the release handler will fire TabDetachRequested).
+        if (this.IsOutsideWindow(stripPoint))
+        {
+            if (d.LastFullDropIndex != -1)
+            {
+                d.LastFullDropIndex = -1;
+                this.ResetNeighbourTransforms(d);
+            }
+
+            return;
+        }
+
+        // Determine where the tab would land and displace neighbours.
+        int fullDropIndex = this.ComputeDropIndex(stripPoint);
+        if (fullDropIndex == d.LastFullDropIndex)
+        {
+            return;
+        }
+
+        d.LastFullDropIndex = fullDropIndex;
+
+        int source = d.FromIndex;
+        int vdi = fullDropIndex > source ? fullDropIndex - 1 : fullDropIndex;
+
+        foreach (var (tab, header) in this.headers)
+        {
+            if (ReferenceEquals(tab, d.Tab))
+            {
+                continue;
+            }
+
+            int oi = this.tabView!.Tabs.IndexOf(tab);
+            if (oi < 0)
+            {
+                continue;
+            }
+
+            int vi = oi < source ? oi : oi - 1;
+            int targetSlot = vi < vdi ? vi : vi + 1;
+            int shift = targetSlot - oi;
+
+            if (shift > 0)
+            {
+                header.RenderTransform = d.ShiftPositive;
+            }
+            else if (shift < 0)
+            {
+                header.RenderTransform = d.ShiftNegative;
+            }
+            else
+            {
+                header.RenderTransform = DragState.IdentityTranslate;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resets all neighbour headers back to identity transform during
+    /// drag (e.g. when the pointer leaves the window).
+    /// </summary>
+    /// <param name="d">Active drag state.</param>
+    private void ResetNeighbourTransforms(DragState d)
+    {
+        foreach (var (tab, header) in this.headers)
+        {
+            if (ReferenceEquals(tab, d.Tab))
+            {
+                continue;
+            }
+
+            header.RenderTransform = DragState.IdentityTranslate;
+        }
+    }
+
+    /// <summary>
+    /// Clears all drag-related visual state: transforms, opacity, z-index,
+    /// and the displacement transition from every header.
+    /// </summary>
+    private void ClearAllDragTransforms()
+    {
+        this.dragSettleTimer?.Stop();
+        this.dragSettleTimer = null;
+
+        foreach (var (_, header) in this.headers)
+        {
+            header.Transitions?.Remove(DragState.DisplacementTransition);
+            header.RenderTransform = null;
+            header.Opacity = 1.0;
+            header.ZIndex = 0;
         }
     }
 
@@ -1054,7 +1220,7 @@ public sealed class TabStrip : UserControl
         for (int i = 0; i < this.tabsPanel.Children.Count; i++)
         {
             var child = this.tabsPanel.Children[i];
-            if (ReferenceEquals(child, this.dropIndicator))
+            if (child is not TabHeader)
             {
                 continue;
             }
@@ -1070,55 +1236,6 @@ public sealed class TabStrip : UserControl
         }
 
         return headerCount;
-    }
-
-    private void UpdateDropIndicator(Point stripPoint)
-    {
-        if (this.IsOutsideWindow(stripPoint))
-        {
-            this.dropIndicator.IsVisible = false;
-            return;
-        }
-
-        int target = this.ComputeDropIndex(stripPoint);
-        this.PositionDropIndicator(target);
-        this.dropIndicator.IsVisible = true;
-    }
-
-    private void EnsureDropIndicatorInserted()
-    {
-        if (!this.tabsPanel.Children.Contains(this.dropIndicator))
-        {
-            this.tabsPanel.Children.Add(this.dropIndicator);
-        }
-    }
-
-    private void PositionDropIndicator(int headerIndex)
-    {
-        // Translate "insertion before header index N" to a panel child index
-        // that skips the indicator itself if it's already inserted.
-        this.tabsPanel.Children.Remove(this.dropIndicator);
-        int insertAt = 0;
-        int headerCount = 0;
-        for (int i = 0; i < this.tabsPanel.Children.Count; i++)
-        {
-            if (headerCount == headerIndex)
-            {
-                insertAt = i;
-                break;
-            }
-
-            headerCount++;
-            insertAt = i + 1;
-        }
-
-        this.tabsPanel.Children.Insert(insertAt, this.dropIndicator);
-    }
-
-    private void RemoveDropIndicator()
-    {
-        this.tabsPanel.Children.Remove(this.dropIndicator);
-        this.dropIndicator.IsVisible = false;
     }
 
     private void RebuildProfileFlyout()
@@ -1168,11 +1285,6 @@ public sealed class TabStrip : UserControl
     /// minimum, the panel reports its full natural width so the
     /// wrapping <see cref="ScrollViewer"/> activates and lets the user
     /// scroll the overflow.
-    /// <para>
-    /// Non-<see cref="TabHeader"/> children (e.g. the drop indicator)
-    /// are measured / arranged at their natural size, preserving the
-    /// existing reorder-drag visuals.
-    /// </para>
     /// </summary>
     private sealed class TabHeaderPanel : StackPanel
     {
@@ -1323,29 +1435,80 @@ public sealed class TabStrip : UserControl
 
     /// <summary>
     /// Captures the state of an in-progress tab-strip drag: the dragged
-    /// session, its original index, the press origin, and the captured
-    /// pointer. Only becomes visually observable once the pointer crosses
-    /// <see cref="DragStartThreshold"/>.
+    /// session, its original index, the press origin, the captured
+    /// pointer, and pre-computed displacement transforms for neighbour
+    /// animation. Only becomes visually observable once the pointer
+    /// crosses <see cref="DragStartThreshold"/>.
     /// </summary>
     private sealed class DragState
     {
-        public DragState(TabSession tab, int fromIndex, Point origin, IPointer pointer)
+        /// <summary>
+        /// Shared transition applied to non-dragged headers so their
+        /// displacement animates smoothly. Defined once and reused
+        /// across all drag operations.
+        /// </summary>
+        public static readonly TransformOperationsTransition DisplacementTransition = new()
+        {
+            Property = Visual.RenderTransformProperty,
+            Duration = TimeSpan.FromMilliseconds(150),
+            Easing = new QuadraticEaseOut(),
+        };
+
+        /// <summary>
+        /// Identity translate used as the baseline / reset value for
+        /// headers. Must be a <see cref="TransformOperations"/> instance
+        /// (not <c>null</c>) so the <see cref="DisplacementTransition"/>
+        /// can interpolate from it.
+        /// </summary>
+        public static readonly ITransform IdentityTranslate =
+            TransformOperations.Parse("translate(0px,0px)");
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DragState"/> class.
+        /// </summary>
+        /// <param name="tab">The tab session being dragged.</param>
+        /// <param name="fromIndex">Original zero-based index.</param>
+        /// <param name="origin">Pointer press position in strip coords.</param>
+        /// <param name="pointer">Captured pointer.</param>
+        /// <param name="header">The visual header being dragged.</param>
+        public DragState(TabSession tab, int fromIndex, Point origin, IPointer pointer, TabHeader header)
         {
             this.Tab = tab;
             this.FromIndex = fromIndex;
             this.Origin = origin;
             this.Pointer = pointer;
+            this.Header = header;
         }
 
+        /// <summary>Gets the tab being dragged.</summary>
         public TabSession Tab { get; }
 
+        /// <summary>Gets the original tab index at drag start.</summary>
         public int FromIndex { get; }
 
+        /// <summary>Gets the pointer-press origin in strip coords.</summary>
         public Point Origin { get; }
 
+        /// <summary>Gets the captured pointer.</summary>
         public IPointer Pointer { get; }
 
+        /// <summary>Gets the dragged tab's header control.</summary>
+        public TabHeader Header { get; }
+
+        /// <summary>Gets or sets a value indicating whether the drag threshold was crossed.</summary>
         public bool Moved { get; set; }
+
+        /// <summary>Gets or sets the slot size (width in horizontal, height in vertical).</summary>
+        public double SlotSize { get; set; }
+
+        /// <summary>Gets or sets the last computed full-list drop index, or -1 if none.</summary>
+        public int LastFullDropIndex { get; set; } = -1;
+
+        /// <summary>Gets or sets the pre-parsed positive shift transform (one slot forward).</summary>
+        public ITransform? ShiftPositive { get; set; }
+
+        /// <summary>Gets or sets the pre-parsed negative shift transform (one slot backward).</summary>
+        public ITransform? ShiftNegative { get; set; }
     }
 
     /// <summary>
