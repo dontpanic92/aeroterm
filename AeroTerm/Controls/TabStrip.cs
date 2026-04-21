@@ -19,6 +19,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 /// <summary>
@@ -71,6 +72,20 @@ public sealed class TabStrip : UserControl
     /// </summary>
     private const double NewTabButtonReservedMargin = 8;
 
+    /// <summary>
+    /// Width of each scroll-indicator button (◀ / ▶) docked at the
+    /// leading and trailing edges of the tab row when the tab list
+    /// overflows the available width.
+    /// </summary>
+    private const double ScrollButtonWidth = 20;
+
+    /// <summary>
+    /// Distance in pixels the tab list scrolls per click on one of the
+    /// scroll-indicator buttons. Matches <see cref="MinTabWidth"/> so
+    /// each click reveals roughly one additional tab.
+    /// </summary>
+    private const double ScrollButtonStep = MinTabWidth;
+
     private const byte TabForegroundAlpha = 0xF0;
     private const byte MutedForegroundAlpha = 0x90;
     private const byte InactiveTintAlpha = 0x10;
@@ -81,6 +96,13 @@ public sealed class TabStrip : UserControl
     private static readonly IBrush DividerBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
     private static readonly IBrush CloseHoverBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
     private static readonly IBrush ActiveAccentBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF));
+
+    /// <summary>
+    /// Duration of the smooth-scroll animation triggered by the
+    /// scroll-indicator buttons. Matches the 150 ms used for tab header
+    /// background transitions.
+    /// </summary>
+    private static readonly TimeSpan ScrollAnimationDuration = TimeSpan.FromMilliseconds(150);
 
     // Instance brushes so the strip can recolor itself when the active
     // color scheme changes. Mutating SolidColorBrush.Color propagates to
@@ -108,11 +130,17 @@ public sealed class TabStrip : UserControl
 
     private readonly TabHeaderPanel tabsPanel;
     private readonly SplitButton newTabButton;
+    private readonly RepeatButton scrollLeftButton;
+    private readonly RepeatButton scrollRightButton;
     private readonly MenuFlyout profileFlyout;
     private readonly Dictionary<TabSession, TabHeader> headers = new();
     private readonly Rectangle dropIndicator;
     private readonly DockPanel rootDock;
     private readonly ScrollViewer tabsScroller;
+    private DispatcherTimer? scrollAnimTimer;
+    private double scrollAnimStartX;
+    private double scrollAnimTargetX;
+    private long scrollAnimStartTicks;
     private TabView? tabView;
     private IReadOnlyList<Profile> profiles = new List<Profile>();
     private TabGroupStore? groupStore;
@@ -182,6 +210,16 @@ public sealed class TabStrip : UserControl
             Content = this.tabsPanel,
         };
         this.tabsScroller.AddHandler(PointerWheelChangedEvent, this.OnTabsScrollerWheel, RoutingStrategies.Tunnel);
+        this.tabsScroller.ScrollChanged += (_, _) => this.UpdateScrollButtonVisibility();
+
+        // Scroll-indicator buttons flanking the tab scroller. They use
+        // RepeatButton so holding down keeps scrolling, and are only
+        // visible when the tab list overflows (horizontal mode).
+        this.scrollLeftButton = this.BuildScrollButton(isLeft: true);
+        this.scrollLeftButton.Click += (_, _) => this.ScrollTabList(-ScrollButtonStep);
+
+        this.scrollRightButton = this.BuildScrollButton(isLeft: false);
+        this.scrollRightButton.Click += (_, _) => this.ScrollTabList(ScrollButtonStep);
 
         // DockPanel keeps the SplitButton pinned to the trailing edge
         // (right in horizontal, top in vertical) so the "+" / profile
@@ -193,7 +231,11 @@ public sealed class TabStrip : UserControl
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         DockPanel.SetDock(this.newTabButton, Dock.Right);
+        DockPanel.SetDock(this.scrollRightButton, Dock.Right);
+        DockPanel.SetDock(this.scrollLeftButton, Dock.Left);
         this.rootDock.Children.Add(this.newTabButton);
+        this.rootDock.Children.Add(this.scrollRightButton);
+        this.rootDock.Children.Add(this.scrollLeftButton);
         this.rootDock.Children.Add(this.tabsScroller);
 
         this.Content = this.rootDock;
@@ -403,6 +445,8 @@ public sealed class TabStrip : UserControl
         // the locally-scoped resource overrides whenever the palette
         // changes so the "+" / menu button keeps tracking the tabs.
         this.RefreshNewTabButtonStateBrushes();
+        this.RefreshScrollButtonStateBrushes(this.scrollLeftButton);
+        this.RefreshScrollButtonStateBrushes(this.scrollRightButton);
     }
 
     /// <summary>
@@ -431,6 +475,19 @@ public sealed class TabStrip : UserControl
                 double reserved = this.newTabButton.Width
                     + this.newTabButton.Margin.Left + this.newTabButton.Margin.Right
                     + NewTabButtonReservedMargin;
+
+                // Account for scroll-indicator buttons when they are visible
+                // so the tab-area shrinks to avoid overlap.
+                if (this.scrollLeftButton.IsVisible)
+                {
+                    reserved += ScrollButtonWidth;
+                }
+
+                if (this.scrollRightButton.IsVisible)
+                {
+                    reserved += ScrollButtonWidth;
+                }
+
                 this.tabsPanel.AvailableTabExtent = Math.Max(0, avail - reserved);
             }
         }
@@ -441,7 +498,9 @@ public sealed class TabStrip : UserControl
             this.tabsPanel.AvailableTabExtent = double.PositiveInfinity;
         }
 
-        return base.MeasureOverride(availableSize);
+        var result = base.MeasureOverride(availableSize);
+        this.UpdateScrollButtonVisibility();
+        return result;
     }
 
     private static TabHeader? FindHeaderFromSource(object? source)
@@ -479,6 +538,73 @@ public sealed class TabStrip : UserControl
     }
 
     /// <summary>
+    /// Builds a scroll-indicator <see cref="RepeatButton"/> with a
+    /// left-pointing or right-pointing chevron glyph. The button is
+    /// initially hidden and only becomes visible via
+    /// <see cref="UpdateScrollButtonVisibility"/> when the tab list
+    /// overflows.
+    /// </summary>
+    /// <param name="isLeft"><see langword="true"/> for the left (◀)
+    /// button; <see langword="false"/> for right (▶).</param>
+    /// <returns>A new <see cref="RepeatButton"/> instance.</returns>
+    private RepeatButton BuildScrollButton(bool isLeft)
+    {
+        // Left chevron: ‹   Right chevron: ›
+        // Drawn in a 1024×1024 coordinate space like BuildPlusIcon.
+        string chevronData = isLeft
+            ? "M640,128 L256,512 640,896"
+            : "M384,128 L768,512 384,896";
+
+        var icon = new PathIcon
+        {
+            Width = 10,
+            Height = 10,
+            Data = Geometry.Parse(chevronData),
+        };
+
+        var btn = new RepeatButton
+        {
+            Content = icon,
+            Width = ScrollButtonWidth,
+            Height = 28,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0),
+            Background = Brushes.Transparent,
+            Foreground = this.tabForegroundBrush,
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(4),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Focusable = false,
+            IsVisible = false,
+            Interval = 120,
+            Delay = 300,
+        };
+
+        AutomationProperties.SetName(btn, isLeft ? "Scroll tabs left" : "Scroll tabs right");
+        this.RefreshScrollButtonStateBrushes(btn);
+        return btn;
+    }
+
+    /// <summary>
+    /// Applies the same SimpleTheme resource overrides used by
+    /// <see cref="RefreshNewTabButtonStateBrushes"/> to a scroll-
+    /// indicator button so its hover / pressed states track the tab
+    /// strip palette.
+    /// </summary>
+    /// <param name="btn">The scroll button to theme.</param>
+    private void RefreshScrollButtonStateBrushes(RepeatButton btn)
+    {
+        var resources = btn.Resources;
+        resources["ThemeControlMidColor"] = this.inactiveHoverBrush.Color;
+        resources["ThemeBorderHighColor"] = this.inactiveTabBrush.Color;
+        resources["ThemeForegroundColor"] = this.tabForegroundBrush.Color;
+        resources["ThemeBorderLowColor"] = Colors.Transparent;
+        resources["ThemeBorderMidColor"] = Colors.Transparent;
+    }
+
+    /// <summary>
     /// Overrides the SimpleTheme color tokens consumed by the
     /// <see cref="SplitButton"/> template at the button's local
     /// resource scope so the trailing "+" / menu button paints with
@@ -509,6 +635,99 @@ public sealed class TabStrip : UserControl
         resources["ThemeBorderMidColor"] = Colors.Transparent;
     }
 
+    /// <summary>
+    /// Initiates a smooth animated scroll of the tab list by
+    /// <paramref name="delta"/> pixels. Positive values scroll right
+    /// (revealing trailing tabs); negative scroll left. If an animation
+    /// is already running, the target is updated additively so repeated
+    /// clicks (or RepeatButton holds) accumulate smoothly.
+    /// </summary>
+    /// <param name="delta">Pixel distance to scroll.</param>
+    private void ScrollTabList(double delta)
+    {
+        double maxX = Math.Max(0, this.tabsScroller.Extent.Width - this.tabsScroller.Viewport.Width);
+        double currentX = this.tabsScroller.Offset.X;
+
+        // When an animation is already in flight, extend the target from
+        // where it was headed rather than from the current (mid-ease)
+        // position. This keeps rapid RepeatButton clicks additive.
+        double baseTarget = this.scrollAnimTimer is not null
+            ? this.scrollAnimTargetX
+            : currentX;
+
+        double newTarget = Math.Clamp(baseTarget + delta, 0, maxX);
+
+        this.scrollAnimStartX = currentX;
+        this.scrollAnimTargetX = newTarget;
+        this.scrollAnimStartTicks = Environment.TickCount64;
+
+        if (this.scrollAnimTimer is null)
+        {
+            this.scrollAnimTimer = new DispatcherTimer(DispatcherPriority.Render)
+            {
+                Interval = TimeSpan.FromMilliseconds(16),
+            };
+            this.scrollAnimTimer.Tick += this.OnScrollAnimTick;
+            this.scrollAnimTimer.Start();
+        }
+    }
+
+    /// <summary>
+    /// Per-frame tick handler for the smooth-scroll animation. Applies
+    /// an ease-out curve to interpolate the scroller offset from
+    /// <see cref="scrollAnimStartX"/> to <see cref="scrollAnimTargetX"/>
+    /// over <see cref="ScrollAnimationDuration"/>.
+    /// </summary>
+    private void OnScrollAnimTick(object? sender, EventArgs e)
+    {
+        long elapsed = Environment.TickCount64 - this.scrollAnimStartTicks;
+        double totalMs = ScrollAnimationDuration.TotalMilliseconds;
+        double t = Math.Clamp(elapsed / totalMs, 0, 1);
+
+        // Ease-out quad: decelerates as it approaches the target.
+        double eased = 1 - ((1 - t) * (1 - t));
+
+        double x = this.scrollAnimStartX + ((this.scrollAnimTargetX - this.scrollAnimStartX) * eased);
+        this.tabsScroller.Offset = new Vector(x, this.tabsScroller.Offset.Y);
+
+        if (t >= 1)
+        {
+            this.scrollAnimTimer?.Stop();
+            this.scrollAnimTimer = null;
+        }
+    }
+
+    /// <summary>
+    /// Shows or hides the scroll-indicator buttons based on the current
+    /// scroll state. Called after tab-list changes, scroll events, and
+    /// layout passes.
+    /// </summary>
+    private void UpdateScrollButtonVisibility()
+    {
+        if (this.orientation != Orientation.Horizontal)
+        {
+            this.scrollLeftButton.IsVisible = false;
+            this.scrollRightButton.IsVisible = false;
+            return;
+        }
+
+        double extent = this.tabsScroller.Extent.Width;
+        double viewport = this.tabsScroller.Viewport.Width;
+        bool overflows = extent > viewport + 0.5;
+
+        if (!overflows)
+        {
+            this.scrollLeftButton.IsVisible = false;
+            this.scrollRightButton.IsVisible = false;
+            return;
+        }
+
+        double offset = this.tabsScroller.Offset.X;
+        double maxX = Math.Max(0, extent - viewport);
+        this.scrollLeftButton.IsVisible = offset > 0.5;
+        this.scrollRightButton.IsVisible = offset < maxX - 0.5;
+    }
+
     private void ApplyOrientation()
     {
         bool vertical = this.orientation == Orientation.Vertical;
@@ -534,6 +753,10 @@ public sealed class TabStrip : UserControl
             this.dropIndicator.Margin = new Thickness(4, 1, 4, 1);
             this.dropIndicator.HorizontalAlignment = HorizontalAlignment.Stretch;
             this.dropIndicator.VerticalAlignment = VerticalAlignment.Top;
+
+            // Scroll buttons are not used in vertical rail mode.
+            this.scrollLeftButton.IsVisible = false;
+            this.scrollRightButton.IsVisible = false;
         }
         else
         {
@@ -556,6 +779,8 @@ public sealed class TabStrip : UserControl
             this.dropIndicator.Margin = new Thickness(1, 4, 1, 4);
             this.dropIndicator.HorizontalAlignment = HorizontalAlignment.Left;
             this.dropIndicator.VerticalAlignment = VerticalAlignment.Stretch;
+
+            this.UpdateScrollButtonVisibility();
         }
     }
 

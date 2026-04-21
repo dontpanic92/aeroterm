@@ -233,6 +233,110 @@ public class TabStripHeadlessTests
         }
     }
 
+    /// <summary>
+    /// When tab count is low and everything fits, both scroll indicator
+    /// buttons must be hidden.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_ScrollButtons_HiddenWhenTabsFit()
+    {
+        var (window, strip, view) = BuildHostedStrip(width: 1200);
+        try
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                view.AddTab(new TabSession(new FakeTabContent($"t{i}")));
+            }
+
+            Dispatcher.UIThread.RunJobs();
+
+            var scrollBtns = FindScrollButtons(strip).ToList();
+            Assert.That(scrollBtns.Count, Is.EqualTo(2), "Strip should contain exactly two scroll-indicator RepeatButtons.");
+            Assert.That(scrollBtns.All(b => !b.IsVisible), Is.True, "Both scroll buttons should be hidden when tabs fit.");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// When tabs overflow, scroll-indicator buttons appear. Initially the
+    /// left button is hidden (offset at zero) and the right button visible.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_ScrollButtons_RightVisibleAtScrollOrigin()
+    {
+        var (window, strip, view) = BuildHostedStrip(width: 400);
+        try
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                view.AddTab(new TabSession(new FakeTabContent($"t{i}")));
+            }
+
+            Dispatcher.UIThread.RunJobs();
+
+            var scrollBtns = FindScrollButtons(strip).ToList();
+            Assert.That(scrollBtns.Count, Is.EqualTo(2));
+
+            // By automation name: "Scroll tabs left" and "Scroll tabs right".
+            var leftBtn = scrollBtns.FirstOrDefault(b =>
+                Avalonia.Automation.AutomationProperties.GetName(b) == "Scroll tabs left");
+            var rightBtn = scrollBtns.FirstOrDefault(b =>
+                Avalonia.Automation.AutomationProperties.GetName(b) == "Scroll tabs right");
+
+            Assert.That(leftBtn, Is.Not.Null);
+            Assert.That(rightBtn, Is.Not.Null);
+            Assert.That(leftBtn!.IsVisible, Is.False, "Left scroll button should be hidden at scroll origin.");
+            Assert.That(rightBtn!.IsVisible, Is.True, "Right scroll button should be visible when more tabs are clipped.");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Programmatically scrolling to the end hides the right button and
+    /// shows the left button.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_ScrollButtons_LeftVisibleAtScrollEnd()
+    {
+        var (window, strip, view) = BuildHostedStrip(width: 400);
+        try
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                view.AddTab(new TabSession(new FakeTabContent($"t{i}")));
+            }
+
+            Dispatcher.UIThread.RunJobs();
+
+            // Scroll the internal ScrollViewer to the very end.
+            var scroller = strip.GetLogicalDescendants()
+                .OfType<ScrollViewer>()
+                .First();
+            double maxX = scroller.Extent.Width - scroller.Viewport.Width;
+            scroller.Offset = new Avalonia.Vector(maxX, 0);
+            Dispatcher.UIThread.RunJobs();
+
+            var scrollBtns = FindScrollButtons(strip).ToList();
+            var leftBtn = scrollBtns.First(b =>
+                Avalonia.Automation.AutomationProperties.GetName(b) == "Scroll tabs left");
+            var rightBtn = scrollBtns.First(b =>
+                Avalonia.Automation.AutomationProperties.GetName(b) == "Scroll tabs right");
+
+            Assert.That(leftBtn.IsVisible, Is.True, "Left scroll button should be visible at scroll end.");
+            Assert.That(rightBtn.IsVisible, Is.False, "Right scroll button should be hidden at scroll end.");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
     private static (Window Window, TabStrip Strip, TabView View) BuildHostedStrip(int width = 800)
     {
         var view = new TabView();
@@ -277,5 +381,11 @@ public class TabStripHeadlessTests
         return strip.GetLogicalDescendants()
             .OfType<SplitButton>()
             .FirstOrDefault();
+    }
+
+    private static System.Collections.Generic.IEnumerable<Avalonia.Controls.RepeatButton> FindScrollButtons(TabStrip strip)
+    {
+        return strip.GetLogicalDescendants()
+            .OfType<Avalonia.Controls.RepeatButton>();
     }
 }
