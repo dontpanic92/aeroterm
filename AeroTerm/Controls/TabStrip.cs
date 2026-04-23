@@ -48,6 +48,13 @@ public sealed class TabStrip : UserControl
     private const double DragStartThreshold = 5.0;
 
     /// <summary>
+    /// Perpendicular distance (in pixels) the pointer must travel away
+    /// from the tab strip before the drag is treated as a detach / new-window
+    /// gesture, even if the cursor is still inside the window.
+    /// </summary>
+    private const double DetachDistanceThreshold = 80.0;
+
+    /// <summary>
     /// Horizontal rail width in vertical-orientation mode. Narrow enough
     /// to feel like a rail, wide enough to show a sensible title slice.
     /// </summary>
@@ -58,7 +65,7 @@ public sealed class TabStrip : UserControl
     /// when the strip has plenty of room. Matches the historical
     /// fixed-width tab look.
     /// </summary>
-    private const double MaxTabWidth = 160;
+    private const double MaxTabWidth = 200;
 
     /// <summary>
     /// Minimum width a tab header can shrink to before the strip falls
@@ -1106,7 +1113,7 @@ public sealed class TabStrip : UserControl
         // headers land at their new layout positions immediately.
         this.ClearAllDragTransforms();
 
-        if (this.IsOutsideWindow(strippt))
+        if (this.ShouldDetach(strippt))
         {
             var screen = this.PointToScreen(strippt);
             var sourceWindow = TopLevel.GetTopLevel(this) as Window;
@@ -1237,7 +1244,7 @@ public sealed class TabStrip : UserControl
         // When outside the window bounds, show the drag preview and check
         // for cross-window drop targets. Reset neighbour displacements so
         // the source strip looks clean.
-        if (this.IsOutsideWindow(stripPoint))
+        if (this.ShouldDetach(stripPoint))
         {
             if (d.LastFullDropIndex != -1)
             {
@@ -1418,6 +1425,66 @@ public sealed class TabStrip : UserControl
         var bounds = new Rect(window.ClientSize);
         return !bounds.Contains(winPt);
     }
+
+    /// <summary>
+    /// Returns <c>true</c> when the pointer is far enough from the tab
+    /// strip (perpendicular to its orientation axis) to be treated as a
+    /// detach gesture, even if the cursor has not left the window.
+    /// </summary>
+    /// <param name="stripPoint">Pointer position in strip-local coords.</param>
+    /// <returns><c>true</c> when the perpendicular distance exceeds
+    /// <see cref="DetachDistanceThreshold"/>.</returns>
+    private bool IsFarFromTabRow(Point stripPoint)
+    {
+        var stripBounds = new Rect(this.Bounds.Size);
+        bool vertical = this.orientation == Orientation.Vertical;
+
+        // Measure perpendicular distance from the strip's own bounds.
+        double distance;
+        if (vertical)
+        {
+            // Vertical strip: measure horizontal distance.
+            if (stripPoint.X < stripBounds.X)
+            {
+                distance = stripBounds.X - stripPoint.X;
+            }
+            else if (stripPoint.X > stripBounds.Right)
+            {
+                distance = stripPoint.X - stripBounds.Right;
+            }
+            else
+            {
+                distance = 0;
+            }
+        }
+        else
+        {
+            // Horizontal strip: measure vertical distance.
+            if (stripPoint.Y < stripBounds.Y)
+            {
+                distance = stripBounds.Y - stripPoint.Y;
+            }
+            else if (stripPoint.Y > stripBounds.Bottom)
+            {
+                distance = stripPoint.Y - stripBounds.Bottom;
+            }
+            else
+            {
+                distance = 0;
+            }
+        }
+
+        return distance >= DetachDistanceThreshold;
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when the pointer has left the window entirely
+    /// or has moved far enough from the tab row to signal a detach.
+    /// </summary>
+    /// <param name="stripPoint">Pointer position in strip-local coords.</param>
+    /// <returns><c>true</c> when a detach gesture is detected.</returns>
+    private bool ShouldDetach(Point stripPoint) =>
+        this.IsOutsideWindow(stripPoint) || this.IsFarFromTabRow(stripPoint);
 
     private int ComputeDropIndex(Point stripPoint, int sourceIndex = -1)
     {

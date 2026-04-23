@@ -103,7 +103,7 @@ public class TabStripHeadlessTests
     /// <summary>
     /// When the strip has plenty of horizontal room, every tab header
     /// is laid out at the maximum tab slot width. Each TabHeader has a
-    /// 2px horizontal margin, so a 160px slot renders a 156px Border.
+    /// 2px horizontal margin, so a 200px slot renders a 196px Border.
     /// </summary>
     [AvaloniaTest]
     public void TabStrip_WithAmpleSpace_HeadersUseMaxWidth()
@@ -122,7 +122,7 @@ public class TabStripHeadlessTests
             Assert.That(headers.Count, Is.EqualTo(3));
             foreach (var h in headers)
             {
-                Assert.That(h.Bounds.Width, Is.EqualTo(156).Within(0.5));
+                Assert.That(h.Bounds.Width, Is.EqualTo(196).Within(0.5));
             }
         }
         finally
@@ -133,7 +133,7 @@ public class TabStripHeadlessTests
 
     /// <summary>
     /// When the strip is narrow, headers shrink uniformly between the
-    /// minimum (80px) and maximum (160px) tab widths instead of pushing
+    /// minimum (80px) and maximum (200px) tab widths instead of pushing
     /// the trailing "+" SplitButton off-screen.
     /// </summary>
     [AvaloniaTest]
@@ -142,9 +142,9 @@ public class TabStripHeadlessTests
         var (window, strip, view) = BuildHostedStrip(width: 600);
         try
         {
-            // 6 tabs * 160px = 960px desired, but the strip only has
+            // 6 tabs * 200px = 1200px desired, but the strip only has
             // ~600px (minus +button) — every header should fall between
-            // 80px and 160px.
+            // 80px and 200px.
             for (int i = 0; i < 6; i++)
             {
                 view.AddTab(new TabSession(new FakeTabContent($"t{i}")));
@@ -156,9 +156,9 @@ public class TabStripHeadlessTests
             Assert.That(headers.Count, Is.EqualTo(6));
             double w0 = headers[0].Bounds.Width;
 
-            // Slot width should be between Min (80) and Max (160). With a
+            // Slot width should be between Min (80) and Max (200). With a
             // 2px header margin per side, observed widths are 4px less.
-            Assert.That(w0, Is.GreaterThanOrEqualTo(76).And.LessThan(156));
+            Assert.That(w0, Is.GreaterThanOrEqualTo(76).And.LessThan(196));
             foreach (var h in headers)
             {
                 Assert.That(h.Bounds.Width, Is.EqualTo(w0).Within(0.5));
