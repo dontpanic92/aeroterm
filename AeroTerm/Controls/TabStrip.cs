@@ -990,7 +990,7 @@ public sealed class TabStrip : UserControl
             return;
         }
 
-        int to = this.ComputeDropIndex(strippt);
+        int to = this.ComputeDropIndex(strippt, snapshot.FromIndex);
 
         // ComputeDropIndex returns a full-list insertion index. When
         // dropping further right than the source, subtract one because
@@ -1111,7 +1111,7 @@ public sealed class TabStrip : UserControl
         }
 
         // Determine where the tab would land and displace neighbours.
-        int fullDropIndex = this.ComputeDropIndex(stripPoint);
+        int fullDropIndex = this.ComputeDropIndex(stripPoint, d.FromIndex);
         if (fullDropIndex == d.LastFullDropIndex)
         {
             return;
@@ -1204,7 +1204,7 @@ public sealed class TabStrip : UserControl
         return !bounds.Contains(winPt);
     }
 
-    private int ComputeDropIndex(Point stripPoint)
+    private int ComputeDropIndex(Point stripPoint, int sourceIndex = -1)
     {
         bool vertical = this.orientation == Orientation.Vertical;
 
@@ -1226,8 +1226,29 @@ public sealed class TabStrip : UserControl
             }
 
             var b = child.Bounds;
-            double mid = vertical ? b.Y + (b.Height / 2.0) : b.X + (b.Width / 2.0);
-            if (panelCoord < mid)
+
+            // When a source index is known, use the near edge of each
+            // neighbour instead of its midpoint so that the reorder
+            // triggers as soon as the pointer reaches the neighbour's
+            // boundary rather than after crossing halfway through it.
+            double threshold;
+            if (sourceIndex >= 0 && headerCount < sourceIndex)
+            {
+                // Neighbour is before the source — use its trailing edge.
+                threshold = vertical ? b.Y + b.Height : b.X + b.Width;
+            }
+            else if (sourceIndex >= 0 && headerCount > sourceIndex)
+            {
+                // Neighbour is after the source — use its leading edge.
+                threshold = vertical ? b.Y : b.X;
+            }
+            else
+            {
+                // The dragged tab itself, or no source info — midpoint.
+                threshold = vertical ? b.Y + (b.Height / 2.0) : b.X + (b.Width / 2.0);
+            }
+
+            if (panelCoord < threshold)
             {
                 return headerCount;
             }
