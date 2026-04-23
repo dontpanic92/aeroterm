@@ -103,6 +103,19 @@ public sealed class TabView : UserControl, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Inserts a tab at the specified position. If <paramref name="index"/>
+    /// is out of range it is clamped to [0, Count].
+    /// </summary>
+    /// <param name="tab">The tab to insert.</param>
+    /// <param name="index">Zero-based insertion index.</param>
+    public void InsertTab(TabSession tab, int index)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        int clamped = Math.Clamp(index, 0, this.Tabs.Count);
+        this.Tabs.Insert(clamped, tab);
+    }
+
+    /// <summary>
     /// Closes a tab: removes it from the collection, disposes its underlying
     /// session, and activates a neighbour if the closed tab was active. When
     /// the closed tab was the last one, <see cref="LastTabClosed"/> fires.

@@ -125,6 +125,7 @@ public partial class MainWindow : Window
         this.tabStrip.ManageProfilesRequested += () => _ = this.ShowSettingsDialogAsync();
         this.tabStrip.TabReorderRequested += (from, to) => this.tabView.MoveTab(from, to);
         this.tabStrip.TabDetachRequested += this.OnTabDetachRequested;
+        this.tabStrip.TabTransferRequested += this.OnTabTransferRequested;
         this.tabStrip.TabGroupAssignmentRequested += this.OnTabGroupAssignmentRequested;
         this.tabStrip.Profiles = App.Profiles.Profiles;
         this.tabStrip.GroupStore = App.TabGroupStore;
@@ -155,6 +156,12 @@ public partial class MainWindow : Window
 
         this.Opened += this.OnWindowOpened;
     }
+
+    /// <summary>
+    /// Gets the tab strip hosted by this window, used by
+    /// <see cref="DragDropCoordinator"/> for cross-window drop detection.
+    /// </summary>
+    internal TabStrip Strip => this.tabStrip;
 
     /// <summary>
     /// Opens the settings dialog. Called from the macOS native app menu.
@@ -632,6 +639,20 @@ public partial class MainWindow : Window
         this.tabView.ActivateTab(session);
     }
 
+    /// <summary>
+    /// Adopts a tab session from another window, inserting it at the
+    /// specified position rather than appending.
+    /// </summary>
+    /// <param name="session">The tab session to adopt.</param>
+    /// <param name="insertionIndex">Zero-based insertion index.</param>
+    private void AdoptTabAt(TabSession session, int insertionIndex)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        this.WireTabSession(session);
+        this.tabView.InsertTab(session, insertionIndex);
+        this.tabView.ActivateTab(session);
+    }
+
     private void OnTabDetachRequested(TabSession tab, PixelPoint screenPos)
     {
         if (this.tabView.Tabs.IndexOf(tab) < 0)
@@ -660,6 +681,25 @@ public partial class MainWindow : Window
         }
 
         newWindow.Show();
+
+        if (this.tabView.Tabs.Count == 0)
+        {
+            this.Close();
+        }
+    }
+
+    private void OnTabTransferRequested(TabSession tab, MainWindow targetWindow, int insertionIndex)
+    {
+        if (this.tabView.Tabs.IndexOf(tab) < 0)
+        {
+            return;
+        }
+
+        this.UnwireTabSession(tab);
+        this.tabView.DetachTab(tab);
+
+        targetWindow.AdoptTabAt(tab, insertionIndex);
+        targetWindow.Activate();
 
         if (this.tabView.Tabs.Count == 0)
         {

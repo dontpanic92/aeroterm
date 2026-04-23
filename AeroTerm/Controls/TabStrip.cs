@@ -146,6 +146,10 @@ public sealed class TabStrip : UserControl
     private IReadOnlyList<Profile> profiles = new List<Profile>();
     private TabGroupStore? groupStore;
     private DragState? drag;
+    private DragPreviewWindow? dragPreview;
+    private TabStrip? dragTargetStrip;
+    private Border? externalDropIndicator;
+    private int externalDropLastIndex = -1;
     private DispatcherTimer? dragSettleTimer;
     private Orientation orientation = Orientation.Horizontal;
 
@@ -281,6 +285,14 @@ public sealed class TabStrip : UserControl
     /// new window positioned near <c>screenPosition</c>.
     /// </summary>
     public event Action<TabSession, PixelPoint>? TabDetachRequested;
+
+    /// <summary>
+    /// Raised when the user drops a dragged tab onto another window's
+    /// <see cref="TabStrip"/>. Subscribers typically call
+    /// <see cref="TabView.DetachTab"/> and transfer the session to the
+    /// target <see cref="MainWindow"/> at the specified insertion index.
+    /// </summary>
+    public event Action<TabSession, MainWindow, int>? TabTransferRequested;
 
     /// <summary>
     /// Raised when the user picks an entry from a tab's "Add to group"
@@ -439,6 +451,117 @@ public sealed class TabStrip : UserControl
         this.RefreshNewTabButtonStateBrushes();
         this.RefreshScrollButtonStateBrushes(this.scrollLeftButton);
         this.RefreshScrollButtonStateBrushes(this.scrollRightButton);
+    }
+
+    /// <summary>
+    /// Tests whether <paramref name="screenPos"/> falls within this
+    /// strip's tab panel and, if so, returns the insertion index where a
+    /// dropped tab would land. Returns <c>-1</c> if the point is outside
+    /// the panel.
+    /// </summary>
+    /// <param name="screenPos">Pointer position in screen pixels.</param>
+    /// <returns>Zero-based insertion index, or <c>-1</c>.</returns>
+    internal int GetDropIndexAtScreenPoint(PixelPoint screenPos)
+    {
+        var stripPoint = this.PointToClient(screenPos);
+        if (!this.Bounds.Contains(new Point(stripPoint.X, stripPoint.Y)))
+        {
+            return -1;
+        }
+
+        return this.ComputeDropIndex(new Point(stripPoint.X, stripPoint.Y));
+    }
+
+    /// <summary>
+    /// Shows a thin accent-coloured insertion indicator at the specified
+    /// position in the tab panel, signalling to the user where a
+    /// cross-window tab drop would land.
+    /// </summary>
+    /// <param name="index">Zero-based insertion index.</param>
+    internal void ShowExternalDropIndicator(int index)
+    {
+        if (index == this.externalDropLastIndex && this.externalDropIndicator is not null)
+        {
+            return;
+        }
+
+        if (this.externalDropIndicator is null)
+        {
+            this.externalDropIndicator = new Border
+            {
+                Background = ActiveAccentBrush,
+                IsHitTestVisible = false,
+                ZIndex = 2,
+            };
+        }
+
+        bool vertical = this.orientation == Orientation.Vertical;
+        if (vertical)
+        {
+            this.externalDropIndicator.Width = double.NaN;
+            this.externalDropIndicator.Height = 3;
+        }
+        else
+        {
+            this.externalDropIndicator.Width = 3;
+            this.externalDropIndicator.Height = double.NaN;
+        }
+
+        // Compute the pixel position for the indicator by examining
+        // the bounds of the panel's header children.
+        double pos = 0;
+        int headerCount = 0;
+        for (int i = 0; i < this.tabsPanel.Children.Count; i++)
+        {
+            if (this.tabsPanel.Children[i] is not TabHeader th)
+            {
+                continue;
+            }
+
+            if (headerCount == index)
+            {
+                pos = vertical ? th.Bounds.Y : th.Bounds.X;
+                break;
+            }
+
+            headerCount++;
+            pos = vertical
+                ? th.Bounds.Y + th.Bounds.Height + th.Margin.Top + th.Margin.Bottom
+                : th.Bounds.X + th.Bounds.Width + th.Margin.Left + th.Margin.Right;
+        }
+
+        if (vertical)
+        {
+            this.externalDropIndicator.Margin = new Thickness(4, pos - 1.5, 4, 0);
+            this.externalDropIndicator.VerticalAlignment = VerticalAlignment.Top;
+            this.externalDropIndicator.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
+        else
+        {
+            this.externalDropIndicator.Margin = new Thickness(pos - 1.5, 4, 0, 4);
+            this.externalDropIndicator.HorizontalAlignment = HorizontalAlignment.Left;
+            this.externalDropIndicator.VerticalAlignment = VerticalAlignment.Stretch;
+        }
+
+        if (!this.tabsPanel.Children.Contains(this.externalDropIndicator))
+        {
+            this.tabsPanel.Children.Add(this.externalDropIndicator);
+        }
+
+        this.externalDropLastIndex = index;
+    }
+
+    /// <summary>
+    /// Removes the external drop indicator if currently shown.
+    /// </summary>
+    internal void ClearExternalDropIndicator()
+    {
+        if (this.externalDropIndicator is not null)
+        {
+            this.tabsPanel.Children.Remove(this.externalDropIndicator);
+            this.externalDropIndicator = null;
+            this.externalDropLastIndex = -1;
+        }
     }
 
     /// <summary>
@@ -986,6 +1109,20 @@ public sealed class TabStrip : UserControl
         if (this.IsOutsideWindow(strippt))
         {
             var screen = this.PointToScreen(strippt);
+            var sourceWindow = TopLevel.GetTopLevel(this) as Window;
+
+            // Check if the pointer is over another window's tab strip.
+            if (sourceWindow is not null)
+            {
+                var target = DragDropCoordinator.FindDropTarget(screen, sourceWindow);
+                if (target.HasValue && TopLevel.GetTopLevel(target.Value.TargetStrip) is MainWindow targetWindow)
+                {
+                    target.Value.TargetStrip.ClearExternalDropIndicator();
+                    this.TabTransferRequested?.Invoke(snapshot.Tab, targetWindow, target.Value.InsertionIndex);
+                    return;
+                }
+            }
+
             this.TabDetachRequested?.Invoke(snapshot.Tab, screen);
             return;
         }
@@ -1097,8 +1234,9 @@ public sealed class TabStrip : UserControl
                 FormattableString.Invariant($"translate({(int)Math.Round(pointerDelta)}px,0px)"));
         }
 
-        // When outside the window bounds, reset neighbour displacements
-        // (the release handler will fire TabDetachRequested).
+        // When outside the window bounds, show the drag preview and check
+        // for cross-window drop targets. Reset neighbour displacements so
+        // the source strip looks clean.
         if (this.IsOutsideWindow(stripPoint))
         {
             if (d.LastFullDropIndex != -1)
@@ -1107,8 +1245,14 @@ public sealed class TabStrip : UserControl
                 this.ResetNeighbourTransforms(d);
             }
 
+            var screenPos = this.PointToScreen(stripPoint);
+            this.UpdateCrossWindowDragState(screenPos, d);
             return;
         }
+
+        // Pointer returned inside the source window — tear down any
+        // cross-window preview / indicator that was active.
+        this.ClearCrossWindowDragState();
 
         // Determine where the tab would land and displace neighbours.
         int fullDropIndex = this.ComputeDropIndex(stripPoint, d.FromIndex);
@@ -1187,6 +1331,77 @@ public sealed class TabStrip : UserControl
             header.RenderTransform = null;
             header.Opacity = 1.0;
             header.ZIndex = 0;
+        }
+
+        this.ClearCrossWindowDragState();
+    }
+
+    /// <summary>
+    /// Updates the drag preview and cross-window drop indicator while the
+    /// pointer is outside the source window.
+    /// </summary>
+    /// <param name="screenPos">Current pointer position in screen pixels.</param>
+    /// <param name="d">Active drag state.</param>
+    private void UpdateCrossWindowDragState(PixelPoint screenPos, DragState d)
+    {
+        // Lazily create and show the floating preview window.
+        if (this.dragPreview is null)
+        {
+            this.dragPreview = new DragPreviewWindow(d.Tab.Title ?? string.Empty);
+            this.dragPreview.Show();
+        }
+
+        this.dragPreview.MoveToScreenPosition(screenPos);
+
+        // Check whether the pointer is over another window's tab strip.
+        var sourceWindow = TopLevel.GetTopLevel(this) as Window;
+        DragDropCoordinator.DropTarget? target = sourceWindow is not null
+            ? DragDropCoordinator.FindDropTarget(screenPos, sourceWindow)
+            : null;
+
+        if (target.HasValue)
+        {
+            var ts = target.Value.TargetStrip;
+            int idx = target.Value.InsertionIndex;
+
+            // Clear indicator on previously-targeted strip if it changed.
+            if (this.dragTargetStrip is not null && !ReferenceEquals(this.dragTargetStrip, ts))
+            {
+                this.dragTargetStrip.ClearExternalDropIndicator();
+            }
+
+            ts.ShowExternalDropIndicator(idx);
+            this.dragTargetStrip = ts;
+            this.dragPreview.IsMergeMode = true;
+        }
+        else
+        {
+            if (this.dragTargetStrip is not null)
+            {
+                this.dragTargetStrip.ClearExternalDropIndicator();
+                this.dragTargetStrip = null;
+            }
+
+            this.dragPreview.IsMergeMode = false;
+        }
+    }
+
+    /// <summary>
+    /// Tears down the floating preview window and any cross-window drop
+    /// indicators.
+    /// </summary>
+    private void ClearCrossWindowDragState()
+    {
+        if (this.dragPreview is not null)
+        {
+            this.dragPreview.Close();
+            this.dragPreview = null;
+        }
+
+        if (this.dragTargetStrip is not null)
+        {
+            this.dragTargetStrip.ClearExternalDropIndicator();
+            this.dragTargetStrip = null;
         }
     }
 
