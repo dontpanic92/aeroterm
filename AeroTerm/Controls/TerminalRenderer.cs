@@ -64,6 +64,9 @@ internal sealed class TerminalRenderer : IDisposable
     /// <param name="enableLigature">Whether ligature shaping is enabled.</param>
     /// <param name="backgroundAlpha">The alpha channel for the default background.</param>
     /// <param name="shouldDrawCursor">Whether the cursor should be drawn.</param>
+    /// <param name="topInset">Vertical offset in pixels to push grid rendering
+    /// down from the canvas origin, leaving the inset area showing only the
+    /// cleared background. Used for the floating title-bar blur effect.</param>
     /// <param name="selection">Optional active text selection to overlay, or <c>null</c>.</param>
     /// <param name="selectionColor">Fill color for the selection overlay. Ignored when <paramref name="selection"/> is null or empty.</param>
     /// <param name="hyperlinkRun">Optional OSC 8 hyperlink run to underline as a hover affordance, or <c>null</c>.</param>
@@ -78,12 +81,16 @@ internal sealed class TerminalRenderer : IDisposable
         bool enableLigature,
         byte backgroundAlpha,
         bool shouldDrawCursor,
+        float topInset = 0,
         TerminalSelection? selection = null,
         SKColor selectionColor = default,
         HyperlinkRun? hyperlinkRun = null,
         IReadOnlyList<VisibleMatch>? searchMatches = null)
     {
         canvas.Clear(GetSkColor(screen.BackgroundColor, backgroundAlpha));
+
+        canvas.Save();
+        canvas.Translate(0, topInset);
 
         var cells = screen.Cells;
         int rows = cells.GetLength(0);
@@ -237,6 +244,8 @@ internal sealed class TerminalRenderer : IDisposable
 
         // Draw preedit (IME composition) overlay
         this.DrawPreedit(canvas, screen, textParam);
+
+        canvas.Restore();
     }
 
     /// <summary>

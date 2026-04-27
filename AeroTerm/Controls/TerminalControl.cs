@@ -33,6 +33,8 @@ using SkiaSharp;
 /// </summary>
 public class TerminalControl : Control, IDisposable
 {
+    private const float TitleBarInsetBlurSigma = 8f;
+
     private readonly TerminalBuffer buffer;
     private readonly VtParser parser;
     private readonly TerminalInputHandler inputHandler;
@@ -58,6 +60,7 @@ public class TerminalControl : Control, IDisposable
     private volatile bool isDisposed;
     private SKColor selectionColor = new SKColor(0x39, 0x66, 0xCC, 0x70);
     private int viewportOffset;
+    private float topInset;
     private bool searchOverlayOpen;
     private bool searchUsingAltBufferSnapshot;
     private IReadOnlyList<SearchMatch> searchMatches = Array.Empty<SearchMatch>();
@@ -248,7 +251,7 @@ public class TerminalControl : Control, IDisposable
     {
         get
         {
-            var c = (uint)(this.Bounds.Height / this.textParam.LineHeight);
+            var c = (uint)((this.Bounds.Height - this.topInset) / this.textParam.LineHeight);
             return c == 0 ? 1 : c;
         }
     }
@@ -343,6 +346,29 @@ public class TerminalControl : Control, IDisposable
     {
         get => this.viewportOffset;
         set => this.viewportOffset = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the vertical inset in pixels reserved at the top of
+    /// the control for a floating title-bar blur overlay. Grid rendering
+    /// begins at this offset; the area above it shows a blurred preview
+    /// of scrollback when the viewport is scrolled.
+    /// </summary>
+    internal float TopInset
+    {
+        get => this.topInset;
+
+        set
+        {
+            if (this.topInset == value)
+            {
+                return;
+            }
+
+            this.topInset = value;
+            this.TryResize();
+            this.InvalidateVisual();
+        }
     }
 
     /// <summary>
@@ -582,7 +608,7 @@ public class TerminalControl : Control, IDisposable
     /// <returns>A <c>(row, col)</c> tuple in visible-grid space.</returns>
     internal (int Row, int Col) PixelToGridPosition(Point pixel)
     {
-        int row = (int)(pixel.Y / this.textParam.LineHeight);
+        int row = (int)((pixel.Y - this.topInset) / this.textParam.LineHeight);
         int col = (int)(pixel.X / this.textParam.CharWidth);
 
         int maxRow = (int)this.DesiredRowCount - 1;
@@ -1052,12 +1078,13 @@ public class TerminalControl : Control, IDisposable
         // Update IME cursor position.
         var cursorPos = screen.CursorPosition;
         var tp = this.textParam;
+        float currentTopInset = this.topInset;
         Dispatcher.UIThread.Post(() =>
         {
             if (!this.isDisposed)
             {
                 float x = cursorPos.Col * tp.CharWidth;
-                float y = cursorPos.Row * tp.LineHeight;
+                float y = (cursorPos.Row * tp.LineHeight) + currentTopInset;
                 this.imeClient.UpdateCursorRectangle(new Rect(x, y, tp.CharWidth, tp.LineHeight));
             }
         });
@@ -1105,10 +1132,19 @@ public class TerminalControl : Control, IDisposable
             this.EnableLigature,
             this.BackgroundAlpha,
             drawCursor,
+            this.topInset,
             selectionForRender,
             this.selectionColor,
             hyperlinkForRender,
             visibleMatches);
+
+        // Render the title-bar inset overlay. When scrolled, show a blurred
+        // preview of scrollback rows; otherwise just a tinted background so
+        // the floating title bar is visually distinct.
+        if (this.topInset > 0)
+        {
+            this.RenderBlurredInset(canvas, screen);
+        }
     }
 
     private void RebuildFontChain(List<string> fontNames)
@@ -1116,6 +1152,81 @@ public class TerminalControl : Control, IDisposable
         this.ligatureTextShaper.ClearCache();
         this.renderer.DiscardBackbuffer();
         this.fontChain.Rebuild(fontNames);
+    }
+
+    /// <summary>
+    /// Renders the floating title-bar overlay in the top inset area.
+    /// When the viewport is scrolled, draws a blurred preview of
+    /// scrollback rows; otherwise renders a tinted backdrop.
+    /// </summary>
+    private void RenderBlurredInset(SKCanvas canvas, Pty.Screen screen)
+    {
+        float insetHeight = this.topInset;
+        float canvasWidth = (float)this.Bounds.Width;
+        var insetRect = new SKRect(0, 0, canvasWidth, insetHeight);
+
+        // Show blurred ghost rows whenever scrollback has content —
+        // not only when the user has manually scrolled back.
+        int cols = screen.Cells.GetLength(1);
+        int insetRowCount = (int)Math.Ceiling(insetHeight / this.textParam.LineHeight);
+        int scrollbackCount = this.buffer.ScrollbackCount;
+        int viewportTop = scrollbackCount - this.viewportOffset;
+        int ghostStart = Math.Max(0, viewportTop - insetRowCount);
+        int actualGhostRows = viewportTop - ghostStart;
+
+        if (actualGhostRows > 0)
+        {
+            // Draw only ghost-row text into a blurred layer. The inset
+            // background is already the same as the main terminal canvas, so
+            // painting or blurring cell backgrounds would create a visible
+            // titlebar-only shadow/tint.
+            using var blurFilter = SKImageFilter.CreateBlur(TitleBarInsetBlurSigma, TitleBarInsetBlurSigma);
+            using var layerPaint = new SKPaint { ImageFilter = blurFilter };
+
+            canvas.Save();
+            canvas.ClipRect(insetRect);
+            canvas.SaveLayer(layerPaint);
+
+            using var fgPaint = new SKPaint { IsAntialias = true };
+            using var ghostFont = new SKFont { Size = this.textParam.SkiaFontSize, Subpixel = true };
+            if (this.fontChain.PrimaryTypeface is { } primaryTf)
+            {
+                ghostFont.Typeface = primaryTf;
+            }
+
+            // Align the bottom ghost row with the top of the main grid.
+            float baseY = insetHeight - (actualGhostRows * this.textParam.LineHeight);
+
+            for (int gi = 0; gi < actualGhostRows; gi++)
+            {
+                int sbIndex = ghostStart + gi;
+                if (sbIndex < 0 || sbIndex >= scrollbackCount)
+                {
+                    continue;
+                }
+
+                var sbRow = this.buffer.GetScrollbackLine(sbIndex);
+                float rowY = baseY + (gi * this.textParam.LineHeight);
+                int copyCols = Math.Min(cols, sbRow.Length);
+
+                for (int j = 0; j < copyCols; j++)
+                {
+                    ref readonly var cell = ref sbRow[j];
+
+                    float x = j * this.textParam.CharWidth;
+                    string? ch = cell.Character;
+                    if (!string.IsNullOrEmpty(ch) && ch != " ")
+                    {
+                        fgPaint.Color = TerminalRenderer.GetSkColor(cell.ForegroundColor);
+                        float baselineY = rowY + (this.textParam.LineHeight * 0.8f);
+                        canvas.DrawText(ch, x, baselineY, ghostFont, fgPaint);
+                    }
+                }
+            }
+
+            canvas.Restore(); // SaveLayer — blur is applied.
+            canvas.Restore(); // ClipRect.
+        }
     }
 
     private void OnTitleChanged(string title)

@@ -95,6 +95,10 @@ public partial class MainWindow : Window
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
         this.macChromeReservation = this.FindControl<Border>("MacChromeReservation")!;
 
+        // Title bar background is transparent; the floating blur effect is
+        // rendered by TerminalControl's SkiaSharp pipeline via TopInset.
+        this.titleBar.Background = Brushes.Transparent;
+
         // Transparent drag handle that fills the title-bar slot to the right
         // of the tab strip (or the entire slot in vertical mode). Hosts the
         // window-move-drag gesture so presses on tab pills no longer kick
@@ -507,7 +511,6 @@ public partial class MainWindow : Window
 
     private void OnBackgroundBrushChanged(IBrush brush)
     {
-        this.titleBar.Background = brush;
         this.terminalBorder.Background = brush;
     }
 
@@ -637,6 +640,7 @@ public partial class MainWindow : Window
         this.WireTabSession(session);
         this.tabView.AddTab(session);
         this.tabView.ActivateTab(session);
+        this.ApplyTopInsetToSession(session);
     }
 
     /// <summary>
@@ -651,6 +655,7 @@ public partial class MainWindow : Window
         this.WireTabSession(session);
         this.tabView.InsertTab(session, insertionIndex);
         this.tabView.ActivateTab(session);
+        this.ApplyTopInsetToSession(session);
     }
 
     private void OnTabDetachRequested(TabSession tab, PixelPoint screenPos)
@@ -718,6 +723,7 @@ public partial class MainWindow : Window
         // DesiredColCount/DesiredRowCount.
         Dispatcher.UIThread.RunJobs();
         session.Start();
+        this.ApplyTopInsetToSession(session);
         session.FocusInput();
     }
 
@@ -728,6 +734,7 @@ public partial class MainWindow : Window
         this.tabView.ActivateTab(session);
         Dispatcher.UIThread.RunJobs();
         session.Start();
+        this.ApplyTopInsetToSession(session);
         session.FocusInput();
     }
 
@@ -855,6 +862,7 @@ public partial class MainWindow : Window
         // Start AFTER insertion + activation so the session has real bounds.
         Dispatcher.UIThread.RunJobs();
         dup.Start();
+        this.ApplyTopInsetToSession(dup);
         dup.FocusInput();
     }
 
@@ -978,6 +986,7 @@ public partial class MainWindow : Window
         this.tabView.ActivateTab(initial);
         Dispatcher.UIThread.RunJobs();
         initial.Start();
+        this.ApplyTopInsetToSession(initial);
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
@@ -1150,7 +1159,35 @@ public partial class MainWindow : Window
             this.titleBarTabHost.IsVisible = true;
         }
 
+        // Update TopInset on all existing terminal controls to match
+        // the current orientation. Horizontal mode: terminals render a
+        // blurred preview in the top inset area behind the floating
+        // title bar. Vertical mode: no inset, terminals start at the top.
+        foreach (var tab in this.tabView.Tabs)
+        {
+            this.ApplyTopInsetToSession(tab);
+        }
+
         this.UpdateTabStripVisibility();
+    }
+
+    /// <summary>
+    /// Sets <see cref="Controls.TerminalControl.TopInset"/> on every
+    /// terminal in <paramref name="session"/> based on the current tab-bar
+    /// orientation. Must be called <em>after</em>
+    /// <see cref="TabSession.Start"/> so that the TerminalControl exists.
+    /// </summary>
+    private void ApplyTopInsetToSession(TabSession session)
+    {
+        bool horizontal = this.settings.TabBarOrientation != TabBarOrientation.Vertical;
+        float inset = horizontal ? (float)TitleBarHeight : 0f;
+        foreach (var content in session.AllContents)
+        {
+            if (content.Terminal is not null)
+            {
+                content.Terminal.TopInset = inset;
+            }
+        }
     }
 
     private void UpdateTitleBarForeground(int rgb)

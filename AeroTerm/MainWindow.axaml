@@ -68,9 +68,23 @@
         </ControlTemplate>
     </Window.Template>
 
-    <DockPanel LastChildFill="True">
-        <!-- Custom Title Bar -->
-        <Grid DockPanel.Dock="Top" Name="TitleBar" IsHitTestVisible="True">
+    <Panel>
+        <!--
+            Content area is first so it renders below the title bar in the
+            Z-order, enabling the acrylic blur on the title bar to "dig"
+            through to the terminal background.
+        -->
+        <DockPanel Name="ContentDock" LastChildFill="True">
+            <!-- Side tab host (used when TabBarOrientation == Vertical).
+                 Hidden in Horizontal mode; the strip is re-parented into
+                 TitleBarTabHost instead. -->
+            <Border Name="SideTabHost" DockPanel.Dock="Left"
+                    Background="Transparent" IsVisible="False" />
+            <Border Name="TerminalBorder" Background="Transparent" />
+        </DockPanel>
+
+        <!-- Custom Title Bar — floats on top of the content area. -->
+        <Grid Name="TitleBar" VerticalAlignment="Top" IsHitTestVisible="True">
             <Grid.ColumnDefinitions>
                 <!-- Reservation for the macOS native traffic-light cluster.
                      Width is set to ~78px in code-behind on macOS so the
@@ -167,20 +181,5 @@
                     Focusable="False"
                     Click="CloseButton_Click" />
         </Grid>
-
-        <!--
-            Content area. A nested DockPanel hosts the tab strip (which docks
-            either Top or Left based on AppSettings.TabBarOrientation) and
-            the terminal border, which fills the remainder. This lets us flip
-            the tab rail at runtime without touching the title bar chrome.
-        -->
-        <DockPanel Name="ContentDock" LastChildFill="True">
-            <!-- Side tab host (used when TabBarOrientation == Vertical).
-                 Hidden in Horizontal mode; the strip is re-parented into
-                 TitleBarTabHost instead. -->
-            <Border Name="SideTabHost" DockPanel.Dock="Left"
-                    Background="Transparent" IsVisible="False" />
-            <Border Name="TerminalBorder" Background="Transparent" />
-        </DockPanel>
-    </DockPanel>
+    </Panel>
 </Window>
