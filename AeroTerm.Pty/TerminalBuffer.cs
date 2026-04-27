@@ -117,6 +117,13 @@ public class TerminalBuffer
     private int scrollbackCount;
     private int scrollbackLimit = DefaultScrollbackLimit;
 
+    // Monotonic counter of rows overwritten by the scrollback ring. Used by
+    // consumers (e.g. selection) that anchor to absolute-row positions and
+    // need to detect/compensate for ring eviction. Only incremented on the
+    // ring-overwrite path; not reset by ClearScrollback (callers that care
+    // about clearing should observe the buffer state directly).
+    private long scrollbackEvictedTotal;
+
     // Per-row "line-wrapped" marker on the primary (or alt) grid. When
     // rowWrapped[r] is true, row r+1 is understood as a continuation of
     // row r (the cursor auto-wrapped at the right margin while writing
@@ -313,6 +320,7 @@ public class TerminalBuffer
 
                 if (clamped == 0)
                 {
+                    this.scrollbackEvictedTotal += this.scrollbackCount;
                     this.scrollbackRing = Array.Empty<Cell[]?>();
                     this.scrollbackWrappedRing = Array.Empty<bool>();
                     this.scrollbackHead = 0;
@@ -324,6 +332,7 @@ public class TerminalBuffer
                 // Reallocate, preserving the newest lines (drop oldest if shrinking).
                 int keep = Math.Min(this.scrollbackCount, clamped);
                 int skip = this.scrollbackCount - keep;
+                this.scrollbackEvictedTotal += skip;
                 var newRing = new Cell[]?[clamped];
                 var newWrapped = new bool[clamped];
                 for (int i = 0; i < keep; i++)
@@ -352,6 +361,25 @@ public class TerminalBuffer
             lock (this.screenLock)
             {
                 return this.scrollbackCount;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the monotonic count of scrollback rows that have been
+    /// overwritten (evicted from the ring) since this buffer was created.
+    /// Combined with <see cref="ScrollbackCount"/> this lets callers detect
+    /// eviction between observations: if the value increased by N, the
+    /// oldest N scrollback indices have been replaced and any absolute-row
+    /// reference into them is now invalid.
+    /// </summary>
+    public long ScrollbackEvictedTotal
+    {
+        get
+        {
+            lock (this.screenLock)
+            {
+                return this.scrollbackEvictedTotal;
             }
         }
     }
@@ -946,6 +974,7 @@ public class TerminalBuffer
     {
         lock (this.screenLock)
         {
+            this.scrollbackEvictedTotal += this.scrollbackCount;
             Array.Clear(this.scrollbackRing, 0, this.scrollbackRing.Length);
             if (this.scrollbackWrappedRing.Length > 0)
             {
@@ -2264,6 +2293,7 @@ public class TerminalBuffer
             this.scrollbackRing[this.scrollbackHead] = row;
             this.scrollbackWrappedRing[this.scrollbackHead] = wrapped;
             this.scrollbackHead = (this.scrollbackHead + 1) % this.scrollbackLimit;
+            this.scrollbackEvictedTotal++;
         }
     }
 

@@ -6,9 +6,11 @@
 namespace AeroTerm.Controls.Terminal;
 
 using System.Runtime.InteropServices;
+using AeroTerm.Controls;
 using AeroTerm.Pty;
 using Avalonia;
 using Avalonia.Input;
+using Avalonia.Threading;
 
 /// <summary>
 /// Encapsulates all pointer-related state and event dispatch for
@@ -19,6 +21,11 @@ using Avalonia.Input;
 /// </summary>
 internal sealed class TerminalPointerHandler
 {
+    // Auto-scroll cadence while the pointer is past the viewport edge
+    // during a drag-select. Small enough to feel responsive; coarse enough
+    // not to eat the selection on a single twitchy touchpad gesture.
+    private static readonly TimeSpan DragAutoScrollInterval = TimeSpan.FromMilliseconds(60);
+
     private readonly TerminalControl owner;
 
     private bool pointerDragSelecting;
@@ -28,6 +35,10 @@ internal sealed class TerminalPointerHandler
     private bool hyperlinkModifierDown;
     private Cursor? handCursor;
     private HyperlinkRun? currentHyperlinkRun;
+
+    private DispatcherTimer? dragAutoScrollTimer;
+    private Point lastDragPointerPosition;
+    private int dragAutoScrollDirection;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalPointerHandler"/> class.
@@ -126,11 +137,13 @@ internal sealed class TerminalPointerHandler
             return;
         }
 
-        // Pointer rows translate to live-grid rows once the viewport is
-        // scrolled into scrollback; selection and hyperlink resolution are
-        // both visible-grid-only features and must skip scrollback-only rows.
+        // Pointer rows translate to absolute rows once the viewport is
+        // scrolled into scrollback. Selection now spans the full buffer;
+        // hyperlink resolution remains visible-grid-only (live screen).
         int gridRows = (int)this.owner.DesiredRowCount;
         int historyRows = Math.Min(this.owner.ViewportOffset, gridRows);
+        int scrollbackCount = this.owner.Buffer.ScrollbackCount;
+        int absRowAtScreenZero = scrollbackCount - this.owner.ViewportOffset;
 
         // Modifier+left-click on a hyperlink opens it; short-circuit before
         // selection logic so the click doesn't begin a drag selection.
@@ -154,30 +167,24 @@ internal sealed class TerminalPointerHandler
         if (isLeft && (mouseTrackingOff || shift))
         {
             var (row, col) = this.owner.PixelToGridPosition(point.Position);
-            int liveRow = row - historyRows;
-            if (liveRow < 0)
-            {
-                // Click landed on a scrollback-only row; selection is a
-                // visible-grid-only feature today, so do nothing.
-                e.Handled = true;
-                return;
-            }
+            int absRow = absRowAtScreenZero + row;
 
-            var cells = this.owner.Buffer.GetScreen()?.Cells;
-            if (cells is not null)
+            var screen = this.owner.Buffer.GetScreen();
+            if (screen is not null)
             {
+                var rowSource = new BufferRowSource(this.owner.Buffer, screen);
                 int clicks = Math.Max(1, e.ClickCount);
                 if (clicks == 2)
                 {
-                    this.owner.Selection.BeginWord(liveRow, col, cells);
+                    this.owner.Selection.BeginWord(absRow, col, rowSource);
                 }
                 else if (clicks >= 3)
                 {
-                    this.owner.Selection.BeginLine(liveRow, cells);
+                    this.owner.Selection.BeginLine(absRow, rowSource);
                 }
                 else
                 {
-                    this.owner.Selection.BeginCharacter(liveRow, col, cells);
+                    this.owner.Selection.BeginCharacter(absRow, col, rowSource);
                 }
 
                 this.pointerDragSelecting = true;
@@ -208,15 +215,22 @@ internal sealed class TerminalPointerHandler
 
         if (this.pointerDragSelecting)
         {
-            int gridRows = (int)this.owner.DesiredRowCount;
-            int historyRows = Math.Min(this.owner.ViewportOffset, gridRows);
-            int liveRow = Math.Max(0, row - historyRows);
-            var cells = this.owner.Buffer.GetScreen()?.Cells;
-            if (cells is not null)
+            int scrollbackCount = this.owner.Buffer.ScrollbackCount;
+            int absRowAtScreenZero = scrollbackCount - this.owner.ViewportOffset;
+            int absRow = absRowAtScreenZero + row;
+            var screen = this.owner.Buffer.GetScreen();
+            if (screen is not null)
             {
-                this.owner.Selection.ExtendTo(liveRow, col, cells);
+                var rowSource = new BufferRowSource(this.owner.Buffer, screen);
+                this.owner.Selection.ExtendTo(absRow, col, rowSource);
                 this.owner.InvalidateVisual();
             }
+
+            // Auto-scroll: if the pointer drifted above the top inset or
+            // below the visible grid, schedule the auto-scroll loop. The
+            // loop converts the pointer's clamped row back into an absRow
+            // each tick so the selection extends correctly.
+            this.UpdateDragAutoScroll(e.GetCurrentPoint(this.owner).Position);
 
             e.Handled = true;
             return;
@@ -234,6 +248,7 @@ internal sealed class TerminalPointerHandler
         if (this.pointerDragSelecting)
         {
             this.pointerDragSelecting = false;
+            this.StopDragAutoScroll();
             e.Pointer.Capture(null);
 
             // A plain click with no drag clears the selection so the next
@@ -306,12 +321,8 @@ internal sealed class TerminalPointerHandler
 
         this.owner.ViewportOffset = target;
 
-        // Entering scrollback invalidates the visible-grid-anchored selection.
-        if (!this.owner.Selection.IsEmpty)
-        {
-            this.owner.Selection.Clear();
-        }
-
+        // Selection now uses absolute-row coordinates and remains valid
+        // across scrollback navigation; nothing to clear here.
         this.owner.InvalidateVisual();
         e.Handled = true;
     }
@@ -334,6 +345,109 @@ internal sealed class TerminalPointerHandler
     {
         this.handCursor?.Dispose();
         this.handCursor = null;
+        this.StopDragAutoScroll();
+    }
+
+    /// <summary>
+    /// Starts or stops the drag auto-scroll timer based on the pointer's
+    /// position relative to the visible grid bounds. Called on every
+    /// pointer-moved event during an active drag.
+    /// </summary>
+    /// <param name="position">Current pointer position in control-local pixels.</param>
+    private void UpdateDragAutoScroll(Point position)
+    {
+        this.lastDragPointerPosition = position;
+
+        double topEdge = this.owner.TopInset;
+        double bottomEdge = this.owner.Bounds.Height;
+        int direction = 0;
+        if (position.Y < topEdge)
+        {
+            direction = +1;  // scroll up into older history
+        }
+        else if (position.Y > bottomEdge)
+        {
+            direction = -1;  // scroll down toward live grid
+        }
+
+        // Skip up-direction auto-scroll when there's no scrollback to show
+        // and skip down-direction auto-scroll when already at the bottom.
+        if (direction > 0 && this.owner.ViewportOffset >= this.owner.Buffer.ScrollbackCount)
+        {
+            direction = 0;
+        }
+        else if (direction < 0 && this.owner.ViewportOffset == 0)
+        {
+            direction = 0;
+        }
+
+        if (direction == 0)
+        {
+            this.StopDragAutoScroll();
+            return;
+        }
+
+        this.dragAutoScrollDirection = direction;
+        if (this.dragAutoScrollTimer is null)
+        {
+            this.dragAutoScrollTimer = new DispatcherTimer(DragAutoScrollInterval, DispatcherPriority.Input, this.OnDragAutoScrollTick);
+            this.dragAutoScrollTimer.Start();
+        }
+    }
+
+    private void StopDragAutoScroll()
+    {
+        if (this.dragAutoScrollTimer is null)
+        {
+            return;
+        }
+
+        this.dragAutoScrollTimer.Stop();
+        this.dragAutoScrollTimer.Tick -= this.OnDragAutoScrollTick;
+        this.dragAutoScrollTimer = null;
+        this.dragAutoScrollDirection = 0;
+    }
+
+    private void OnDragAutoScrollTick(object? sender, EventArgs e)
+    {
+        if (!this.pointerDragSelecting || this.dragAutoScrollDirection == 0)
+        {
+            this.StopDragAutoScroll();
+            return;
+        }
+
+        // Use the alt-buffer guard from the wheel handler: pagers manage
+        // their own scrolling, and we shouldn't fight them.
+        if (this.owner.Buffer.IsUsingAltBuffer)
+        {
+            this.StopDragAutoScroll();
+            return;
+        }
+
+        int scrollbackCount = this.owner.Buffer.ScrollbackCount;
+        int before = this.owner.ViewportOffset;
+        int target = Math.Clamp(before + this.dragAutoScrollDirection, 0, scrollbackCount);
+        if (target == before)
+        {
+            this.StopDragAutoScroll();
+            return;
+        }
+
+        this.owner.ViewportOffset = target;
+
+        // Re-extend the selection using the latest pointer position so the
+        // active endpoint follows the newly-revealed row.
+        var (row, col) = this.owner.PixelToGridPosition(this.lastDragPointerPosition);
+        int absRowAtScreenZero = this.owner.Buffer.ScrollbackCount - this.owner.ViewportOffset;
+        int absRow = absRowAtScreenZero + row;
+        var screen = this.owner.Buffer.GetScreen();
+        if (screen is not null)
+        {
+            var rowSource = new BufferRowSource(this.owner.Buffer, screen);
+            this.owner.Selection.ExtendTo(absRow, col, rowSource);
+        }
+
+        this.owner.InvalidateVisual();
     }
 
     /// <summary>

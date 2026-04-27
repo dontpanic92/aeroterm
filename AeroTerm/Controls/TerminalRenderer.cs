@@ -69,6 +69,10 @@ internal sealed class TerminalRenderer : IDisposable
     /// cleared background. Used for the floating title-bar blur effect.</param>
     /// <param name="selection">Optional active text selection to overlay, or <c>null</c>.</param>
     /// <param name="selectionColor">Fill color for the selection overlay. Ignored when <paramref name="selection"/> is null or empty.</param>
+    /// <param name="selectionRowOffset">Absolute-row offset corresponding to
+    /// screen row 0. Selection coordinates are in absolute-row space; the
+    /// renderer projects them to screen rows as
+    /// <c>screenRow = absRow - selectionRowOffset</c>.</param>
     /// <param name="hyperlinkRun">Optional OSC 8 hyperlink run to underline as a hover affordance, or <c>null</c>.</param>
     /// <param name="searchMatches">Optional visible search-overlay matches
     /// to highlight (projected into <see cref="Pty.Screen"/> row coords).
@@ -84,6 +88,7 @@ internal sealed class TerminalRenderer : IDisposable
         float topInset = 0,
         TerminalSelection? selection = null,
         SKColor selectionColor = default,
+        int selectionRowOffset = 0,
         HyperlinkRun? hyperlinkRun = null,
         IReadOnlyList<VisibleMatch>? searchMatches = null)
     {
@@ -117,17 +122,22 @@ internal sealed class TerminalRenderer : IDisposable
         }
 
         // Paint selection overlay between backgrounds and text so glyphs stay
-        // legible atop the tint.
+        // legible atop the tint. Selection coordinates are in absolute-row
+        // space; project to screen rows via selectionRowOffset.
         if (selection is not null && !selection.IsEmpty)
         {
             this.selectionPaint.Color = selectionColor;
             var (sr, sc, er, ec) = selection.GetNormalizedRange();
-            sr = Math.Clamp(sr, 0, rows - 1);
-            er = Math.Clamp(er, 0, rows - 1);
-            for (int i = sr; i <= er; i++)
+            int srScreen = sr - selectionRowOffset;
+            int erScreen = er - selectionRowOffset;
+
+            // Clip to the visible screen rows.
+            int firstScreen = Math.Max(0, srScreen);
+            int lastScreen = Math.Min(rows - 1, erScreen);
+            for (int i = firstScreen; i <= lastScreen; i++)
             {
-                int startCol = i == sr ? Math.Clamp(sc, 0, cols - 1) : 0;
-                int endCol = i == er ? Math.Clamp(ec, 0, cols - 1) : cols - 1;
+                int startCol = i == srScreen ? Math.Clamp(sc, 0, cols - 1) : 0;
+                int endCol = i == erScreen ? Math.Clamp(ec, 0, cols - 1) : cols - 1;
                 if (endCol < startCol)
                 {
                     continue;

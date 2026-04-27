@@ -234,6 +234,107 @@ public class TerminalSelectionTests
         Assert.That((er, ec), Is.EqualTo((1, 3)));
     }
 
+    /// <summary>
+    /// <see cref="TerminalSelection.Shift"/> moves all stored row indices
+    /// uniformly. Used by the owner to compensate for scrollback ring
+    /// eviction without losing the user's selection.
+    /// </summary>
+    [Test]
+    public void Shift_TranslatesAllRowsByDelta()
+    {
+        var rows = new ListRowSource(new[] { "alpha", "beta-", "gamma" });
+        var s = new TerminalSelection();
+        s.BeginCharacter(1, 0, rows);
+        s.ExtendTo(2, 4, rows);
+
+        s.Shift(-1);
+
+        var (sr, sc, er, ec) = s.GetNormalizedRange();
+        Assert.That((sr, sc, er, ec), Is.EqualTo((0, 0, 1, 4)));
+    }
+
+    /// <summary>
+    /// <see cref="TerminalSelection.ClampRows"/> snaps endpoints into the
+    /// supplied range. After clamping, copy text reflects the surviving
+    /// portion of the selection.
+    /// </summary>
+    [Test]
+    public void ClampRows_TrimsEndpointsToRange()
+    {
+        var rows = new ListRowSource(new[] { "alpha", "beta", "gamma" });
+        var s = new TerminalSelection();
+        s.BeginCharacter(0, 0, rows);
+        s.ExtendTo(2, 4, rows);
+
+        s.ClampRows(1, 2);
+
+        Assert.That(s.IsEmpty, Is.False);
+        Assert.That(s.CopyText(rows), Is.EqualTo("beta\ngamma"));
+    }
+
+    /// <summary>
+    /// When the entire selection range falls outside the clamping window
+    /// the selection is cleared (full eviction).
+    /// </summary>
+    [Test]
+    public void ClampRows_FullyOutOfRange_ClearsSelection()
+    {
+        var rows = new ListRowSource(new[] { "alpha", "beta", "gamma" });
+        var s = new TerminalSelection();
+        s.BeginCharacter(0, 0, rows);
+        s.ExtendTo(0, 4, rows);
+
+        s.ClampRows(2, 2);
+
+        Assert.That(s.IsEmpty, Is.True);
+        Assert.That(s.Mode, Is.EqualTo(TerminalSelectionMode.None));
+    }
+
+    /// <summary>
+    /// Cross-row character selection over a row source returns the joined
+    /// text with rtrimmed full rows, matching the visible-grid behavior.
+    /// </summary>
+    [Test]
+    public void CopyText_ITerminalRowSource_AcrossRows()
+    {
+        var rows = new ListRowSource(new[] { "line one   ", "line two   ", "line three " });
+        var s = new TerminalSelection();
+        s.BeginCharacter(0, 0, rows);
+        s.ExtendTo(2, 3, rows);
+
+        Assert.That(s.CopyText(rows), Is.EqualTo("line one\nline two\nline"));
+    }
+
+    /// <summary>
+    /// Word selection on a scrollback-backed row addresses the row's full
+    /// width, even when scrollback rows happen to be narrower than the
+    /// live grid (post-shrink).
+    /// </summary>
+    [Test]
+    public void BeginWord_OnScrollbackRow_UsesRowOwnWidth()
+    {
+        var rows = new ListRowSource(new[] { "scroll-old" }, liveCols: 80);
+        var s = new TerminalSelection();
+        s.BeginWord(0, 3, rows);
+
+        Assert.That(s.CopyText(rows), Is.EqualTo("scroll-old"));
+    }
+
+    /// <summary>
+    /// Line selection on a row whose width differs from <c>Cols</c> uses
+    /// the row's own length for the trailing endpoint.
+    /// </summary>
+    [Test]
+    public void BeginLine_OnNarrowScrollbackRow_CoversRowWidth()
+    {
+        var rows = new ListRowSource(new[] { "abc" }, liveCols: 80);
+        var s = new TerminalSelection();
+        s.BeginLine(0, rows);
+
+        var (sr, sc, er, ec) = s.GetNormalizedRange();
+        Assert.That((sr, sc, er, ec), Is.EqualTo((0, 0, 0, 2)));
+    }
+
     private static Cell[,] Grid(params string[] rows)
     {
         int h = rows.Length;
@@ -261,5 +362,52 @@ public class TerminalSelectionTests
 
         cells[0, leadCol + 1] = new Cell(null, default);
         return cells;
+    }
+
+    /// <summary>
+    /// In-test <see cref="ITerminalRowSource"/> implementation backed by a
+    /// list of strings (one per absolute row). Lets tests address rows
+    /// of varying widths and pick a live-grid <c>Cols</c> independently
+    /// (mimicking a scrollback row narrower than the current viewport).
+    /// </summary>
+    private sealed class ListRowSource : ITerminalRowSource
+    {
+        private readonly Cell[][] rows;
+
+        public ListRowSource(string[] rows, int? liveCols = null)
+        {
+            this.rows = new Cell[rows.Length][];
+            int maxWidth = 0;
+            for (int r = 0; r < rows.Length; r++)
+            {
+                var s = rows[r];
+                this.rows[r] = new Cell[s.Length];
+                for (int c = 0; c < s.Length; c++)
+                {
+                    this.rows[r][c] = new Cell(s[c].ToString(), default);
+                }
+
+                if (s.Length > maxWidth)
+                {
+                    maxWidth = s.Length;
+                }
+            }
+
+            this.Cols = liveCols ?? maxWidth;
+        }
+
+        public int RowCount => this.rows.Length;
+
+        public int Cols { get; }
+
+        public Cell[] GetRow(int absRow)
+        {
+            if (absRow < 0 || absRow >= this.rows.Length)
+            {
+                return Array.Empty<Cell>();
+            }
+
+            return this.rows[absRow];
+        }
     }
 }

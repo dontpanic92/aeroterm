@@ -29,16 +29,19 @@ internal enum TerminalSelectionMode
 }
 
 /// <summary>
-/// Tracks a terminal text selection over the visible screen grid. Coordinates
-/// are in (row, column) cell space; (0, 0) is the top-left visible cell.
-/// The type is pure — it knows nothing about Avalonia input, the PTY, or
-/// rendering — so it is cheap to unit test.
+/// Tracks a terminal text selection over the addressable buffer in
+/// absolute-row coordinates. Absolute row 0 is the oldest scrollback
+/// row when present, otherwise the top of the live grid; rows
+/// <c>[ScrollbackCount, ScrollbackCount + LiveRows)</c> reference the
+/// live screen.
 /// </summary>
 /// <remarks>
-/// AeroTerm has no scrollback ring today, so a selection is valid only for
-/// the current visible grid snapshot. The owning control is responsible for
-/// invalidating the selection when the buffer scrolls, the screen is cleared,
-/// or the alt-buffer is switched.
+/// The class itself is pure — it knows nothing about Avalonia input,
+/// the PTY, or rendering. Owners are responsible for providing a
+/// suitable <see cref="ITerminalRowSource"/> snapshot for each call,
+/// for shifting/clamping the selection when the scrollback ring evicts
+/// rows (<see cref="Shift"/>, <see cref="ClampRows"/>), and for clearing
+/// it on alt-buffer switch / full reset.
 /// </remarks>
 internal sealed class TerminalSelection
 {
@@ -54,12 +57,12 @@ internal sealed class TerminalSelection
     public TerminalSelectionMode Mode { get; private set; }
 
     /// <summary>
-    /// Gets the fixed endpoint of the selection.
+    /// Gets the fixed endpoint of the selection in absolute-row coords.
     /// </summary>
     public (int Row, int Col) Anchor { get; private set; }
 
     /// <summary>
-    /// Gets the moving endpoint of the selection.
+    /// Gets the moving endpoint of the selection in absolute-row coords.
     /// </summary>
     public (int Row, int Col) Active { get; private set; }
 
@@ -73,12 +76,12 @@ internal sealed class TerminalSelection
     /// <summary>
     /// Begins a character-granularity selection at the given cell.
     /// </summary>
-    /// <param name="row">Grid row.</param>
-    /// <param name="col">Grid column.</param>
-    /// <param name="cells">Current visible cells for wide-char canonicalization.</param>
-    public void BeginCharacter(int row, int col, Cell[,] cells)
+    /// <param name="absRow">Absolute row index.</param>
+    /// <param name="col">Column index.</param>
+    /// <param name="rows">Row source for wide-char canonicalization.</param>
+    public void BeginCharacter(int absRow, int col, ITerminalRowSource rows)
     {
-        var p = CanonicalizeEndpoint(cells, row, col);
+        var p = CanonicalizeEndpoint(rows, absRow, col);
         this.Mode = TerminalSelectionMode.Character;
         this.Anchor = p;
         this.Active = p;
@@ -90,13 +93,13 @@ internal sealed class TerminalSelection
     /// Begins a word-granularity selection by snapping to the word boundaries
     /// around the given cell.
     /// </summary>
-    /// <param name="row">Grid row.</param>
-    /// <param name="col">Grid column.</param>
-    /// <param name="cells">Current visible cells.</param>
-    public void BeginWord(int row, int col, Cell[,] cells)
+    /// <param name="absRow">Absolute row index.</param>
+    /// <param name="col">Column index.</param>
+    /// <param name="rows">Row source.</param>
+    public void BeginWord(int absRow, int col, ITerminalRowSource rows)
     {
-        var p = CanonicalizeEndpoint(cells, row, col);
-        var (s, e) = FindWordRange(cells, p.Row, p.Col);
+        var p = CanonicalizeEndpoint(rows, absRow, col);
+        var (s, e) = FindWordRange(rows, p.Row, p.Col);
         this.Mode = TerminalSelectionMode.Word;
         this.boundaryAnchorStart = s;
         this.boundaryAnchorEnd = e;
@@ -107,13 +110,13 @@ internal sealed class TerminalSelection
     /// <summary>
     /// Begins a line-granularity selection covering the full row.
     /// </summary>
-    /// <param name="row">Grid row.</param>
-    /// <param name="cells">Current visible cells.</param>
-    public void BeginLine(int row, Cell[,] cells)
+    /// <param name="absRow">Absolute row index.</param>
+    /// <param name="rows">Row source.</param>
+    public void BeginLine(int absRow, ITerminalRowSource rows)
     {
-        int cols = cells.GetLength(1);
-        var s = (row, 0);
-        var e = (row, Math.Max(0, cols - 1));
+        int width = LineWidth(rows, absRow);
+        var s = (absRow, 0);
+        var e = (absRow, Math.Max(0, width - 1));
         this.Mode = TerminalSelectionMode.Line;
         this.boundaryAnchorStart = s;
         this.boundaryAnchorEnd = e;
@@ -126,17 +129,17 @@ internal sealed class TerminalSelection
     /// the endpoint snaps to the corresponding boundary; the selection
     /// always grows outward from the original anchor.
     /// </summary>
-    /// <param name="row">Grid row.</param>
-    /// <param name="col">Grid column.</param>
-    /// <param name="cells">Current visible cells.</param>
-    public void ExtendTo(int row, int col, Cell[,] cells)
+    /// <param name="absRow">Absolute row index.</param>
+    /// <param name="col">Column index.</param>
+    /// <param name="rows">Row source.</param>
+    public void ExtendTo(int absRow, int col, ITerminalRowSource rows)
     {
         if (this.Mode == TerminalSelectionMode.None)
         {
             return;
         }
 
-        var p = CanonicalizeEndpoint(cells, row, col);
+        var p = CanonicalizeEndpoint(rows, absRow, col);
 
         if (this.Mode == TerminalSelectionMode.Character)
         {
@@ -146,7 +149,7 @@ internal sealed class TerminalSelection
 
         if (this.Mode == TerminalSelectionMode.Word)
         {
-            var (s, e) = FindWordRange(cells, p.Row, p.Col);
+            var (s, e) = FindWordRange(rows, p.Row, p.Col);
             if (Compare(s, this.boundaryAnchorStart) < 0)
             {
                 this.Anchor = this.boundaryAnchorEnd;
@@ -162,8 +165,8 @@ internal sealed class TerminalSelection
         }
 
         // Line mode.
-        int cols = cells.GetLength(1);
-        if (p.Row < this.boundaryAnchorStart.Row)
+        int width = LineWidth(rows, p.Row);
+        if (Compare((p.Row, 0), this.boundaryAnchorStart) < 0)
         {
             this.Anchor = this.boundaryAnchorEnd;
             this.Active = (p.Row, 0);
@@ -171,7 +174,7 @@ internal sealed class TerminalSelection
         else
         {
             this.Anchor = this.boundaryAnchorStart;
-            this.Active = (p.Row, Math.Max(0, cols - 1));
+            this.Active = (p.Row, Math.Max(0, width - 1));
         }
     }
 
@@ -185,6 +188,65 @@ internal sealed class TerminalSelection
         this.Active = default;
         this.boundaryAnchorStart = default;
         this.boundaryAnchorEnd = default;
+    }
+
+    /// <summary>
+    /// Shifts every absolute row reference in the selection by
+    /// <paramref name="rowDelta"/>. Negative deltas move the selection
+    /// upward (used to compensate for scrollback eviction). Caller is
+    /// responsible for following up with <see cref="ClampRows"/> if the
+    /// shift can drive endpoints out of range.
+    /// </summary>
+    /// <param name="rowDelta">Row delta to apply.</param>
+    public void Shift(int rowDelta)
+    {
+        if (this.Mode == TerminalSelectionMode.None || rowDelta == 0)
+        {
+            return;
+        }
+
+        this.Anchor = (this.Anchor.Row + rowDelta, this.Anchor.Col);
+        this.Active = (this.Active.Row + rowDelta, this.Active.Col);
+        this.boundaryAnchorStart = (this.boundaryAnchorStart.Row + rowDelta, this.boundaryAnchorStart.Col);
+        this.boundaryAnchorEnd = (this.boundaryAnchorEnd.Row + rowDelta, this.boundaryAnchorEnd.Col);
+    }
+
+    /// <summary>
+    /// Clamps the selection to <c>[minRow, maxRow]</c>. Endpoints below
+    /// <paramref name="minRow"/> snap to <paramref name="minRow"/> at
+    /// column 0; endpoints above <paramref name="maxRow"/> snap to
+    /// <paramref name="maxRow"/>. If the entire selection sits outside
+    /// the range it is cleared.
+    /// </summary>
+    /// <param name="minRow">Inclusive lower bound on absolute rows.</param>
+    /// <param name="maxRow">Inclusive upper bound on absolute rows.</param>
+    public void ClampRows(int minRow, int maxRow)
+    {
+        if (this.Mode == TerminalSelectionMode.None)
+        {
+            return;
+        }
+
+        if (maxRow < minRow)
+        {
+            this.Clear();
+            return;
+        }
+
+        int aRow = this.Anchor.Row;
+        int bRow = this.Active.Row;
+        int hi = Math.Max(aRow, bRow);
+        int lo = Math.Min(aRow, bRow);
+        if (hi < minRow || lo > maxRow)
+        {
+            this.Clear();
+            return;
+        }
+
+        this.Anchor = ClampEndpoint(this.Anchor, minRow, maxRow);
+        this.Active = ClampEndpoint(this.Active, minRow, maxRow);
+        this.boundaryAnchorStart = ClampEndpoint(this.boundaryAnchorStart, minRow, maxRow);
+        this.boundaryAnchorEnd = ClampEndpoint(this.boundaryAnchorEnd, minRow, maxRow);
     }
 
     /// <summary>
@@ -206,14 +268,14 @@ internal sealed class TerminalSelection
     }
 
     /// <summary>
-    /// Tests whether the given cell lies within the current selection. Wide
-    /// glyph continuation cells (Character == null) are reported as selected
-    /// when their leading cell is selected.
+    /// Tests whether the given absolute cell lies within the current
+    /// selection. Wide glyph continuation cells (Character == null) are
+    /// reported as selected when their leading cell is selected.
     /// </summary>
-    /// <param name="row">Grid row.</param>
-    /// <param name="col">Grid column.</param>
+    /// <param name="absRow">Absolute row index.</param>
+    /// <param name="col">Column index.</param>
     /// <returns>True if the cell is within the selection.</returns>
-    public bool Contains(int row, int col)
+    public bool Contains(int absRow, int col)
     {
         if (this.Mode == TerminalSelectionMode.None)
         {
@@ -221,7 +283,7 @@ internal sealed class TerminalSelection
         }
 
         var (sr, sc, er, ec) = this.GetNormalizedRange();
-        if (row < sr || row > er)
+        if (absRow < sr || absRow > er)
         {
             return false;
         }
@@ -231,12 +293,12 @@ internal sealed class TerminalSelection
             return col >= sc && col <= ec;
         }
 
-        if (row == sr)
+        if (absRow == sr)
         {
             return col >= sc;
         }
 
-        if (row == er)
+        if (absRow == er)
         {
             return col <= ec;
         }
@@ -245,43 +307,46 @@ internal sealed class TerminalSelection
     }
 
     /// <summary>
-    /// Extracts the selected text from the given visible cells. Fully
+    /// Extracts the selected text from the given row source. Fully
     /// selected rows are right-trimmed of blank cells and separated by
     /// <c>\n</c>; the final row preserves its trailing content up to the
     /// last selected column. Wide glyphs are emitted once.
     /// </summary>
-    /// <param name="cells">The visible cells.</param>
+    /// <param name="rows">The row source.</param>
     /// <returns>The plain-text selection content.</returns>
-    public string CopyText(Cell[,] cells)
+    public string CopyText(ITerminalRowSource rows)
     {
-        if (this.Mode == TerminalSelectionMode.None)
-        {
-            return string.Empty;
-        }
-
-        int rows = cells.GetLength(0);
-        int cols = cells.GetLength(1);
-        if (rows == 0 || cols == 0)
+        if (this.Mode == TerminalSelectionMode.None || rows.RowCount == 0)
         {
             return string.Empty;
         }
 
         var (sr, sc, er, ec) = this.GetNormalizedRange();
-        sr = Math.Clamp(sr, 0, rows - 1);
-        er = Math.Clamp(er, 0, rows - 1);
-        sc = Math.Clamp(sc, 0, cols - 1);
-        ec = Math.Clamp(ec, 0, cols - 1);
+        sr = Math.Clamp(sr, 0, rows.RowCount - 1);
+        er = Math.Clamp(er, 0, rows.RowCount - 1);
 
         var sb = new StringBuilder();
         for (int r = sr; r <= er; r++)
         {
-            int cStart = r == sr ? sc : 0;
-            int cEnd = r == er ? ec : cols - 1;
+            var row = rows.GetRow(r);
+            int width = row.Length;
+            if (width == 0)
+            {
+                if (r < er)
+                {
+                    sb.Append('\n');
+                }
+
+                continue;
+            }
+
+            int cStart = r == sr ? Math.Clamp(sc, 0, width - 1) : 0;
+            int cEnd = r == er ? Math.Clamp(ec, 0, width - 1) : width - 1;
 
             var rowBuilder = new StringBuilder();
             for (int c = cStart; c <= cEnd; c++)
             {
-                string? ch = cells[r, c].Character;
+                string? ch = row[c].Character;
 
                 // Skip continuation cells of wide glyphs.
                 if (ch is null)
@@ -314,42 +379,114 @@ internal sealed class TerminalSelection
         return sb.ToString();
     }
 
+    // --------------------------------------------------------------------
+    // Cell[,] adapter overloads. These wrap the supplied 2D grid in a
+    // Cell2DRowSource so callers (notably the existing test suite) can
+    // continue to express selections in plain visible-grid coordinates.
+    // --------------------------------------------------------------------
+
+    /// <summary>Cell[,] adapter for <see cref="BeginCharacter(int, int, ITerminalRowSource)"/>.</summary>
+    /// <param name="row">Row index in the supplied grid.</param>
+    /// <param name="col">Column index.</param>
+    /// <param name="cells">Visible-grid cells.</param>
+    public void BeginCharacter(int row, int col, Cell[,] cells)
+        => this.BeginCharacter(row, col, new Cell2DRowSource(cells));
+
+    /// <summary>Cell[,] adapter for <see cref="BeginWord(int, int, ITerminalRowSource)"/>.</summary>
+    /// <param name="row">Row index in the supplied grid.</param>
+    /// <param name="col">Column index.</param>
+    /// <param name="cells">Visible-grid cells.</param>
+    public void BeginWord(int row, int col, Cell[,] cells)
+        => this.BeginWord(row, col, new Cell2DRowSource(cells));
+
+    /// <summary>Cell[,] adapter for <see cref="BeginLine(int, ITerminalRowSource)"/>.</summary>
+    /// <param name="row">Row index in the supplied grid.</param>
+    /// <param name="cells">Visible-grid cells.</param>
+    public void BeginLine(int row, Cell[,] cells)
+        => this.BeginLine(row, new Cell2DRowSource(cells));
+
+    /// <summary>Cell[,] adapter for <see cref="ExtendTo(int, int, ITerminalRowSource)"/>.</summary>
+    /// <param name="row">Row index in the supplied grid.</param>
+    /// <param name="col">Column index.</param>
+    /// <param name="cells">Visible-grid cells.</param>
+    public void ExtendTo(int row, int col, Cell[,] cells)
+        => this.ExtendTo(row, col, new Cell2DRowSource(cells));
+
+    /// <summary>Cell[,] adapter for <see cref="CopyText(ITerminalRowSource)"/>.</summary>
+    /// <param name="cells">Visible-grid cells.</param>
+    /// <returns>The selected text.</returns>
+    public string CopyText(Cell[,] cells)
+        => this.CopyText(new Cell2DRowSource(cells));
+
+    private static (int Row, int Col) ClampEndpoint((int Row, int Col) p, int minRow, int maxRow)
+    {
+        if (p.Row < minRow)
+        {
+            return (minRow, 0);
+        }
+
+        if (p.Row > maxRow)
+        {
+            return (maxRow, p.Col);
+        }
+
+        return p;
+    }
+
     private static int Compare((int Row, int Col) a, (int Row, int Col) b)
     {
         int d = a.Row - b.Row;
         return d != 0 ? d : a.Col - b.Col;
     }
 
-    private static (int Row, int Col) CanonicalizeEndpoint(Cell[,] cells, int row, int col)
+    private static int LineWidth(ITerminalRowSource rows, int absRow)
     {
-        int rows = cells.GetLength(0);
-        int cols = cells.GetLength(1);
-        if (rows == 0 || cols == 0)
+        var row = rows.GetRow(absRow);
+        return row.Length > 0 ? row.Length : rows.Cols;
+    }
+
+    private static (int Row, int Col) CanonicalizeEndpoint(ITerminalRowSource rows, int absRow, int col)
+    {
+        if (rows.RowCount == 0)
         {
-            return (row, col);
+            return (absRow, col);
         }
 
-        row = Math.Clamp(row, 0, rows - 1);
-        col = Math.Clamp(col, 0, cols - 1);
+        absRow = Math.Clamp(absRow, 0, rows.RowCount - 1);
+        var row = rows.GetRow(absRow);
+        int width = row.Length;
+        if (width == 0)
+        {
+            return (absRow, Math.Max(0, col));
+        }
+
+        col = Math.Clamp(col, 0, width - 1);
 
         // If the pointer landed on the second half of a wide glyph, move
         // the endpoint back onto the leading cell so range math and copy
         // behave consistently.
-        if (cells[row, col].Character is null && col > 0)
+        if (row[col].Character is null && col > 0)
         {
             col--;
         }
 
-        return (row, col);
+        return (absRow, col);
     }
 
     private static ((int Row, int Col) Start, (int Row, int Col) End) FindWordRange(
-        Cell[,] cells,
-        int row,
+        ITerminalRowSource rows,
+        int absRow,
         int col)
     {
-        int cols = cells.GetLength(1);
-        int startCategory = Category(cells[row, col].Character);
+        var row = rows.GetRow(absRow);
+        int width = row.Length;
+        if (width == 0)
+        {
+            return ((absRow, col), (absRow, col));
+        }
+
+        col = Math.Clamp(col, 0, width - 1);
+        int startCategory = Category(row[col].Character);
 
         int s = col;
         while (s > 0)
@@ -357,7 +494,7 @@ internal sealed class TerminalSelection
             int prev = s - 1;
 
             // Treat continuation cells as part of the same glyph as their lead.
-            if (cells[row, prev].Character is null)
+            if (row[prev].Character is null)
             {
                 if (prev == 0)
                 {
@@ -365,7 +502,7 @@ internal sealed class TerminalSelection
                 }
 
                 // Peek at the lead cell category.
-                int cat = Category(cells[row, prev - 1].Character);
+                int cat = Category(row[prev - 1].Character);
                 if (cat != startCategory)
                 {
                     break;
@@ -375,7 +512,7 @@ internal sealed class TerminalSelection
                 continue;
             }
 
-            if (Category(cells[row, prev].Character) != startCategory)
+            if (Category(row[prev].Character) != startCategory)
             {
                 break;
             }
@@ -384,18 +521,18 @@ internal sealed class TerminalSelection
         }
 
         int e = col;
-        while (e < cols - 1)
+        while (e < width - 1)
         {
             int next = e + 1;
 
             // Continuation of the current glyph: keep going.
-            if (cells[row, next].Character is null)
+            if (row[next].Character is null)
             {
                 e = next;
                 continue;
             }
 
-            if (Category(cells[row, next].Character) != startCategory)
+            if (Category(row[next].Character) != startCategory)
             {
                 break;
             }
@@ -403,7 +540,7 @@ internal sealed class TerminalSelection
             e = next;
         }
 
-        return ((row, s), (row, e));
+        return ((absRow, s), (absRow, e));
     }
 
     private static int Category(string? ch)

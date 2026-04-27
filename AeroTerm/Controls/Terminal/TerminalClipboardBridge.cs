@@ -6,6 +6,7 @@
 namespace AeroTerm.Controls.Terminal;
 
 using System.Threading.Tasks;
+using AeroTerm.Controls;
 using AeroTerm.Diagnostics;
 using AeroTerm.Pty;
 using AeroTerm.Services;
@@ -69,7 +70,7 @@ internal sealed class TerminalClipboardBridge
             return;
         }
 
-        string text = selection.CopyText(screen.Cells);
+        string text = selection.CopyText(new BufferRowSource(buffer, screen));
         if (string.IsNullOrEmpty(text))
         {
             return;
@@ -100,7 +101,7 @@ internal sealed class TerminalClipboardBridge
             return;
         }
 
-        string text = selection.CopyText(screen.Cells);
+        string text = selection.CopyText(new BufferRowSource(buffer, screen));
         if (string.IsNullOrEmpty(text))
         {
             return;

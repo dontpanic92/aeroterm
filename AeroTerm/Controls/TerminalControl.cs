@@ -67,6 +67,7 @@ public class TerminalControl : Control, IDisposable
     private int activeMatchIndex = -1;
     private int searchSnapshotScrollbackCount;
     private int searchSnapshotRows;
+    private int lastEvictedDelta;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -837,6 +838,15 @@ public class TerminalControl : Control, IDisposable
 
         this.buffer.Resize(cols, rows);
         this.ptyBridge.Resize(cols, rows);
+
+        // After resize the scrollback ring may have absorbed live rows, the
+        // live grid height may have shrunk, and per-row column counts may
+        // have changed. Clear any active selection rather than try to track
+        // these shifts precisely.
+        if (this.selection.Mode != TerminalSelectionMode.None)
+        {
+            this.selection.Clear();
+        }
     }
 
     private void UpdateModeInfoFromBuffer()
@@ -1102,16 +1112,21 @@ public class TerminalControl : Control, IDisposable
         HyperlinkRun? hyperlinkForRender = this.pointerHandler.CurrentHyperlinkRun;
         Pty.Screen renderScreen = screen;
 
+        // Project absolute-row selection coordinates into screen rows.
+        // selectionRowOffset is the absolute-row index that maps to screen
+        // row 0; equivalently, ScrollbackCount - viewportOffset.
+        int scrollbackCountForRender = this.buffer.ScrollbackCount;
+        int selectionRowOffset = scrollbackCountForRender - this.viewportOffset;
+
         if (this.viewportOffset > 0)
         {
             renderScreen = TerminalVisualHost.ComposeScrollbackScreen(screen, this.buffer, this.viewportOffset);
 
-            // Hide the cursor and any hyperlink overlay while viewing history;
-            // selection is visible-grid-only and is cleared on entering
-            // scrollback, so we deliberately omit the selection overlay here.
+            // Hide the cursor and any hyperlink overlay while viewing history.
+            // Selection now operates in absolute-row coords so it remains
+            // valid (and visible) across the scrollback boundary.
             drawCursor = false;
             hyperlinkForRender = null;
-            selectionForRender = null;
         }
 
         IReadOnlyList<VisibleMatch>? visibleMatches = this.searchOverlayOpen
@@ -1135,6 +1150,7 @@ public class TerminalControl : Control, IDisposable
             this.topInset,
             selectionForRender,
             this.selectionColor,
+            selectionRowOffset,
             hyperlinkForRender,
             visibleMatches);
 
@@ -1237,8 +1253,10 @@ public class TerminalControl : Control, IDisposable
     private int ReaderProcessAndReportScrollbackDelta(ReadOnlySpan<byte> bytes)
     {
         int before = this.buffer.ScrollbackCount;
+        long evictedBefore = this.buffer.ScrollbackEvictedTotal;
         this.parser.Process(bytes);
         int after = this.buffer.ScrollbackCount;
+        this.lastEvictedDelta = (int)Math.Min(int.MaxValue, this.buffer.ScrollbackEvictedTotal - evictedBefore);
         return after - before;
     }
 
@@ -1305,17 +1323,28 @@ public class TerminalControl : Control, IDisposable
             this.viewportOffset = newOffset;
         }
 
-        // Clear any active selection as soon as the shell writes to the
-        // screen: with no scrollback, coordinates reference the visible
-        // grid only, and new output invalidates them.
-        if (this.selection.Mode != TerminalSelectionMode.None)
+        // Selection is anchored in absolute-row coords. New PTY output that
+        // simply pushes lines into scrollback does not invalidate it; only
+        // ring eviction (lines falling off the oldest end) does. Shift
+        // selection rows down by the eviction count and clamp to the new
+        // valid range. This runs on the reader thread but TerminalSelection
+        // mutators are not thread-safe, so we marshal to the UI thread.
+        int evictedDelta = this.lastEvictedDelta;
+        this.lastEvictedDelta = 0;
+        if (this.selection.Mode != TerminalSelectionMode.None && evictedDelta > 0)
         {
+            int evictedSnapshot = evictedDelta;
             Dispatcher.UIThread.Post(() =>
             {
-                if (this.selection.Mode != TerminalSelectionMode.None)
+                if (this.selection.Mode == TerminalSelectionMode.None)
                 {
-                    this.selection.Clear();
+                    return;
                 }
+
+                this.selection.Shift(-evictedSnapshot);
+                int maxRow = this.buffer.ScrollbackCount + (int)this.DesiredRowCount - 1;
+                this.selection.ClampRows(0, maxRow);
+                this.InvalidateVisual();
             });
         }
 

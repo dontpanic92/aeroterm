@@ -399,6 +399,63 @@ public class TerminalBufferTests
     }
 
     /// <summary>
+    /// <see cref="TerminalBuffer.ScrollbackEvictedTotal"/> increments once
+    /// per row overwritten in the ring once it saturates, and stays put
+    /// while the ring is filling.
+    /// </summary>
+    [Test]
+    public void Scrollback_EvictedTotal_IncrementsOnRingOverflow()
+    {
+        var buffer = new TerminalBuffer(1, 2) { ScrollbackLimit = 3 };
+        Assert.That(buffer.ScrollbackEvictedTotal, Is.EqualTo(0));
+
+        for (int i = 0; i < 3; i++)
+        {
+            buffer.SetCursorPosition(0, 0);
+            buffer.PutChar((char)('0' + i));
+            buffer.SetCursorPosition(1, 0);
+            buffer.LineFeed();
+        }
+
+        // Ring filled but not yet overflowing.
+        Assert.That(buffer.ScrollbackEvictedTotal, Is.EqualTo(0));
+
+        for (int i = 3; i < 5; i++)
+        {
+            buffer.SetCursorPosition(0, 0);
+            buffer.PutChar((char)('0' + i));
+            buffer.SetCursorPosition(1, 0);
+            buffer.LineFeed();
+        }
+
+        Assert.That(buffer.ScrollbackEvictedTotal, Is.EqualTo(2));
+    }
+
+    /// <summary>
+    /// Shrinking the scrollback limit credits the dropped lines toward
+    /// <see cref="TerminalBuffer.ScrollbackEvictedTotal"/> so consumers
+    /// anchored to absolute rows can compensate.
+    /// </summary>
+    [Test]
+    public void Scrollback_ShrinkLimit_BumpsEvictedTotal()
+    {
+        var buffer = new TerminalBuffer(1, 2);
+        for (int i = 0; i < 5; i++)
+        {
+            buffer.SetCursorPosition(0, 0);
+            buffer.PutChar((char)('A' + i));
+            buffer.SetCursorPosition(1, 0);
+            buffer.LineFeed();
+        }
+
+        Assume.That(buffer.ScrollbackEvictedTotal, Is.EqualTo(0));
+
+        buffer.ScrollbackLimit = 2;
+
+        Assert.That(buffer.ScrollbackEvictedTotal, Is.EqualTo(3));
+    }
+
+    /// <summary>
     /// Shrinking the limit drops the oldest lines and keeps the newest ones.
     /// </summary>
     [Test]
