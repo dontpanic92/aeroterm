@@ -29,4 +29,11 @@ public enum BlurType
     /// Plain transparent background without blur.
     /// </summary>
     Transparent = 3,
+
+    /// <summary>
+    /// macOS Liquid Glass effect (macOS 26+). Falls back to
+    /// <see cref="Transparent"/> on older macOS versions and to
+    /// <see cref="Acrylic"/> on non-macOS platforms.
+    /// </summary>
+    LiquidGlass = 4,
 }

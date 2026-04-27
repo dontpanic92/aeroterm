@@ -23,6 +23,7 @@ public sealed class WindowEffectsService
     private readonly ILogger<WindowEffectsService> logger;
     private bool isMacFullScreen;
     private bool isDialogOpen;
+    private bool liquidGlassFallbackLogged;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WindowEffectsService"/> class.
@@ -112,6 +113,7 @@ public sealed class WindowEffectsService
                 MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
                 MacOSInterop.EnableUnifiedTitleBar(nsWindow);
                 MacOSInterop.SetWindowIconFromBundle(nsWindow);
+                this.UpdateLiquidGlassBackdrop(nsWindow);
             },
             DispatcherPriority.Background);
     }
@@ -142,6 +144,7 @@ public sealed class WindowEffectsService
             MacOSInterop.SetTransparentTitlebar(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
+            this.UpdateLiquidGlassBackdrop(nsWindow);
         }
         catch (Exception ex)
         {
@@ -176,12 +179,14 @@ public sealed class WindowEffectsService
         if (isFullScreen)
         {
             MacOSInterop.DetachToolbar(nsWindow);
+            MacOSInterop.RemoveLiquidGlassBackdrop(nsWindow);
         }
         else
         {
             MacOSInterop.SetTransparentTitlebar(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
+            this.UpdateLiquidGlassBackdrop(nsWindow);
         }
 
         this.UpdateBackgroundOpacity();
@@ -309,6 +314,15 @@ public sealed class WindowEffectsService
             BlurType.Acrylic => WindowTransparencyLevel.AcrylicBlur,
             BlurType.Mica => WindowTransparencyLevel.Mica,
             BlurType.Transparent => WindowTransparencyLevel.Transparent,
+
+            // Liquid Glass needs no Avalonia-managed material behind the
+            // window — we install our own NSGlassEffectView. Request
+            // Transparent so Avalonia removes its NSVisualEffectView and
+            // the glass surface shows through. On non-macOS / macOS < 26
+            // this path is still selected but InstallLiquidGlassBackdrop
+            // no-ops, leaving a plain transparent window (matching the
+            // documented fallback behavior of BlurType.LiquidGlass).
+            BlurType.LiquidGlass => WindowTransparencyLevel.Transparent,
             _ => WindowTransparencyLevel.None,
         };
     }
@@ -333,19 +347,66 @@ public sealed class WindowEffectsService
             BlurType.Acrylic => 3, // DWMSBT_TRANSIENTWINDOW
             BlurType.Mica => 2, // DWMSBT_MAINWINDOW
             BlurType.Transparent => 0,
+            BlurType.LiquidGlass => 0, // macOS-only effect; no DWM equivalent.
             _ => 0,
         };
     }
 
     /// <summary>
     /// Returns whether Avalonia's internal titlebar material view should be
-    /// hidden. It must be hidden when the user selects the Transparent blur
-    /// type on macOS, because the <c>NSVisualEffectMaterialTitlebar</c> view
-    /// that Avalonia inserts renders as opaque without a behind-window blur.
+    /// hidden. It must be hidden when the user selects the Transparent or
+    /// LiquidGlass blur type on macOS, because the
+    /// <c>NSVisualEffectMaterialTitlebar</c> view that Avalonia inserts
+    /// renders as opaque without a behind-window blur, which would obscure
+    /// the (transparent) titlebar area or stack on top of the Liquid Glass
+    /// backdrop.
     /// </summary>
     private bool ShouldHideTitleBarMaterial()
     {
-        return this.settings.EnableBlurBehind && this.settings.BlurType == BlurType.Transparent;
+        return this.settings.EnableBlurBehind
+            && (this.settings.BlurType == BlurType.Transparent
+                || this.settings.BlurType == BlurType.LiquidGlass);
+    }
+
+    /// <summary>
+    /// Installs or removes the macOS Liquid Glass backdrop in response to
+    /// the current settings. When <see cref="BlurType.LiquidGlass"/> is
+    /// selected and the OS supports it (macOS 26+), an
+    /// <c>NSGlassEffectView</c> is inserted as the back-most subview of
+    /// the NSWindow's contentView. On older macOS the effect silently
+    /// falls back to a plain transparent window and a single info-level
+    /// log message is emitted (per-process).
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    private void UpdateLiquidGlassBackdrop(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        bool wantGlass = this.settings.EnableBlurBehind
+            && this.settings.BlurType == BlurType.LiquidGlass;
+
+        if (!wantGlass)
+        {
+            MacOSInterop.RemoveLiquidGlassBackdrop(nsWindow);
+            return;
+        }
+
+        if (!MacOSInterop.IsMacOS26OrLater())
+        {
+            if (!this.liquidGlassFallbackLogged)
+            {
+                this.liquidGlassFallbackLogged = true;
+                this.logger.LogInformation(
+                    "BlurType.LiquidGlass requested but NSGlassEffectView is unavailable on this macOS version; falling back to a plain transparent window.");
+            }
+
+            return;
+        }
+
+        MacOSInterop.InstallLiquidGlassBackdrop(nsWindow);
     }
 
     private void UpdateBlurPreservationForCurrentSettings()

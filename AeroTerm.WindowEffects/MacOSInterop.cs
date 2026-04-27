@@ -20,6 +20,22 @@ public static class MacOSInterop
     private const long NSWindowToolbarStyleUnifiedCompact = 4;
 
     /// <summary>
+    /// Tag value previously used to mark our backdrop. Retained as a
+    /// constant for documentation purposes only — we now identify the
+    /// installed instance by class lookup (<c>isKindOfClass:</c>) because
+    /// <c>NSView</c>'s <c>tag</c> property is read-only and
+    /// <c>setTag:</c> raises an unrecognized-selector exception on
+    /// <c>NSGlassEffectView</c>.
+    /// </summary>
+    private const long LiquidGlassBackdropTag = 0x4145524F; // 'AERO'
+
+    /// <summary>
+    /// Cached result of <see cref="IsMacOS26OrLater"/>. Reset only on
+    /// process exit (the macOS version doesn't change at runtime).
+    /// </summary>
+    private static bool? isMacOS26OrLaterCached;
+
+    /// <summary>
     /// Configures the NSWindow for a fully transparent background while
     /// preserving native traffic light buttons. Sets the window as non-opaque
     /// with a clear background color, makes the titlebar transparent with a
@@ -383,6 +399,200 @@ public static class MacOSInterop
     }
 
     /// <summary>
+    /// Returns <c>true</c> when the current process is running on macOS 26
+    /// (Tahoe) or later. Uses the managed
+    /// <see cref="Environment.OSVersion"/> probe (which .NET 10 maps to the
+    /// real product version on macOS) so the check works even in
+    /// processes that have not loaded AppKit yet (e.g. unit tests). The
+    /// result is cached for the lifetime of the process. Always returns
+    /// <c>false</c> off macOS.
+    /// </summary>
+    /// <returns><c>true</c> if Liquid Glass APIs are available.</returns>
+    public static bool IsMacOS26OrLater()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return false;
+        }
+
+        if (isMacOS26OrLaterCached.HasValue)
+        {
+            return isMacOS26OrLaterCached.Value;
+        }
+
+        bool present = Environment.OSVersion.Version.Major >= 26;
+        isMacOS26OrLaterCached = present;
+        return present;
+    }
+
+    /// <summary>
+    /// Installs (or refreshes) an <c>NSGlassEffectView</c> as the back-most
+    /// subview of the NSWindow's <c>contentView</c>, providing a window-wide
+    /// Liquid Glass surface. The view is sized to the contentView bounds
+    /// and configured with width-/height-flexible autoresizing so it tracks
+    /// window resizes. A no-op on macOS &lt; 26 or off macOS.
+    /// </summary>
+    /// <remarks>
+    /// AeroTerm's existing transparent-titlebar configuration leaves the
+    /// window non-opaque with a clear background, so the glass surface is
+    /// visible behind everything Avalonia renders. Subsequent calls reuse
+    /// the previously installed instance (located by view tag) so this is
+    /// safe to call from window activation / full-screen restore handlers.
+    /// </remarks>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    public static void InstallLiquidGlassBackdrop(IntPtr nsWindow)
+    {
+        if (!IsMacOS26OrLater() || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr contentView = NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("contentView"));
+        if (contentView == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr existing = FindGlassBackdrop(contentView);
+        if (existing != IntPtr.Zero)
+        {
+            // Re-assert frame in case Avalonia rebuilt the contentView tree.
+            NSRect bounds = NativeMethods.ObjCMsgSendRectRet(
+                contentView,
+                NativeMethods.SelRegisterName("bounds"));
+            NativeMethods.ObjCMsgSendRect(
+                existing,
+                NativeMethods.SelRegisterName("setFrame:"),
+                bounds);
+            return;
+        }
+
+        IntPtr glassClass = NativeMethods.ObjCGetClass("NSGlassEffectView");
+        if (glassClass == IntPtr.Zero)
+        {
+            return;
+        }
+
+        NSRect contentBounds = NativeMethods.ObjCMsgSendRectRet(
+            contentView,
+            NativeMethods.SelRegisterName("bounds"));
+
+        IntPtr alloc = NativeMethods.ObjCMsgSend(
+            glassClass,
+            NativeMethods.SelRegisterName("alloc"));
+        if (alloc == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // [[NSGlassEffectView alloc] initWithFrame:contentView.bounds]
+        IntPtr glass = NativeMethods.ObjCMsgSendRectRetPtr(
+            alloc,
+            NativeMethods.SelRegisterName("initWithFrame:"),
+            contentBounds);
+        if (glass == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // NSViewWidthSizable (1<<1) | NSViewHeightSizable (1<<4) = 18
+        NativeMethods.ObjCMsgSendLong(
+            glass,
+            NativeMethods.SelRegisterName("setAutoresizingMask:"),
+            18);
+
+        // [contentView addSubview:glass positioned:NSWindowBelow relativeTo:nil]
+        // NSWindowBelow = -1 ensures the glass is the back-most subview.
+        NativeMethods.ObjCMsgSendPtrLongPtr(
+            contentView,
+            NativeMethods.SelRegisterName("addSubview:positioned:relativeTo:"),
+            glass,
+            -1,
+            IntPtr.Zero);
+
+        // contentView retained the subview; balance the +1 from alloc/init.
+        NativeMethods.ObjCMsgSend(glass, NativeMethods.SelRegisterName("release"));
+    }
+
+    /// <summary>
+    /// Removes any previously installed Liquid Glass backdrop from the
+    /// NSWindow's <c>contentView</c>. Safe to call repeatedly. A no-op on
+    /// macOS &lt; 26 or off macOS.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    public static void RemoveLiquidGlassBackdrop(IntPtr nsWindow)
+    {
+        if (!IsMacOS26OrLater() || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr contentView = NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("contentView"));
+        if (contentView == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr existing = FindGlassBackdrop(contentView);
+        if (existing != IntPtr.Zero)
+        {
+            NativeMethods.ObjCMsgSend(
+                existing,
+                NativeMethods.SelRegisterName("removeFromSuperview"));
+        }
+    }
+
+    /// <summary>
+    /// Locates a previously installed Liquid Glass backdrop among the
+    /// direct subviews of <paramref name="contentView"/> by class
+    /// (<c>isKindOfClass:NSGlassEffectView</c>). Avalonia does not insert
+    /// instances of this class itself, so the first match is ours.
+    /// </summary>
+    /// <param name="contentView">The NSWindow's contentView.</param>
+    /// <returns>The glass view pointer, or <see cref="IntPtr.Zero"/>.</returns>
+    private static IntPtr FindGlassBackdrop(IntPtr contentView)
+    {
+        IntPtr glassClass = NativeMethods.ObjCGetClass("NSGlassEffectView");
+        if (glassClass == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        IntPtr subviews = NativeMethods.ObjCMsgSend(
+            contentView,
+            NativeMethods.SelRegisterName("subviews"));
+        if (subviews == IntPtr.Zero)
+        {
+            return IntPtr.Zero;
+        }
+
+        IntPtr countSel = NativeMethods.SelRegisterName("count");
+        IntPtr objectAtIndexSel = NativeMethods.SelRegisterName("objectAtIndex:");
+        IntPtr isKindOfClassSel = NativeMethods.SelRegisterName("isKindOfClass:");
+
+        long count = (long)(nint)NativeMethods.ObjCMsgSend(subviews, countSel);
+        for (long i = 0; i < count; i++)
+        {
+            IntPtr subview = NativeMethods.ObjCMsgSendLongRetPtr(subviews, objectAtIndexSel, i);
+            if (subview == IntPtr.Zero)
+            {
+                continue;
+            }
+
+            if (NativeMethods.ObjCMsgSendPtrRetBool(subview, isKindOfClassSel, glassClass))
+            {
+                return subview;
+            }
+        }
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
     /// Loads the bundled <c>.icns</c> icon resource and returns a retained
     /// <c>NSImage</c> pointer. The caller owns one reference and is
     /// responsible for releasing it after assigning it to its target.
@@ -687,5 +897,54 @@ public static class MacOSInterop
         /// <returns>The return value as a pointer.</returns>
         [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
         public static extern IntPtr ObjCMsgSendStringRetPtr(IntPtr receiver, IntPtr selector, [MarshalAs(UnmanagedType.LPUTF8Str)] string arg);
+
+        /// <summary>
+        /// Sends a message with an <see cref="NSRect"/> argument to an
+        /// Objective-C object (e.g. <c>setFrame:</c>).
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <param name="rect">The rectangle argument.</param>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern void ObjCMsgSendRect(IntPtr receiver, IntPtr selector, NSRect rect);
+
+        /// <summary>
+        /// Sends a message with an <see cref="NSRect"/> argument to an
+        /// Objective-C object and returns a pointer result (e.g.
+        /// <c>initWithFrame:</c>).
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <param name="rect">The rectangle argument.</param>
+        /// <returns>The return value as a pointer.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern IntPtr ObjCMsgSendRectRetPtr(IntPtr receiver, IntPtr selector, NSRect rect);
+
+        /// <summary>
+        /// Sends a no-argument message to an Objective-C object and returns
+        /// an <see cref="NSRect"/> (e.g. <c>bounds</c>, <c>frame</c>). The
+        /// .NET runtime emits the AArch64 ABI hidden out-pointer (x8) for
+        /// this large-struct return; on x86_64 the equivalent
+        /// <c>objc_msgSend_stret</c> entry would be required, so this helper
+        /// is intended for arm64-mac (the codebase's primary target).
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <returns>The returned rectangle.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern NSRect ObjCMsgSendRectRet(IntPtr receiver, IntPtr selector);
+
+        /// <summary>
+        /// Sends a message with one pointer, one long, and one pointer
+        /// argument to an Objective-C object (e.g.
+        /// <c>addSubview:positioned:relativeTo:</c>).
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <param name="arg1">First pointer argument.</param>
+        /// <param name="arg2">Long integer argument.</param>
+        /// <param name="arg3">Third pointer argument.</param>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern void ObjCMsgSendPtrLongPtr(IntPtr receiver, IntPtr selector, IntPtr arg1, long arg2, IntPtr arg3);
     }
 }

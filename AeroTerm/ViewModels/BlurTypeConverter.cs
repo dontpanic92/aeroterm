@@ -36,6 +36,11 @@ internal sealed class BlurTypeConverter : IValueConverter
     /// </summary>
     public static readonly BlurTypeConverter Mica = new(BlurType.Mica);
 
+    /// <summary>
+    /// Converter instance for the Liquid Glass blur type (macOS 26+).
+    /// </summary>
+    public static readonly BlurTypeConverter LiquidGlass = new(BlurType.LiquidGlass);
+
     private readonly BlurType targetValue;
 
     private BlurTypeConverter(BlurType targetValue)

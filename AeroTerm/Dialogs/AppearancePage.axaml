@@ -34,6 +34,11 @@
                              IsEnabled="{Binding IsMicaEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Mica}, Mode=TwoWay}" />
 
+                <RadioButton dialogs:SettingsSearch.Label="Liquid Glass"
+                             Content="Liquid Glass (macOS 26+)" GroupName="BlurKind" Margin="20,0,0,5"
+                             IsEnabled="{Binding IsLiquidGlassEnabled}"
+                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.LiquidGlass}, Mode=TwoWay}" />
+
                 <StackPanel dialogs:SettingsSearch.Label="Background Opacity"
                             Orientation="Horizontal" Margin="20,0,0,0">
                     <TextBlock Name="OpacityLabel" Text="Background Opacity" VerticalAlignment="Center" />

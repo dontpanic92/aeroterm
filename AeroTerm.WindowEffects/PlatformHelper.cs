@@ -119,6 +119,16 @@ public static class PlatformHelper
     }
 
     /// <summary>
+    /// Check whether the macOS Liquid Glass effect is available.
+    /// Requires macOS 26 (Tahoe) or later. Always <c>false</c> off macOS.
+    /// </summary>
+    /// <returns>Whether Liquid Glass is available.</returns>
+    public static bool LiquidGlassAvailable()
+    {
+        return MacOSInterop.IsMacOS26OrLater();
+    }
+
+    /// <summary>
     /// Check whether the DWM system backdrop API is available (Windows 11 22H2+).
     /// </summary>
     /// <returns>Whether the DWM backdrop is available.</returns>

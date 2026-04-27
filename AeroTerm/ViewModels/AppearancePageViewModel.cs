@@ -234,6 +234,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
                 this.OnPropertyChanged(nameof(this.IsGaussianEnabled));
                 this.OnPropertyChanged(nameof(this.IsAcrylicEnabled));
                 this.OnPropertyChanged(nameof(this.IsMicaEnabled));
+                this.OnPropertyChanged(nameof(this.IsLiquidGlassEnabled));
                 this.OnPropertyChanged(nameof(this.IsOpacityEnabled));
             }
         }
@@ -321,6 +322,11 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     /// Gets a value indicating whether the Mica radio option should be enabled.
     /// </summary>
     public bool IsMicaEnabled => this.EnableBlurBehind && PlatformHelper.MicaAvailable();
+
+    /// <summary>
+    /// Gets a value indicating whether the Liquid Glass radio option should be enabled.
+    /// </summary>
+    public bool IsLiquidGlassEnabled => this.EnableBlurBehind && PlatformHelper.LiquidGlassAvailable();
 
     /// <summary>
     /// Gets a value indicating whether the opacity slider should be enabled.
