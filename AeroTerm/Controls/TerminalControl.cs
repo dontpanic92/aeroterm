@@ -179,6 +179,14 @@ public class TerminalControl : Control, IDisposable
     public event Action? BellRaised;
 
     /// <summary>
+    /// Raised whenever <see cref="TopInset"/> changes. The argument is the
+    /// new inset in pixels. Hosts that overlay sibling visuals on top of the
+    /// terminal (e.g., the search overlay) subscribe to this so they can
+    /// shift their layout out from under the floating title bar.
+    /// </summary>
+    internal event EventHandler<float>? TopInsetChanged;
+
+    /// <summary>
     /// Gets or sets a value indicating whether font ligature is enabled.
     /// </summary>
     public bool EnableLigature { get; set; }
@@ -369,6 +377,7 @@ public class TerminalControl : Control, IDisposable
             this.topInset = value;
             this.TryResize();
             this.InvalidateVisual();
+            this.TopInsetChanged?.Invoke(this, value);
         }
     }
 

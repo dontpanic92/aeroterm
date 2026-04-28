@@ -8,6 +8,7 @@ namespace AeroTerm.Controls;
 using AeroTerm.Models;
 using AeroTerm.Services;
 using AeroTerm.Utilities;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 
@@ -119,6 +120,11 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.coordinator.TerminalReady -= this.OnTerminalReady;
         this.coordinator.TitleChanged -= this.OnCoordinatorTitleChanged;
         this.coordinator.ProcessExitedNormally -= this.OnCoordinatorProcessExited;
+        if (this.terminal is not null)
+        {
+            this.terminal.TopInsetChanged -= this.OnTerminalTopInsetChanged;
+        }
+
         this.coordinator.Shutdown();
     }
 
@@ -160,7 +166,29 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.terminal = control;
         this.host.Children.Add(control);
         this.host.Children.Add(control.SearchOverlayVisual);
+        this.SyncSearchOverlayMargin(control.TopInset);
+        control.TopInsetChanged += this.OnTerminalTopInsetChanged;
         this.ApplyProfileAppearanceOverrides(control);
+    }
+
+    private void OnTerminalTopInsetChanged(object? sender, float topInset)
+    {
+        this.SyncSearchOverlayMargin(topInset);
+    }
+
+    private void SyncSearchOverlayMargin(float topInset)
+    {
+        if (this.terminal is null)
+        {
+            return;
+        }
+
+        // Anchor the overlay below the floating custom title bar so its
+        // TextBox and buttons aren't z-occluded by the TitleBar grid (which
+        // also lives at the top of the window and intercepts pointer hits
+        // in the same band). The 8 / 12 px insets match the original
+        // SearchOverlay.axaml margins for the visible top/right gap.
+        this.terminal.SearchOverlayVisual.Margin = new Thickness(0, topInset + 8, 12, 0);
     }
 
     private void ApplyProfileAppearanceOverrides(TerminalControl control)
