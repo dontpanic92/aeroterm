@@ -201,6 +201,59 @@ public class SymbolGlyphRendererTests
         }
     }
 
+    /// <summary>Verifies that representative Braille code points are accepted and produce the expected number of dots.</summary>
+    /// <param name="codePoint">A Braille pattern code point.</param>
+    /// <param name="expectedDots">The expected number of set dots (popcount of the low 8 bits).</param>
+    [TestCase(0x2800, 0)] // BRAILLE PATTERN BLANK
+    [TestCase(0x2801, 1)] // dot 1 only
+    [TestCase(0x2880, 1)] // dot 8 only
+    [TestCase(0x28FF, 8)] // all 8 dots
+    [TestCase(0x2847, 4)] // dots 1, 2, 3, 7 (lower-left corner)
+    public void BrailleRendersExpectedDotCount(int codePoint, int expectedDots)
+    {
+        // Use a slightly larger cell so individual dots are easily resolved.
+        const int W = 12;
+        const int H = 28;
+        using var bitmap = new SKBitmap(W, H, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var canvas = new SKCanvas(bitmap);
+        canvas.Clear(SKColors.Black);
+        using var renderer = new SymbolGlyphRenderer();
+        Assume.That(renderer.TryDraw(canvas, codePoint, new SKRect(0, 0, W, H), SKColors.White), Is.True);
+        canvas.Flush();
+
+        // Sample the 8 documented dot positions and count those that
+        // landed on a foreground pixel.
+        int[] dotMaskByPosition = { 0x01, 0x02, 0x04, 0x40, 0x08, 0x10, 0x20, 0x80 };
+        var positions = new (float X, float Y)[]
+        {
+            (W * 0.25f, H * 0.125f),
+            (W * 0.25f, H * 0.375f),
+            (W * 0.25f, H * 0.625f),
+            (W * 0.25f, H * 0.875f),
+            (W * 0.75f, H * 0.125f),
+            (W * 0.75f, H * 0.375f),
+            (W * 0.75f, H * 0.625f),
+            (W * 0.75f, H * 0.875f),
+        };
+
+        int actualDots = 0;
+        for (int i = 0; i < positions.Length; i++)
+        {
+            int sx = (int)positions[i].X;
+            int sy = (int)positions[i].Y;
+            bool hasDot = IsForeground(bitmap.GetPixel(sx, sy));
+            if (hasDot)
+            {
+                actualDots++;
+            }
+
+            bool expectSet = (codePoint & dotMaskByPosition[i]) != 0;
+            Assert.That(hasDot, Is.EqualTo(expectSet), $"Dot position {i} (mask 0x{dotMaskByPosition[i]:X2}) of U+{codePoint:X4}");
+        }
+
+        Assert.That(actualDots, Is.EqualTo(expectedDots));
+    }
+
     /// <summary><see cref="SymbolGlyphRanges.Handles"/> covers the documented ranges and excludes neighbours.</summary>
     [Test]
     public void SymbolGlyphRangesHandlesExpectedRanges()
@@ -211,6 +264,8 @@ public class SymbolGlyphRendererTests
             Assert.That(SymbolGlyphRanges.Handles(0x257F), Is.True);
             Assert.That(SymbolGlyphRanges.Handles(0x2580), Is.True);
             Assert.That(SymbolGlyphRanges.Handles(0x259F), Is.True);
+            Assert.That(SymbolGlyphRanges.Handles(0x2800), Is.True);
+            Assert.That(SymbolGlyphRanges.Handles(0x28FF), Is.True);
             Assert.That(SymbolGlyphRanges.Handles(0xE0A0), Is.True);
             Assert.That(SymbolGlyphRanges.Handles(0xE0D4), Is.True);
             Assert.That(SymbolGlyphRanges.Handles(0x1FB00), Is.True);
@@ -219,6 +274,8 @@ public class SymbolGlyphRendererTests
             Assert.That(SymbolGlyphRanges.Handles('A'), Is.False);
             Assert.That(SymbolGlyphRanges.Handles(0x24FF), Is.False);
             Assert.That(SymbolGlyphRanges.Handles(0x25A0), Is.False);
+            Assert.That(SymbolGlyphRanges.Handles(0x27FF), Is.False);
+            Assert.That(SymbolGlyphRanges.Handles(0x2900), Is.False);
             Assert.That(SymbolGlyphRanges.Handles(0xE09F), Is.False);
             Assert.That(SymbolGlyphRanges.Handles(0xE0D5), Is.False);
             Assert.That(SymbolGlyphRanges.Handles(0x1FAFF), Is.False);

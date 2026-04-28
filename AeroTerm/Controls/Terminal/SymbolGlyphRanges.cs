@@ -38,6 +38,12 @@ internal static class SymbolGlyphRanges
             return true;
         }
 
+        // Braille Patterns: U+2800..U+28FF.
+        if ((uint)(codePoint - 0x2800) <= (0x28FF - 0x2800))
+        {
+            return true;
+        }
+
         // Powerline glyphs (Nerd Font PUA): U+E0A0..U+E0D4.
         if ((uint)(codePoint - 0xE0A0) <= (0xE0D4 - 0xE0A0))
         {

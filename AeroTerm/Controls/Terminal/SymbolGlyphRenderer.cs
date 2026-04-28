@@ -58,6 +58,12 @@ internal sealed class SymbolGlyphRenderer : IDisposable
             return true;
         }
 
+        if (codePoint >= 0x2800 && codePoint <= 0x28FF)
+        {
+            Braille.Draw(canvas, codePoint, cellRect, this.aaFillPaint);
+            return true;
+        }
+
         if (codePoint >= 0xE0A0 && codePoint <= 0xE0D4)
         {
             return Powerline.TryDraw(canvas, codePoint, cellRect, this.fillPaint, this.aaFillPaint, this.strokePaint, this.scratchPath);
