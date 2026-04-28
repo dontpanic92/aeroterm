@@ -915,7 +915,12 @@ public partial class MainWindow : Window
 
         this.effectsService.CurrentBackgroundColor = color;
         this.effectsService.UpdateBackgroundOpacity();
-        this.settings.BackgroundColor = color;
+
+        // Note: do not write `color` back into `this.settings.BackgroundColor`.
+        // The reported colour is a transient hint derived from what the active
+        // pane is currently drawing (e.g. btop fills the alt buffer with its
+        // own bg). Persisting it would clobber the user's saved preference and
+        // make full-screen TUI apps "stick" their bg across restarts.
     }
 
     private void OnActiveTabChanged(TabSession? newActive)

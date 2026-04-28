@@ -1201,7 +1201,7 @@ public class TerminalBuffer
                         int startCol = i < copyRows ? copyCols : 0;
                         for (int j = startCol; j < this.Cols; j++)
                         {
-                            resized[i, j].Clear(this.defaultFg, this.detectedBg, 0);
+                            resized[i, j].Clear(this.defaultFg, this.defaultBg, 0);
                         }
                     }
 
@@ -1865,7 +1865,7 @@ public class TerminalBuffer
         return stops;
     }
 
-    private static bool IsDefaultBlank(Cell cell, int defaultFg, int detectedBg, int defaultBg)
+    private static bool IsDefaultBlank(Cell cell, int defaultFg, int defaultBg)
     {
         _ = defaultFg;
         if (cell.Character is null)
@@ -1879,7 +1879,7 @@ public class TerminalBuffer
             return false;
         }
 
-        if (cell.BackgroundColor != detectedBg && cell.BackgroundColor != defaultBg)
+        if (cell.BackgroundColor != defaultBg)
         {
             return false;
         }
@@ -1893,19 +1893,19 @@ public class TerminalBuffer
         return true;
     }
 
-    private static Cell DefaultBlankCell(int defaultFg, int detectedBg, int specialColor)
+    private static Cell DefaultBlankCell(int defaultFg, int defaultBg, int specialColor)
     {
         var c = default(Cell);
-        c.Clear(defaultFg, detectedBg, specialColor);
+        c.Clear(defaultFg, defaultBg, specialColor);
         return c;
     }
 
-    private static Cell[] BlankRow(int cols, int defaultFg, int detectedBg, int specialColor)
+    private static Cell[] BlankRow(int cols, int defaultFg, int defaultBg, int specialColor)
     {
         var row = new Cell[cols];
         for (int j = 0; j < cols; j++)
         {
-            row[j].Clear(defaultFg, detectedBg, specialColor);
+            row[j].Clear(defaultFg, defaultBg, specialColor);
         }
 
         return row;
@@ -2011,8 +2011,11 @@ public class TerminalBuffer
             }
         }
 
-        // Find the peak bg color in the histogram.
-        int bestColor = this.detectedBg;
+        // Find the peak bg color in the histogram. Seed with defaultBg (not the
+        // current detectedBg) so that when no color holds a strict majority we
+        // fall back to the user's true default rather than drifting with the
+        // previous frame — see notes on the btop alt-buffer regression.
+        int bestColor = this.defaultBg;
         int bestCount = 0;
         foreach (var kvp in this.bgHistogram)
         {
@@ -2026,6 +2029,13 @@ public class TerminalBuffer
         if (bestCount > totalCells / 2)
         {
             this.detectedBg = bestColor;
+        }
+        else
+        {
+            // No clear majority — revert to the user's default so transient
+            // alt-buffer apps (btop, htop, vim) cannot leave the window
+            // chrome stuck on their colour after they exit.
+            this.detectedBg = this.defaultBg;
         }
     }
 
@@ -2081,7 +2091,7 @@ public class TerminalBuffer
     private void ClearRow(int row)
     {
         int fg = this.currentFg == -1 ? this.defaultFg : this.currentFg;
-        int bg = this.currentBg == -1 ? this.detectedBg : this.currentBg;
+        int bg = this.currentBg == -1 ? this.defaultBg : this.currentBg;
         for (int j = 0; j < this.Cols; j++)
         {
             this.cells[row, j].Clear(fg, bg, this.currentSpecial);
@@ -2099,7 +2109,7 @@ public class TerminalBuffer
         colEnd = Math.Min(this.Cols - 1, colEnd);
 
         int fg = this.currentFg == -1 ? this.defaultFg : this.currentFg;
-        int bg = this.currentBg == -1 ? this.detectedBg : this.currentBg;
+        int bg = this.currentBg == -1 ? this.defaultBg : this.currentBg;
         for (int i = rowStart; i <= rowEnd; i++)
         {
             int jStart = i == rowStart ? colStart : 0;
@@ -2316,7 +2326,7 @@ public class TerminalBuffer
             int startCol = i < copyRows ? copyCols : 0;
             for (int j = startCol; j < cols; j++)
             {
-                newCells[i, j].Clear(this.defaultFg, this.detectedBg, this.currentSpecial);
+                newCells[i, j].Clear(this.defaultFg, this.defaultBg, this.currentSpecial);
             }
         }
 
@@ -2462,7 +2472,7 @@ public class TerminalBuffer
         {
             var line = logicalLines[li];
             int keep = line.Count;
-            while (keep > 0 && IsDefaultBlank(line[keep - 1], this.defaultFg, this.detectedBg, this.defaultBg))
+            while (keep > 0 && IsDefaultBlank(line[keep - 1], this.defaultFg, this.defaultBg))
             {
                 keep--;
             }
@@ -2493,7 +2503,7 @@ public class TerminalBuffer
 
             if (line.Count == 0)
             {
-                outRows.Add(BlankRow(newCols, this.defaultFg, this.detectedBg, this.currentSpecial));
+                outRows.Add(BlankRow(newCols, this.defaultFg, this.defaultBg, this.currentSpecial));
                 outWrapped.Add(false);
             }
             else
@@ -2521,7 +2531,7 @@ public class TerminalBuffer
                             // Pad with a blank, wrap.
                             while (current.Count < newCols)
                             {
-                                current.Add(DefaultBlankCell(this.defaultFg, this.detectedBg, this.currentSpecial));
+                                current.Add(DefaultBlankCell(this.defaultFg, this.defaultBg, this.currentSpecial));
                             }
 
                             outRows.Add(current.ToArray());
@@ -2554,7 +2564,7 @@ public class TerminalBuffer
                 // Pad last chunk to newCols.
                 while (current.Count < newCols)
                 {
-                    current.Add(DefaultBlankCell(this.defaultFg, this.detectedBg, this.currentSpecial));
+                    current.Add(DefaultBlankCell(this.defaultFg, this.defaultBg, this.currentSpecial));
                 }
 
                 outRows.Add(current.ToArray());
@@ -2628,7 +2638,7 @@ public class TerminalBuffer
             var row = outRows[i];
             for (int c = 0; c < newCols; c++)
             {
-                newLive[filled, c] = c < row.Length ? row[c] : DefaultBlankCell(this.defaultFg, this.detectedBg, this.currentSpecial);
+                newLive[filled, c] = c < row.Length ? row[c] : DefaultBlankCell(this.defaultFg, this.defaultBg, this.currentSpecial);
             }
 
             newLiveWrapped[filled] = outWrapped[i];
@@ -2638,7 +2648,7 @@ public class TerminalBuffer
         {
             for (int c = 0; c < newCols; c++)
             {
-                newLive[i, c] = DefaultBlankCell(this.defaultFg, this.detectedBg, this.currentSpecial);
+                newLive[i, c] = DefaultBlankCell(this.defaultFg, this.defaultBg, this.currentSpecial);
             }
 
             newLiveWrapped[i] = false;
@@ -2682,7 +2692,7 @@ public class TerminalBuffer
         {
             for (int c = 0; c < this.Cols; c++)
             {
-                if (!IsDefaultBlank(this.cells[r, c], this.defaultFg, this.detectedBg, this.defaultBg))
+                if (!IsDefaultBlank(this.cells[r, c], this.defaultFg, this.defaultBg))
                 {
                     return r;
                 }
