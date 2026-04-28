@@ -8,6 +8,7 @@ namespace AeroTerm.Controls;
 using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Text;
+using AeroTerm.Controls.Terminal;
 using AeroTerm.Pty;
 using SkiaSharp;
 
@@ -19,6 +20,7 @@ internal sealed class TerminalRenderer : IDisposable
     private readonly FontFallbackChain fontChain;
     private readonly LigatureTextShaper ligatureTextShaper;
     private readonly EditorTextInputMethodClient imeClient;
+    private readonly SymbolGlyphRenderer symbolGlyphRenderer = new();
     private readonly SKPaint backgroundPaint = new() { IsAntialias = false, Style = SKPaintStyle.Fill };
     private readonly SKPaint textPaint = new() { IsAntialias = true };
     private readonly SKPaint underlinePaint = new() { StrokeWidth = 1, IsAntialias = true };
@@ -283,6 +285,7 @@ internal sealed class TerminalRenderer : IDisposable
             this.searchActiveBorderPaint.Dispose();
             this.textFont.Dispose();
             this.undercurlPath.Dispose();
+            this.symbolGlyphRenderer.Dispose();
             this.isDisposed = true;
         }
     }
@@ -333,6 +336,32 @@ internal sealed class TerminalRenderer : IDisposable
         return 1;
     }
 
+    private static bool IsSymbolCell(Cell[,] cells, int row, int col)
+    {
+        var cell = cells[row, col];
+        if (cell.Character is null || cell.Character.Length == 0)
+        {
+            return false;
+        }
+
+        // Surrogate pairs in symbol ranges (Legacy Computing lives in the
+        // SMP) need ConvertToUtf32; non-surrogate BMP chars take the fast
+        // path on the high byte to avoid the surrogate-handling cost.
+        char first = cell.Character[0];
+        if (!char.IsHighSurrogate(first))
+        {
+            return SymbolGlyphRanges.Handles(first);
+        }
+
+        if (cell.Character.Length < 2)
+        {
+            return false;
+        }
+
+        int cp = char.ConvertToUtf32(first, cell.Character[1]);
+        return SymbolGlyphRanges.Handles(cp);
+    }
+
     private void DrawCellRange(
         SKCanvas canvas,
         Cell[,] cells,
@@ -363,12 +392,12 @@ internal sealed class TerminalRenderer : IDisposable
         if (enableLigature)
         {
             this.textFont.Embolden = false;
-            this.DrawLigatureTextRange(canvas, cells, row, colStart, colEnd, weight, slant, baselineY, bold, textParam);
+            this.DrawCellRangeWithSymbols(canvas, cells, row, colStart, colEnd, weight, slant, baselineY, bold, textParam, ligatures: true, foregroundColor, styledTypeface);
         }
         else
         {
             this.textFont.Embolden = bold;
-            this.DrawPlainTextRange(canvas, cells, row, colStart, colEnd, styledTypeface, weight, slant, baselineY, textParam);
+            this.DrawCellRangeWithSymbols(canvas, cells, row, colStart, colEnd, weight, slant, baselineY, bold, textParam, ligatures: false, foregroundColor, styledTypeface);
         }
 
         // Draw underline decoration (single / double / curly)
@@ -423,6 +452,79 @@ internal sealed class TerminalRenderer : IDisposable
             this.underlinePaint.Color = GetSkColor(foregroundColor);
             float sY = (row * textParam.LineHeight) + (textParam.LineHeight * 0.55f);
             canvas.DrawLine(colStart * textParam.CharWidth, sY, colEnd * textParam.CharWidth, sY, this.underlinePaint);
+        }
+    }
+
+    private void DrawCellRangeWithSymbols(
+        SKCanvas canvas,
+        Cell[,] cells,
+        int row,
+        int colStart,
+        int colEnd,
+        SKFontStyleWeight weight,
+        SKFontStyleSlant slant,
+        float baselineY,
+        bool bold,
+        TextLayoutParameters textParam,
+        bool ligatures,
+        int foregroundColor,
+        SKTypeface styledTypeface)
+    {
+        // Walk the column range, splitting consecutive cells into
+        // alternating "text" and "symbol" sub-runs. Text sub-runs are
+        // dispatched to the existing font path so all batching/ligature
+        // shaping is preserved. Symbol cells are painted by the
+        // SymbolGlyphRenderer at exact cell-rect geometry, bypassing the
+        // font's per-glyph natural advance which is what creates the
+        // sub-pixel disconnection gap that motivates this code.
+        int j = colStart;
+        SKColor symbolColor = GetSkColor(foregroundColor);
+        while (j < colEnd)
+        {
+            int textStart = j;
+            while (j < colEnd && !IsSymbolCell(cells, row, j))
+            {
+                j++;
+            }
+
+            int textEnd = j;
+            if (textEnd > textStart)
+            {
+                if (ligatures)
+                {
+                    this.DrawLigatureTextRange(canvas, cells, row, textStart, textEnd, weight, slant, baselineY, bold, textParam);
+                }
+                else
+                {
+                    this.DrawPlainTextRange(canvas, cells, row, textStart, textEnd, styledTypeface, weight, slant, baselineY, textParam);
+                }
+            }
+
+            while (j < colEnd && IsSymbolCell(cells, row, j))
+            {
+                var cell = cells[row, j];
+                int codePoint = char.ConvertToUtf32(cell.Character!, 0);
+                var rect = new SKRect(
+                    j * textParam.CharWidth,
+                    row * textParam.LineHeight,
+                    (j + 1) * textParam.CharWidth,
+                    (row + 1) * textParam.LineHeight);
+                if (!this.symbolGlyphRenderer.TryDraw(canvas, codePoint, rect, symbolColor))
+                {
+                    // No programmatic implementation: fall back to the
+                    // font for this single cell so we never lose a glyph.
+                    if (ligatures)
+                    {
+                        this.DrawLigatureTextRange(canvas, cells, row, j, j + 1, weight, slant, baselineY, bold, textParam);
+                    }
+                    else
+                    {
+                        this.DrawPlainTextRange(canvas, cells, row, j, j + 1, styledTypeface, weight, slant, baselineY, textParam);
+                    }
+                }
+
+                j++;
+            }
         }
     }
 
