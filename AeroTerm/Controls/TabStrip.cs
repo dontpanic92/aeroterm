@@ -999,6 +999,71 @@ public sealed class TabStrip : UserControl
     private void OnActiveTabChanged(TabSession? newActive)
     {
         this.UpdateStates();
+        this.ScrollActiveIntoView();
+    }
+
+    /// <summary>
+    /// Ensures the currently active tab header is visible in the
+    /// horizontal tab scroller. Deferred to the next dispatcher pass
+    /// so the freshly-added header has been measured and arranged
+    /// before its bounds are queried.
+    /// </summary>
+    private void ScrollActiveIntoView()
+    {
+        if (this.orientation != Orientation.Horizontal || this.tabView is null)
+        {
+            return;
+        }
+
+        var active = this.tabView.ActiveTab;
+        if (active is null || !this.headers.TryGetValue(active, out var header))
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (!header.IsAttachedToVisualTree())
+                {
+                    return;
+                }
+
+                double extent = this.tabsScroller.Extent.Width;
+                double viewport = this.tabsScroller.Viewport.Width;
+                if (extent <= viewport)
+                {
+                    return;
+                }
+
+                var origin = header.TranslatePoint(default, this.tabsPanel);
+                if (origin is null)
+                {
+                    return;
+                }
+
+                double headerLeft = origin.Value.X;
+                double headerRight = headerLeft + header.Bounds.Width;
+                double offsetX = this.tabsScroller.Offset.X;
+                double maxX = Math.Max(0, extent - viewport);
+
+                double newOffset = offsetX;
+                if (headerLeft < offsetX)
+                {
+                    newOffset = headerLeft;
+                }
+                else if (headerRight > offsetX + viewport)
+                {
+                    newOffset = headerRight - viewport;
+                }
+
+                newOffset = Math.Clamp(newOffset, 0, maxX);
+                if (!newOffset.Equals(offsetX))
+                {
+                    this.tabsScroller.Offset = new Vector(newOffset, this.tabsScroller.Offset.Y);
+                }
+            },
+            DispatcherPriority.Loaded);
     }
 
     private void AddHeader(TabSession tab, int index = -1)
@@ -1591,6 +1656,8 @@ public sealed class TabStrip : UserControl
     /// </summary>
     private sealed class TabHeaderPanel : StackPanel
     {
+        private double availableTabExtent = double.PositiveInfinity;
+
         /// <summary>
         /// Gets or sets the soft maximum tab-area extent published by
         /// the owning <see cref="TabStrip"/>. Used in place of
@@ -1598,7 +1665,29 @@ public sealed class TabStrip : UserControl
         /// <see cref="ScrollViewer"/> ancestor passes infinity in the
         /// scrolled axis.
         /// </summary>
-        public double AvailableTabExtent { get; set; } = double.PositiveInfinity;
+        /// <remarks>
+        /// Setting this property invalidates measure when the value
+        /// changes. Without this, resizing the window (e.g., maximize)
+        /// would not re-flow tab widths because the inner ScrollViewer
+        /// keeps passing infinity in the scrolled axis — Avalonia would
+        /// see no measure-input change on this panel and skip layout,
+        /// leaving tabs stuck at their previous (narrow) per-header width.
+        /// </remarks>
+        public double AvailableTabExtent
+        {
+            get => this.availableTabExtent;
+            set
+            {
+                if (this.availableTabExtent.Equals(value))
+                {
+                    return;
+                }
+
+                this.availableTabExtent = value;
+                this.InvalidateMeasure();
+                this.InvalidateArrange();
+            }
+        }
 
         /// <inheritdoc />
         protected override Size MeasureOverride(Size availableSize)

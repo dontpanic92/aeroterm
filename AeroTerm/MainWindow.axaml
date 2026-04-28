@@ -101,7 +101,11 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- macOS traffic-light reservation (see column comment). -->
+            <!-- macOS traffic-light reservation (see column comment).
+                 Hit-test enabled on macOS in code-behind so the empty
+                 background area surrounding the native traffic lights
+                 still drags / maximizes the window — the AppKit-drawn
+                 buttons themselves intercept clicks before Avalonia. -->
             <Border Grid.Column="0" Name="MacChromeReservation"
                     Width="0" Background="Transparent"
                     IsHitTestVisible="False" />

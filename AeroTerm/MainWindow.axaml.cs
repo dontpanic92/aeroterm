@@ -37,6 +37,14 @@ public partial class MainWindow : Window
     private const double MacChromeReservationWidth = 78.0;
 
     /// <summary>
+    /// Width in DIPs reserved at the trailing edge of the horizontal tab
+    /// strip so the user always has a guaranteed empty area to drag the
+    /// window or double-click to maximize, even when many tabs would
+    /// otherwise consume the entire titlebar width.
+    /// </summary>
+    private const double TrailingDragReservationWidth = 24.0;
+
+    /// <summary>
     /// Unified custom titlebar height in DIPs. Chosen to match the macOS
     /// "unified / thick" titlebar (Safari, Terminal.app, iTerm2) so the
     /// native traffic-light cluster sits vertically centered against our
@@ -55,6 +63,7 @@ public partial class MainWindow : Window
     private readonly Border sideTabHost;
     private readonly Border macChromeReservation;
     private readonly Border titleBarDragHandle;
+    private readonly Border titleBarTrailingDragReservation;
     private readonly DockPanel titleBarTabDock;
     private readonly BellService bellService;
     private readonly TabView tabView;
@@ -111,6 +120,18 @@ public partial class MainWindow : Window
         };
         this.titleBarDragHandle.PointerPressed += this.TitleBar_PointerPressed;
         this.titleBarDragHandle.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
+
+        // Fixed-width trailing reservation that guarantees a draggable
+        // area on the right edge of the horizontal tab strip even when
+        // many tabs would otherwise consume the entire titlebar width.
+        this.titleBarTrailingDragReservation = new Border
+        {
+            Background = Brushes.Transparent,
+            Focusable = false,
+            Width = TrailingDragReservationWidth,
+        };
+        this.titleBarTrailingDragReservation.PointerPressed += this.TitleBar_PointerPressed;
+        this.titleBarTrailingDragReservation.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
         this.titleBarTabDock = new DockPanel { LastChildFill = true };
 
         this.effectsService = new WindowEffectsService(this, settings, AppLogger.Factory.CreateLogger<WindowEffectsService>());
@@ -1073,6 +1094,14 @@ public partial class MainWindow : Window
         // fullscreen and the reservation should collapse with it.
         this.UpdateMacChromeReservation();
         this.PropertyChanged += this.OnWindowPropertyChangedForMacChrome;
+
+        // Make the empty background area around the native traffic-light
+        // cluster draggable / double-click-zoomable. The AppKit-drawn
+        // close / minimize / zoom buttons sit above Avalonia content and
+        // intercept clicks themselves before these handlers fire.
+        this.macChromeReservation.IsHitTestVisible = true;
+        this.macChromeReservation.PointerPressed += this.TitleBar_PointerPressed;
+        this.macChromeReservation.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
     }
 
     private void OnWindowPropertyChangedForMacChrome(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -1151,9 +1180,22 @@ public partial class MainWindow : Window
         else
         {
             this.sideTabHost.Child = null;
+
+            // Order matters: DockPanel measures children in declaration
+            // order. Adding the trailing reservation FIRST (Dock.Right)
+            // subtracts its width from the available space the tab strip
+            // is measured against, guaranteeing the reservation is never
+            // squeezed to zero by a wide row of tabs.
+            DockPanel.SetDock(this.titleBarTrailingDragReservation, Dock.Right);
+            this.titleBarTabDock.Children.Add(this.titleBarTrailingDragReservation);
+
             DockPanel.SetDock(this.tabStrip, Dock.Left);
             this.titleBarTabDock.Children.Add(this.tabStrip);
+
+            // LastChildFill: the empty area between the tab strip's
+            // trailing edge and the fixed reservation also drags / zooms.
             this.titleBarTabDock.Children.Add(this.titleBarDragHandle);
+
             this.titleBarTabHost.Child = this.titleBarTabDock;
             this.sideTabHost.IsVisible = false;
             this.titleBarTabHost.IsVisible = true;

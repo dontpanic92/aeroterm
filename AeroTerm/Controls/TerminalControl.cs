@@ -33,7 +33,7 @@ using SkiaSharp;
 /// </summary>
 public class TerminalControl : Control, IDisposable
 {
-    private const float TitleBarInsetBlurSigma = 8f;
+    private const float TitleBarInsetBlurSigma = 14f;
 
     private readonly TerminalBuffer buffer;
     private readonly VtParser parser;
