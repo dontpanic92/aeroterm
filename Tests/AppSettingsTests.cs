@@ -8,6 +8,7 @@ namespace AeroTerm.Tests;
 using System.IO;
 using System.Text.Json;
 using AeroTerm.Services;
+using AeroTerm.WindowEffects;
 using NUnit.Framework;
 
 /// <summary>
@@ -71,9 +72,64 @@ public class AppSettingsTests
             "  \"ScrollbackLines\": 1000\n" +
             "}";
 
-        var loaded = JsonSerializer.Deserialize(LegacyJson, AppSettingsJsonContext.Default.AppSettings);
+        var migrated = AppSettings.MigrateLegacyJson(LegacyJson);
+        var loaded = JsonSerializer.Deserialize(migrated, AppSettingsJsonContext.Default.AppSettings);
         Assert.That(loaded, Is.Not.Null);
         Assert.That(loaded!.ConfirmOnClose, Is.True);
+    }
+
+    /// <summary>
+    /// Brand-new <see cref="AppSettings"/> instances default the split
+    /// background opacity values to Avalonia-style acrylic defaults
+    /// (tint 0.85, material 0.75).
+    /// </summary>
+    [Test]
+    public void BackgroundOpacity_DefaultsToSplitAvaloniaAcrylicValues()
+    {
+        var settings = new AppSettings();
+        Assert.That(settings.BackgroundTintOpacity, Is.EqualTo(0.85));
+        Assert.That(settings.BackgroundMaterialOpacity, Is.EqualTo(0.75));
+    }
+
+    /// <summary>
+    /// Legacy settings files that only carry the old single
+    /// <c>BackgroundOpacity</c> key migrate to the split tint/material
+    /// model so that the perceived effective alpha is preserved
+    /// (<c>tint * material == legacy</c>).
+    /// </summary>
+    [Test]
+    public void BackgroundOpacity_LegacyJsonMigratesPreservingEffectiveAlpha()
+    {
+        const string LegacyJson = "{ \"BackgroundOpacity\": 0.6 }";
+
+        var migrated = AppSettings.MigrateLegacyJson(LegacyJson);
+        var loaded = JsonSerializer.Deserialize(migrated, AppSettingsJsonContext.Default.AppSettings);
+
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.BackgroundTintOpacity, Is.EqualTo(0.6));
+        Assert.That(loaded.BackgroundMaterialOpacity, Is.EqualTo(1.0));
+        Assert.That(loaded.BackgroundTintOpacity * loaded.BackgroundMaterialOpacity, Is.EqualTo(0.6));
+    }
+
+    /// <summary>
+    /// When new keys are explicitly present in the JSON they take
+    /// precedence over any lingering legacy <c>BackgroundOpacity</c>
+    /// value (which is dropped during migration).
+    /// </summary>
+    [Test]
+    public void BackgroundOpacity_NewKeysOverrideLegacyDuringMigration()
+    {
+        const string MixedJson =
+            "{ \"BackgroundOpacity\": 0.6, " +
+            "\"BackgroundTintOpacity\": 0.4, " +
+            "\"BackgroundMaterialOpacity\": 0.5 }";
+
+        var migrated = AppSettings.MigrateLegacyJson(MixedJson);
+        var loaded = JsonSerializer.Deserialize(migrated, AppSettingsJsonContext.Default.AppSettings);
+
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.BackgroundTintOpacity, Is.EqualTo(0.4));
+        Assert.That(loaded.BackgroundMaterialOpacity, Is.EqualTo(0.5));
     }
 
     /// <summary>
@@ -238,5 +294,40 @@ public class AppSettingsTests
         settings.ScrollbackLines = 2000;
 
         Assert.That(last, Is.EqualTo(nameof(AppSettings.ScrollbackLines)));
+    }
+
+    /// <summary>
+    /// Brand-new <see cref="AppSettings"/> instances default
+    /// <see cref="AppSettings.MaterialTone"/> to
+    /// <see cref="MaterialTone.Light"/> to preserve pre-feature
+    /// behavior (where the OS picked the light tonal variant via
+    /// Avalonia's <c>RequestedThemeVariant="Light"</c>).
+    /// </summary>
+    [Test]
+    public void MaterialTone_DefaultsToLight()
+    {
+        var settings = new AppSettings();
+        Assert.That(settings.MaterialTone, Is.EqualTo(MaterialTone.Light));
+    }
+
+    /// <summary>
+    /// <see cref="AppSettings.MaterialTone"/> survives a save / reload
+    /// round-trip through the source-generated JSON context for both
+    /// variants.
+    /// </summary>
+    [Test]
+    public void MaterialTone_RoundTripsThroughJson()
+    {
+        var ctx = AppSettingsJsonContext.Default.AppSettings;
+
+        var dark = new AppSettings { MaterialTone = MaterialTone.Dark };
+        var loadedDark = JsonSerializer.Deserialize(JsonSerializer.Serialize(dark, ctx), ctx);
+        Assert.That(loadedDark, Is.Not.Null);
+        Assert.That(loadedDark!.MaterialTone, Is.EqualTo(MaterialTone.Dark));
+
+        var light = new AppSettings { MaterialTone = MaterialTone.Light };
+        var loadedLight = JsonSerializer.Deserialize(JsonSerializer.Serialize(light, ctx), ctx);
+        Assert.That(loadedLight, Is.Not.Null);
+        Assert.That(loadedLight!.MaterialTone, Is.EqualTo(MaterialTone.Light));
     }
 }

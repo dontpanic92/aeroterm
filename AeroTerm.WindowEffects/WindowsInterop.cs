@@ -15,6 +15,7 @@ public static class WindowsInterop
 {
     private const uint WmNcactivate = 0x0086;
     private const uint DwmwaSystembackdropType = 38;
+    private const uint DwmwaUseImmersiveDarkMode = 20;
     private static readonly IntPtr SubclassId = (IntPtr)1;
 
     private static SubclassCallbackDelegate? subclassProcInstance;
@@ -148,6 +149,36 @@ public static class WindowsInterop
             sizeof(int));
 
         storedBackdropType = 0;
+    }
+
+    /// <summary>
+    /// Sets the DWM <c>DWMWA_USE_IMMERSIVE_DARK_MODE</c> hint on the
+    /// given window so that the system backdrop (acrylic / mica / blur)
+    /// and the non-client area pick the dark or light tonal variant.
+    /// </summary>
+    /// <remarks>
+    /// Independent of Avalonia's <c>RequestedThemeVariant</c>: callers
+    /// can re-apply this after Avalonia has set its own value (e.g. at
+    /// the end of <c>SetupBlurBehind</c>) so the user's explicit choice
+    /// always wins. Silently no-ops on non-Windows platforms or when
+    /// the OS is too old to support the attribute (DWM returns a
+    /// non-zero HRESULT, which we ignore).
+    /// </remarks>
+    /// <param name="hwnd">The native HWND to update.</param>
+    /// <param name="dark"><c>true</c> for dark tone, <c>false</c> for light.</param>
+    public static void SetImmersiveDarkMode(IntPtr hwnd, bool dark)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        int value = dark ? 1 : 0;
+        NativeMethods.DwmSetWindowAttribute(
+            hwnd,
+            DwmwaUseImmersiveDarkMode,
+            ref value,
+            sizeof(int));
     }
 
     /// <summary>

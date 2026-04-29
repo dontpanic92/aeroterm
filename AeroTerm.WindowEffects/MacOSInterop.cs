@@ -547,6 +547,55 @@ public static class MacOSInterop
     }
 
     /// <summary>
+    /// Sets the <c>NSWindow.appearance</c> to either
+    /// <c>NSAppearanceNameAqua</c> (light) or
+    /// <c>NSAppearanceNameDarkAqua</c> (dark). The window's
+    /// <c>NSVisualEffectView</c>(s) automatically pick the matching
+    /// vibrancy material from the window's effective appearance.
+    /// </summary>
+    /// <remarks>
+    /// Independent of Avalonia's <c>RequestedThemeVariant</c>: setting
+    /// this overrides the inherited app-level appearance for this
+    /// window only. Silently no-ops on non-macOS platforms.
+    /// </remarks>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <param name="dark"><c>true</c> for dark tone, <c>false</c> for light.</param>
+    public static void SetWindowAppearance(IntPtr nsWindow, bool dark)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr nsAppearanceClass = NativeMethods.ObjCGetClass("NSAppearance");
+        if (nsAppearanceClass == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr nameNsString = CreateNSString(dark ? "NSAppearanceNameDarkAqua" : "NSAppearanceNameAqua");
+        if (nameNsString == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr appearance = NativeMethods.ObjCMsgSendPtrRetPtr(
+            nsAppearanceClass,
+            NativeMethods.SelRegisterName("appearanceNamed:"),
+            nameNsString);
+        if (appearance == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // [window setAppearance:appearance]
+        NativeMethods.ObjCMsgSendPtrRetPtr(
+            nsWindow,
+            NativeMethods.SelRegisterName("setAppearance:"),
+            appearance);
+    }
+
+    /// <summary>
     /// Locates a previously installed Liquid Glass backdrop among the
     /// direct subviews of <paramref name="contentView"/> by class
     /// (<c>isKindOfClass:NSGlassEffectView</c>). Avalonia does not insert

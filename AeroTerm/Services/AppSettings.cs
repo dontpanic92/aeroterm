@@ -8,6 +8,7 @@ namespace AeroTerm.Services;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AeroTerm.Diagnostics;
 using AeroTerm.WindowEffects;
 using Microsoft.Extensions.Logging;
@@ -29,7 +30,9 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
 
     private bool enableBlurBehind = true;
     private BlurType blurType = BlurType.Acrylic;
-    private double backgroundOpacity = 0.75;
+    private MaterialTone materialTone = MaterialTone.Light;
+    private double backgroundTintOpacity = 0.85;
+    private double backgroundMaterialOpacity = 0.75;
     private int windowWidth = 800;
     private int windowHeight = 600;
     private bool isMaximized;
@@ -97,12 +100,44 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
-    /// Gets or sets the background opacity.
+    /// Gets or sets the tonal variant (light or dark) of the platform
+    /// blur / acrylic / mica / vibrancy backdrop. Independent of
+    /// Avalonia's <c>RequestedThemeVariant</c>; ignored when blur is
+    /// disabled, when <see cref="WindowEffects.BlurType.Transparent"/>
+    /// is selected, or on Linux. Defaults to
+    /// <see cref="WindowEffects.MaterialTone.Light"/> to match the
+    /// pre-existing implicit behavior.
     /// </summary>
-    public double BackgroundOpacity
+    public MaterialTone MaterialTone
     {
-        get => this.backgroundOpacity;
-        set => this.SetField(ref this.backgroundOpacity, value);
+        get => this.materialTone;
+        set => this.SetField(ref this.materialTone, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the opacity of the tint color layered over the
+    /// platform blur backdrop (0.0–1.0). Combined multiplicatively with
+    /// <see cref="BackgroundMaterialOpacity"/> to produce the effective
+    /// alpha of the window background brush. Mirrors
+    /// <c>ExperimentalAcrylicMaterial.TintOpacity</c> in Avalonia.
+    /// </summary>
+    public double BackgroundTintOpacity
+    {
+        get => this.backgroundTintOpacity;
+        set => this.SetField(ref this.backgroundTintOpacity, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the opacity of the overall material layer (0.0–1.0).
+    /// Lower values let more of the platform backdrop show through.
+    /// Combined multiplicatively with <see cref="BackgroundTintOpacity"/>
+    /// to produce the effective alpha. Mirrors
+    /// <c>ExperimentalAcrylicMaterial.MaterialOpacity</c> in Avalonia.
+    /// </summary>
+    public double BackgroundMaterialOpacity
+    {
+        get => this.backgroundMaterialOpacity;
+        set => this.SetField(ref this.backgroundMaterialOpacity, value);
     }
 
     /// <summary>
@@ -366,7 +401,9 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         var fresh = Load();
         this.EnableBlurBehind = fresh.EnableBlurBehind;
         this.BlurType = fresh.BlurType;
-        this.BackgroundOpacity = fresh.BackgroundOpacity;
+        this.MaterialTone = fresh.MaterialTone;
+        this.BackgroundTintOpacity = fresh.BackgroundTintOpacity;
+        this.BackgroundMaterialOpacity = fresh.BackgroundMaterialOpacity;
         this.WindowWidth = fresh.WindowWidth;
         this.WindowHeight = fresh.WindowHeight;
         this.IsMaximized = fresh.IsMaximized;
@@ -435,6 +472,52 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         return GetSettingsPath();
     }
 
+    /// <summary>
+    /// Rewrites legacy settings JSON in place so that older keys whose
+    /// schemas have changed deserialize correctly under the current
+    /// source-generated contract. Currently handles the
+    /// <c>BackgroundOpacity</c> → <c>BackgroundTintOpacity</c> +
+    /// <c>BackgroundMaterialOpacity</c> split: an upgrader's existing
+    /// effective alpha is preserved by seeding tint = legacy and
+    /// material = 1.0 (so tint * material = legacy).
+    /// </summary>
+    /// <param name="json">The raw settings JSON text.</param>
+    /// <returns>The migrated JSON text, or <paramref name="json"/> unchanged when no migration applies.</returns>
+    internal static string MigrateLegacyJson(string json)
+    {
+        try
+        {
+            if (JsonNode.Parse(json) is not JsonObject node)
+            {
+                return json;
+            }
+
+            if (node.TryGetPropertyValue("BackgroundOpacity", out var legacy)
+                && legacy is JsonValue legacyValue
+                && legacyValue.TryGetValue<double>(out var legacyOpacity))
+            {
+                if (!node.ContainsKey("BackgroundTintOpacity"))
+                {
+                    node["BackgroundTintOpacity"] = legacyOpacity;
+                }
+
+                if (!node.ContainsKey("BackgroundMaterialOpacity"))
+                {
+                    node["BackgroundMaterialOpacity"] = 1.0;
+                }
+
+                node.Remove("BackgroundOpacity");
+                return node.ToJsonString();
+            }
+        }
+        catch (JsonException)
+        {
+            // Fall through and let the source-gen deserializer surface the error.
+        }
+
+        return json;
+    }
+
     private static AppSettings Load()
     {
         try
@@ -443,6 +526,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
             if (File.Exists(settingsPath))
             {
                 var json = File.ReadAllText(settingsPath);
+                json = MigrateLegacyJson(json);
                 return JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings) as AppSettings ?? new AppSettings();
             }
         }

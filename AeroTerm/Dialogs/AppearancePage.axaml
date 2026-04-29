@@ -39,14 +39,35 @@
                              IsEnabled="{Binding IsLiquidGlassEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.LiquidGlass}, Mode=TwoWay}" />
 
-                <StackPanel dialogs:SettingsSearch.Label="Background Opacity"
+                <StackPanel dialogs:SettingsSearch.Label="Tint Opacity"
                             Orientation="Horizontal" Margin="20,0,0,0">
-                    <TextBlock Name="OpacityLabel" Text="Background Opacity" VerticalAlignment="Center" />
-                    <Slider Value="{Binding BackgroundOpacity, Mode=TwoWay}" Width="200" Minimum="0.01" Maximum="1"
+                    <TextBlock Name="TintOpacityLabel" Text="Tint Opacity" VerticalAlignment="Center" Width="110" />
+                    <Slider Value="{Binding BackgroundTintOpacity, Mode=TwoWay}" Width="200" Minimum="0" Maximum="1"
                             TickFrequency="0.01" IsSnapToTickEnabled="True" Margin="10,0"
-                            AutomationProperties.LabeledBy="{Binding #OpacityLabel}"
+                            AutomationProperties.LabeledBy="{Binding #TintOpacityLabel}"
                             IsEnabled="{Binding IsOpacityEnabled}" />
-                    <TextBlock Text="{Binding OpacityLabel}" Width="40" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding TintOpacityLabel}" Width="40" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <StackPanel dialogs:SettingsSearch.Label="Material Opacity"
+                            Orientation="Horizontal" Margin="20,0,0,0">
+                    <TextBlock Name="MaterialOpacityLabel" Text="Material Opacity" VerticalAlignment="Center" Width="110" />
+                    <Slider Value="{Binding BackgroundMaterialOpacity, Mode=TwoWay}" Width="200" Minimum="0" Maximum="1"
+                            TickFrequency="0.01" IsSnapToTickEnabled="True" Margin="10,0"
+                            AutomationProperties.LabeledBy="{Binding #MaterialOpacityLabel}"
+                            IsEnabled="{Binding IsOpacityEnabled}" />
+                    <TextBlock Text="{Binding MaterialOpacityLabel}" Width="40" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <StackPanel dialogs:SettingsSearch.Label="Material Tone"
+                            Orientation="Horizontal" Margin="20,5,0,0">
+                    <TextBlock Text="Material Tone" VerticalAlignment="Center" Width="110" />
+                    <RadioButton Content="Light" GroupName="MaterialToneKind" Margin="0,0,10,0"
+                                 IsEnabled="{Binding IsMaterialToneEnabled}"
+                                 IsChecked="{Binding MaterialTone, Converter={x:Static vm:MaterialToneConverter.Light}, Mode=TwoWay}" />
+                    <RadioButton Content="Dark" GroupName="MaterialToneKind"
+                                 IsEnabled="{Binding IsMaterialToneEnabled}"
+                                 IsChecked="{Binding MaterialTone, Converter={x:Static vm:MaterialToneConverter.Dark}, Mode=TwoWay}" />
                 </StackPanel>
             </StackPanel>
         </GroupBox>

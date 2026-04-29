@@ -84,6 +84,7 @@ public sealed class WindowEffectsService
         this.window.Background = Brushes.Transparent;
         this.UpdateTransparencyLevelHint();
         this.UpdateBackgroundOpacity();
+        this.ApplyMaterialTone();
     }
 
     /// <summary>
@@ -114,6 +115,7 @@ public sealed class WindowEffectsService
                 MacOSInterop.EnableUnifiedTitleBar(nsWindow);
                 MacOSInterop.SetWindowIconFromBundle(nsWindow);
                 this.UpdateLiquidGlassBackdrop(nsWindow);
+                this.ApplyMaterialTone(nsWindow);
             },
             DispatcherPriority.Background);
     }
@@ -297,10 +299,25 @@ public sealed class WindowEffectsService
     /// </summary>
     public void UpdateBackgroundOpacity()
     {
-        float opacity = this.settings.EnableBlurBehind
-            ? (float)this.settings.BackgroundOpacity
-            : 1f;
-        IBrush backgroundBrush = new SolidColorBrush(PlatformHelper.GetAvaloniaColor(this.CurrentBackgroundColor, opacity));
+        Color tintColor = PlatformHelper.GetAvaloniaColor(this.CurrentBackgroundColor, 1f);
+        Color brushColor;
+        float opacity;
+
+        if (this.settings.EnableBlurBehind)
+        {
+            (brushColor, opacity) = AcrylicColorMath.Compose(
+                tintColor,
+                this.settings.BackgroundTintOpacity,
+                this.settings.BackgroundMaterialOpacity);
+        }
+        else
+        {
+            brushColor = tintColor;
+            opacity = 1f;
+        }
+
+        var argb = Color.FromArgb((byte)(opacity * 255), brushColor.R, brushColor.G, brushColor.B);
+        IBrush backgroundBrush = new SolidColorBrush(argb);
 
         this.BackgroundBrushChanged?.Invoke(backgroundBrush);
         this.BackgroundAlphaChanged?.Invoke((byte)(opacity * 255));
@@ -440,9 +457,63 @@ public sealed class WindowEffectsService
                 });
                 break;
 
-            case nameof(IWindowEffectsSettings.BackgroundOpacity):
+            case nameof(IWindowEffectsSettings.BackgroundTintOpacity):
+            case nameof(IWindowEffectsSettings.BackgroundMaterialOpacity):
                 Dispatcher.UIThread.Post(() => this.UpdateBackgroundOpacity());
                 break;
+
+            case nameof(IWindowEffectsSettings.MaterialTone):
+                Dispatcher.UIThread.Post(() => this.ApplyMaterialTone());
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Applies <see cref="IWindowEffectsSettings.MaterialTone"/> to the
+    /// underlying native window. No-op when blur is disabled or when
+    /// <see cref="BlurType.Transparent"/> is selected (no material to
+    /// tint), and no-op on Linux.
+    /// </summary>
+    private void ApplyMaterialTone()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            var nsWindow = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            this.ApplyMaterialTone(nsWindow);
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            var hwnd = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            this.ApplyMaterialTone(hwnd);
+        }
+    }
+
+    /// <summary>
+    /// Platform-specific application of
+    /// <see cref="IWindowEffectsSettings.MaterialTone"/>, called with a
+    /// pre-resolved native window handle (HWND on Windows, NSWindow* on
+    /// macOS) to avoid resolving the handle twice when called from the
+    /// macOS deferred dispatcher path.
+    /// </summary>
+    /// <param name="nativeHandle">The native window handle.</param>
+    private void ApplyMaterialTone(IntPtr nativeHandle)
+    {
+        if (nativeHandle == IntPtr.Zero
+            || !this.settings.EnableBlurBehind
+            || this.settings.BlurType == BlurType.Transparent)
+        {
+            return;
+        }
+
+        bool dark = this.settings.MaterialTone == MaterialTone.Dark;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            WindowsInterop.SetImmersiveDarkMode(nativeHandle, dark);
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            MacOSInterop.SetWindowAppearance(nativeHandle, dark);
         }
     }
 }

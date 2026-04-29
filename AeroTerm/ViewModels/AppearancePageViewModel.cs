@@ -28,7 +28,9 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private bool enableLigature;
     private bool enableBlurBehind;
     private BlurType blurType;
-    private double backgroundOpacity;
+    private MaterialTone materialTone;
+    private double backgroundTintOpacity;
+    private double backgroundMaterialOpacity;
     private double fontSize;
     private int selectedFontIndex = -1;
     private ColorScheme selectedColorScheme;
@@ -51,7 +53,9 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         this.enableLigature = settings.EnableLigature;
         this.enableBlurBehind = settings.EnableBlurBehind;
         this.blurType = settings.BlurType;
-        this.backgroundOpacity = settings.BackgroundOpacity;
+        this.materialTone = settings.MaterialTone;
+        this.backgroundTintOpacity = settings.BackgroundTintOpacity;
+        this.backgroundMaterialOpacity = settings.BackgroundMaterialOpacity;
         this.fontSize = settings.FontSize;
 
         foreach (var entry in settings.FallbackFonts)
@@ -87,7 +91,10 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         "Blur",
         "Acrylic",
         "Mica",
+        "Material Tone",
         "Background Opacity",
+        "Tint Opacity",
+        "Material Opacity",
         "Font Ligature",
         "Font Size",
         "Font Priority",
@@ -236,6 +243,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
                 this.OnPropertyChanged(nameof(this.IsMicaEnabled));
                 this.OnPropertyChanged(nameof(this.IsLiquidGlassEnabled));
                 this.OnPropertyChanged(nameof(this.IsOpacityEnabled));
+                this.OnPropertyChanged(nameof(this.IsMaterialToneEnabled));
             }
         }
     }
@@ -251,30 +259,73 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             if (this.SetField(ref this.blurType, value))
             {
                 this.settings.BlurType = value;
+                this.OnPropertyChanged(nameof(this.IsMaterialToneEnabled));
             }
         }
     }
 
     /// <summary>
-    /// Gets or sets the background opacity.
+    /// Gets or sets the tonal variant (light or dark) of the platform
+    /// material backdrop. See
+    /// <see cref="AppSettings.MaterialTone"/>.
     /// </summary>
-    public double BackgroundOpacity
+    public MaterialTone MaterialTone
     {
-        get => this.backgroundOpacity;
+        get => this.materialTone;
         set
         {
-            if (this.SetField(ref this.backgroundOpacity, value))
+            if (this.SetField(ref this.materialTone, value))
             {
-                this.settings.BackgroundOpacity = value;
-                this.OnPropertyChanged(nameof(this.OpacityLabel));
+                this.settings.MaterialTone = value;
             }
         }
     }
 
     /// <summary>
-    /// Gets the opacity label text (e.g. "75%").
+    /// Gets or sets the opacity of the tint color layered over the
+    /// platform blur backdrop. See
+    /// <see cref="AppSettings.BackgroundTintOpacity"/>.
     /// </summary>
-    public string OpacityLabel => ((int)(this.BackgroundOpacity * 100)).ToString() + "%";
+    public double BackgroundTintOpacity
+    {
+        get => this.backgroundTintOpacity;
+        set
+        {
+            if (this.SetField(ref this.backgroundTintOpacity, value))
+            {
+                this.settings.BackgroundTintOpacity = value;
+                this.OnPropertyChanged(nameof(this.TintOpacityLabel));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the opacity of the overall material layer over the
+    /// platform blur backdrop. See
+    /// <see cref="AppSettings.BackgroundMaterialOpacity"/>.
+    /// </summary>
+    public double BackgroundMaterialOpacity
+    {
+        get => this.backgroundMaterialOpacity;
+        set
+        {
+            if (this.SetField(ref this.backgroundMaterialOpacity, value))
+            {
+                this.settings.BackgroundMaterialOpacity = value;
+                this.OnPropertyChanged(nameof(this.MaterialOpacityLabel));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the tint opacity label text (e.g. "85%").
+    /// </summary>
+    public string TintOpacityLabel => ((int)(this.BackgroundTintOpacity * 100)).ToString() + "%";
+
+    /// <summary>
+    /// Gets the material opacity label text (e.g. "75%").
+    /// </summary>
+    public string MaterialOpacityLabel => ((int)(this.BackgroundMaterialOpacity * 100)).ToString() + "%";
 
     /// <summary>
     /// Gets the available color schemes.
@@ -332,6 +383,14 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     /// Gets a value indicating whether the opacity slider should be enabled.
     /// </summary>
     public bool IsOpacityEnabled => this.EnableBlurBehind;
+
+    /// <summary>
+    /// Gets a value indicating whether the Material Tone radio buttons
+    /// should be enabled. Disabled when blur is off (no material) or
+    /// when <see cref="BlurType.Transparent"/> is selected (a fully
+    /// transparent backdrop has no tonal variant).
+    /// </summary>
+    public bool IsMaterialToneEnabled => this.EnableBlurBehind && this.BlurType != BlurType.Transparent;
 
     /// <summary>
     /// Gets the available bell-action choices for data binding.
