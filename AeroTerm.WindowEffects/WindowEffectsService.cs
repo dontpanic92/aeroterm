@@ -76,6 +76,18 @@ public sealed class WindowEffectsService
     public bool IsMacFullScreen => this.isMacFullScreen;
 
     /// <summary>
+    /// Gets a value indicating whether blur / transparency / Liquid Glass
+    /// effects should currently be applied. False whenever the window is in
+    /// macOS native full-screen mode — there is no desktop visible behind
+    /// the window in that state, so the effects produce no visual benefit
+    /// and only complicate the appearance of our chrome. The user-facing
+    /// <see cref="IWindowEffectsSettings.EnableBlurBehind"/> setting is
+    /// preserved unchanged and re-honoured on exit from full screen.
+    /// </summary>
+    private bool EffectiveBlurEnabled =>
+        this.settings.EnableBlurBehind && !this.isMacFullScreen;
+
+    /// <summary>
     /// Configures initial blur and transparency settings on the window.
     /// </summary>
     public void SetupBlurBehind()
@@ -180,18 +192,31 @@ public sealed class WindowEffectsService
 
         if (isFullScreen)
         {
+            // Drop the unified NSToolbar so its translucent material does
+            // not render behind our custom tab bar in the AppKit-drawn
+            // fullscreen titlebar. Liquid Glass / transparency are handled
+            // by the apply pipeline below via EffectiveBlurEnabled.
             MacOSInterop.DetachToolbar(nsWindow);
-            MacOSInterop.RemoveLiquidGlassBackdrop(nsWindow);
         }
         else
         {
+            // Restore the in-window appearance to match the pre-fullscreen
+            // configuration. SetTransparentTitlebar / unified toolbar must
+            // be reapplied here because AppKit resets these on exit from
+            // its fullscreen space.
             MacOSInterop.SetTransparentTitlebar(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
-            this.UpdateLiquidGlassBackdrop(nsWindow);
         }
 
+        // Re-run the full apply pipeline. EffectiveBlurEnabled is now
+        // false in fullscreen, so this collapses transparency, opacity,
+        // and Liquid Glass to their "blur off" state, and restores them
+        // on exit.
+        this.UpdateTransparencyLevelHint();
+        this.UpdateLiquidGlassBackdrop(nsWindow);
         this.UpdateBackgroundOpacity();
+
         this.MacOSFullScreenChanged?.Invoke(isFullScreen);
     }
 
@@ -205,7 +230,7 @@ public sealed class WindowEffectsService
     {
         this.isDialogOpen = true;
 
-        if (!this.settings.EnableBlurBehind)
+        if (!this.EffectiveBlurEnabled)
         {
             return IntPtr.Zero;
         }
@@ -265,7 +290,7 @@ public sealed class WindowEffectsService
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task CheckTransparencyMismatchAsync()
     {
-        if (!this.settings.EnableBlurBehind)
+        if (!this.EffectiveBlurEnabled)
         {
             return;
         }
@@ -303,7 +328,7 @@ public sealed class WindowEffectsService
         Color brushColor;
         float opacity;
 
-        if (this.settings.EnableBlurBehind)
+        if (this.EffectiveBlurEnabled)
         {
             (brushColor, opacity) = AcrylicColorMath.Compose(
                 tintColor,
@@ -346,7 +371,7 @@ public sealed class WindowEffectsService
 
     private void UpdateTransparencyLevelHint()
     {
-        if (this.settings.EnableBlurBehind)
+        if (this.EffectiveBlurEnabled)
         {
             this.window.TransparencyLevelHint = [this.GetRequestedTransparencyLevel()];
         }
@@ -380,7 +405,7 @@ public sealed class WindowEffectsService
     /// </summary>
     private bool ShouldHideTitleBarMaterial()
     {
-        return this.settings.EnableBlurBehind
+        return this.EffectiveBlurEnabled
             && (this.settings.BlurType == BlurType.Transparent
                 || this.settings.BlurType == BlurType.LiquidGlass);
     }
@@ -402,7 +427,7 @@ public sealed class WindowEffectsService
             return;
         }
 
-        bool wantGlass = this.settings.EnableBlurBehind
+        bool wantGlass = this.EffectiveBlurEnabled
             && this.settings.BlurType == BlurType.LiquidGlass;
 
         if (!wantGlass)
@@ -499,7 +524,7 @@ public sealed class WindowEffectsService
     private void ApplyMaterialTone(IntPtr nativeHandle)
     {
         if (nativeHandle == IntPtr.Zero
-            || !this.settings.EnableBlurBehind
+            || !this.EffectiveBlurEnabled
             || this.settings.BlurType == BlurType.Transparent)
         {
             return;
