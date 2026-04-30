@@ -52,17 +52,23 @@ public struct Cell
     }
 
     /// <summary>
-    /// Gets the color for foreground.
+    /// Gets the logical foreground color. This is no longer a baked RGB:
+    /// it is encoded per <see cref="ColorRef"/> and may be an RGB literal,
+    /// a palette-index reference, or the
+    /// <see cref="ColorRef.DefaultFg"/> sentinel. Call
+    /// <see cref="ResolveForeground"/> to obtain a paintable RGB.
     /// </summary>
     public int ForegroundColor { get; private set; }
 
     /// <summary>
-    /// Gets the color for background.
+    /// Gets the logical background color. Encoded per <see cref="ColorRef"/>;
+    /// see <see cref="ForegroundColor"/> for details.
     /// </summary>
     public int BackgroundColor { get; private set; }
 
     /// <summary>
-    /// Gets the color for undercurl.
+    /// Gets the special / underline color (RGB). Special colors are not
+    /// palette-tracked and are unaffected by color-scheme changes.
     /// </summary>
     public int SpecialColor { get; private set; }
 
@@ -233,4 +239,22 @@ public struct Cell
     {
         this.Set(" ", new CellStyle(foreground, background, special, false, false, false, false, false));
     }
+
+    /// <summary>
+    /// Resolves <see cref="ForegroundColor"/> to a paintable RGB using
+    /// the supplied per-frame <paramref name="palette"/>.
+    /// </summary>
+    /// <param name="palette">A palette snapshot from <see cref="Screen.Palette"/>.</param>
+    /// <returns>The resolved 24-bit RGB.</returns>
+    public int ResolveForeground(in PaletteSnapshot palette) =>
+        palette.ResolveForeground(this.ForegroundColor);
+
+    /// <summary>
+    /// Resolves <see cref="BackgroundColor"/> to a paintable RGB using
+    /// the supplied per-frame <paramref name="palette"/>.
+    /// </summary>
+    /// <param name="palette">A palette snapshot from <see cref="Screen.Palette"/>.</param>
+    /// <returns>The resolved 24-bit RGB.</returns>
+    public int ResolveBackground(in PaletteSnapshot palette) =>
+        palette.ResolveBackground(this.BackgroundColor);
 }

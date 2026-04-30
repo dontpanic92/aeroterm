@@ -100,6 +100,7 @@ internal sealed class TerminalRenderer : IDisposable
         canvas.Translate(0, topInset);
 
         var cells = screen.Cells;
+        var palette = screen.Palette;
         int rows = cells.GetLength(0);
         int cols = cells.GetLength(1);
 
@@ -110,13 +111,14 @@ internal sealed class TerminalRenderer : IDisposable
         {
             for (int j = 0; j < cols; j++)
             {
-                if (cells[i, j].BackgroundColor != screen.BackgroundColor || cells[i, j].Reverse)
+                int cellBg = cells[i, j].ResolveBackground(palette);
+                if (cellBg != screen.BackgroundColor || cells[i, j].Reverse)
                 {
                     float x = j * textParam.CharWidth;
                     float y = i * textParam.LineHeight;
                     int color = cells[i, j].Reverse
-                        ? cells[i, j].ForegroundColor
-                        : cells[i, j].BackgroundColor;
+                        ? cells[i, j].ResolveForeground(palette)
+                        : cellBg;
                     this.backgroundPaint.Color = GetSkColor(color);
                     canvas.DrawRect(x, y, textParam.CharWidth, textParam.LineHeight, this.backgroundPaint);
                 }
@@ -222,7 +224,7 @@ internal sealed class TerminalRenderer : IDisposable
 
                 j = cellRangeEnd;
 
-                this.DrawCellRange(canvas, cells, i, cellRangeStart, cellRangeEnd, textParam, enableLigature);
+                this.DrawCellRange(canvas, cells, palette, i, cellRangeStart, cellRangeEnd, textParam, enableLigature);
             }
         }
 
@@ -238,8 +240,8 @@ internal sealed class TerminalRenderer : IDisposable
             if (ec >= sc)
             {
                 int fg = cells[run.Row, sc].Reverse
-                    ? cells[run.Row, sc].BackgroundColor
-                    : cells[run.Row, sc].ForegroundColor;
+                    ? cells[run.Row, sc].ResolveBackground(palette)
+                    : cells[run.Row, sc].ResolveForeground(palette);
                 this.underlinePaint.Color = GetSkColor(fg);
                 float ulY = ((run.Row + 1) * textParam.LineHeight) - 1;
                 float sx = sc * textParam.CharWidth;
@@ -365,6 +367,7 @@ internal sealed class TerminalRenderer : IDisposable
     private void DrawCellRange(
         SKCanvas canvas,
         Cell[,] cells,
+        PaletteSnapshot palette,
         int row,
         int colStart,
         int colEnd,
@@ -377,8 +380,8 @@ internal sealed class TerminalRenderer : IDisposable
         bool strikethrough = cells[row, colStart].Strikethrough;
         int specialColor = cells[row, colStart].SpecialColor;
         int foregroundColor = cells[row, colStart].Reverse
-            ? cells[row, colStart].BackgroundColor
-            : cells[row, colStart].ForegroundColor;
+            ? cells[row, colStart].ResolveBackground(palette)
+            : cells[row, colStart].ResolveForeground(palette);
         int underlineColor = specialColor != 0 ? specialColor : foregroundColor;
 
         var weight = bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal;

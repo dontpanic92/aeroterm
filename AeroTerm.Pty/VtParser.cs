@@ -1277,7 +1277,7 @@ public class VtParser
 
                 // Standard foreground colors (30-37)
                 case int n when n >= 30 && n <= 37:
-                    this.buffer.SetForegroundColor(StandardColors[n - 30]);
+                    this.buffer.SetForegroundColor(ColorRef.Palette(n - 30));
                     break;
 
                 case 38: // Extended foreground
@@ -1290,7 +1290,7 @@ public class VtParser
 
                 // Standard background colors (40-47)
                 case int n when n >= 40 && n <= 47:
-                    this.buffer.SetBackgroundColor(StandardColors[n - 40]);
+                    this.buffer.SetBackgroundColor(ColorRef.Palette(n - 40));
                     break;
 
                 case 48: // Extended background
@@ -1311,12 +1311,12 @@ public class VtParser
 
                 // Bright foreground colors (90-97)
                 case int n when n >= 90 && n <= 97:
-                    this.buffer.SetForegroundColor(BrightColors[n - 90]);
+                    this.buffer.SetForegroundColor(ColorRef.Palette(8 + (n - 90)));
                     break;
 
                 // Bright background colors (100-107)
                 case int n when n >= 100 && n <= 107:
-                    this.buffer.SetBackgroundColor(BrightColors[n - 100]);
+                    this.buffer.SetBackgroundColor(ColorRef.Palette(8 + (n - 100)));
                     break;
             }
         }
@@ -1339,7 +1339,7 @@ public class VtParser
             if (colonMode == 5 && subs.Length >= 2)
             {
                 int colorIndex = Math.Clamp(subs[1], 0, 255);
-                int color = Convert256Color(colorIndex);
+                int color = isSpecial ? Convert256Color(colorIndex) : ColorRef.Palette(colorIndex);
                 this.ApplyExtendedColor(color, isForeground, isSpecial);
                 return index;
             }
@@ -1381,9 +1381,11 @@ public class VtParser
         int mode = this.parameters[index + 1];
         if (mode == 5 && index + 2 < this.parameters.Count)
         {
-            // 256-color: 38;5;N
+            // 256-color: 38;5;N → emit a palette-index reference so the
+            // cell follows palette / scheme changes at render time.
+            // Special (underline) colors are not palette-tracked.
             int colorIndex = Math.Clamp(this.parameters[index + 2], 0, 255);
-            int color = Convert256Color(colorIndex);
+            int color = isSpecial ? Convert256Color(colorIndex) : ColorRef.Palette(colorIndex);
             this.ApplyExtendedColor(color, isForeground, isSpecial);
             return index + 2;
         }

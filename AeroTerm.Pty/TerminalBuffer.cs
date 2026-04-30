@@ -41,8 +41,8 @@ public class TerminalBuffer
     private int cursorCol;
     private int savedCursorRow;
     private int savedCursorCol;
-    private int savedFg = -1;
-    private int savedBg = -1;
+    private int savedFg = ColorRef.DefaultFg;
+    private int savedBg = ColorRef.DefaultBg;
     private int savedSpecial;
     private bool savedBold;
     private bool savedItalic;
@@ -63,8 +63,8 @@ public class TerminalBuffer
     private int scrollTop;
     private int scrollBottom;
 
-    private int currentFg = -1;
-    private int currentBg = -1;
+    private int currentFg = ColorRef.DefaultFg;
+    private int currentBg = ColorRef.DefaultBg;
     private int currentSpecial;
     private bool bold;
     private bool italic;
@@ -1201,7 +1201,7 @@ public class TerminalBuffer
                         int startCol = i < copyRows ? copyCols : 0;
                         for (int j = startCol; j < this.Cols; j++)
                         {
-                            resized[i, j].Clear(this.defaultFg, this.defaultBg, 0);
+                            resized[i, j].Clear(ColorRef.DefaultFg, ColorRef.DefaultBg, 0);
                         }
                     }
 
@@ -1277,8 +1277,8 @@ public class TerminalBuffer
     /// </summary>
     public void ResetAttributes()
     {
-        this.currentFg = -1;
-        this.currentBg = -1;
+        this.currentFg = ColorRef.DefaultFg;
+        this.currentBg = ColorRef.DefaultBg;
         this.currentSpecial = 0;
         this.bold = false;
         this.italic = false;
@@ -1377,26 +1377,31 @@ public class TerminalBuffer
     }
 
     /// <summary>
-    /// Set foreground color (RGB format).
+    /// Set foreground color (logical encoding per <see cref="ColorRef"/>:
+    /// RGB literal, palette index, or <see cref="ColorRef.DefaultFg"/>).
     /// </summary>
-    /// <param name="color">Color value in RGB format.</param>
+    /// <param name="color">Logical color value.</param>
     public void SetForegroundColor(int color) => this.currentFg = color;
 
     /// <summary>
-    /// Set background color (RGB format).
+    /// Set background color (logical encoding per <see cref="ColorRef"/>).
     /// </summary>
-    /// <param name="color">Color value in RGB format.</param>
+    /// <param name="color">Logical color value.</param>
     public void SetBackgroundColor(int color) => this.currentBg = color;
 
     /// <summary>
-    /// Reset foreground color to default.
+    /// Reset foreground color to default. New cells written after this
+    /// call carry the <see cref="ColorRef.DefaultFg"/> sentinel and
+    /// repaint with the buffer's current
+    /// <see cref="DefaultForeground"/> at render time.
     /// </summary>
-    public void SetDefaultForeground() => this.currentFg = -1;
+    public void SetDefaultForeground() => this.currentFg = ColorRef.DefaultFg;
 
     /// <summary>
-    /// Reset background color to default.
+    /// Reset background color to default. New cells written after this
+    /// call carry the <see cref="ColorRef.DefaultBg"/> sentinel.
     /// </summary>
-    public void SetDefaultBackground() => this.currentBg = -1;
+    public void SetDefaultBackground() => this.currentBg = ColorRef.DefaultBg;
 
     /// <summary>
     /// Set special (underline/undercurl) color (RGB format).
@@ -1467,8 +1472,8 @@ public class TerminalBuffer
                     this.cells[i, j].Set(
                         "E",
                         new CellStyle(
-                            this.defaultFg,
-                            this.defaultBg,
+                            ColorRef.DefaultFg,
+                            ColorRef.DefaultBg,
                             0,
                             false,
                             false,
@@ -1548,15 +1553,25 @@ public class TerminalBuffer
     }
 
     /// <summary>
-    /// Set a palette color for a 256-color index.
+    /// Set a palette color for a 256-color index. Cells that reference
+    /// this index pick up the new value on the next frame.
     /// </summary>
     /// <param name="index">The palette index.</param>
     /// <param name="color">The RGB color value.</param>
     public void SetPaletteColor(int index, int color)
     {
-        if (index >= 0 && index < this.palette.Length)
+        if (index < 0 || index >= this.palette.Length)
         {
-            this.palette[index] = color;
+            return;
+        }
+
+        lock (this.screenLock)
+        {
+            var newPalette = (int[])this.palette.Clone();
+            newPalette[index] = color;
+            this.palette = newPalette;
+            this.allDirty = true;
+            this.bgHistogramValid = false;
         }
     }
 
@@ -1566,9 +1581,18 @@ public class TerminalBuffer
     /// <param name="index">The palette index.</param>
     public void ResetPaletteColor(int index)
     {
-        if (index >= 0 && index < this.palette.Length)
+        if (index < 0 || index >= this.palette.Length)
         {
-            this.palette[index] = DefaultPalette[index];
+            return;
+        }
+
+        lock (this.screenLock)
+        {
+            var newPalette = (int[])this.palette.Clone();
+            newPalette[index] = DefaultPalette[index];
+            this.palette = newPalette;
+            this.allDirty = true;
+            this.bgHistogramValid = false;
         }
     }
 
@@ -1577,11 +1601,21 @@ public class TerminalBuffer
     /// </summary>
     public void ResetPaletteColors()
     {
-        Array.Copy(DefaultPalette, this.palette, DefaultPalette.Length);
+        lock (this.screenLock)
+        {
+            this.palette = (int[])DefaultPalette.Clone();
+            this.allDirty = true;
+            this.bgHistogramValid = false;
+        }
     }
 
     /// <summary>
     /// Overrides the first 16 ANSI palette colors with the given values.
+    /// Existing cells that reference these palette indexes (logical
+    /// <see cref="ColorRef.Palette(int)"/> values) automatically render
+    /// with the new colors on the next frame — including cells in the
+    /// scrollback ring. Truecolor literals (SGR 38;2 / 48;2) are
+    /// unaffected by spec.
     /// </summary>
     /// <param name="colors">An array of at least 16 RGB color values.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="colors"/>
@@ -1594,47 +1628,40 @@ public class TerminalBuffer
             return;
         }
 
-        Array.Copy(colors, this.palette, 16);
-        this.allDirty = true;
+        lock (this.screenLock)
+        {
+            // Allocate a fresh palette array so any captured
+            // PaletteSnapshot continues to see its old values; new
+            // snapshots will see the updated table.
+            var newPalette = (int[])this.palette.Clone();
+            Array.Copy(colors, newPalette, 16);
+            this.palette = newPalette;
+            this.allDirty = true;
+            this.bgHistogramValid = false;
+        }
     }
 
     /// <summary>
-    /// Replaces the default foreground and background colors on all existing
-    /// cells, so that a color scheme change takes immediate visual effect.
+    /// Updates the buffer's default foreground / background colors. Cells
+    /// that reference these defaults via the <see cref="ColorRef.DefaultFg"/>
+    /// / <see cref="ColorRef.DefaultBg"/> sentinels — including cells in
+    /// the scrollback ring — automatically render with the new defaults
+    /// on the next frame.
     /// </summary>
-    /// <param name="newFg">The new default foreground color.</param>
-    /// <param name="newBg">The new default background color.</param>
+    /// <param name="newFg">The new default foreground RGB.</param>
+    /// <param name="newBg">The new default background RGB.</param>
     public void RecolorDefaults(int newFg, int newBg)
     {
-        int oldFg = this.defaultFg;
-        int oldBg = this.defaultBg;
-        this.defaultFg = newFg;
-        this.defaultBg = newBg;
-        this.detectedBg = newBg;
-
-        if (this.cells is not null && (oldFg != newFg || oldBg != newBg))
+        lock (this.screenLock)
         {
-            for (int i = 0; i < this.Rows; i++)
+            if (this.defaultFg == newFg && this.defaultBg == newBg)
             {
-                for (int j = 0; j < this.Cols; j++)
-                {
-                    RemapCellDefaultColor(ref this.cells[i, j], oldFg, newFg, oldBg, newBg);
-                }
+                return;
             }
 
-            if (this.altCells is not null)
-            {
-                int altRows = this.altCells.GetLength(0);
-                int altCols = this.altCells.GetLength(1);
-                for (int i = 0; i < altRows; i++)
-                {
-                    for (int j = 0; j < altCols; j++)
-                    {
-                        RemapCellDefaultColor(ref this.altCells[i, j], oldFg, newFg, oldBg, newBg);
-                    }
-                }
-            }
-
+            this.defaultFg = newFg;
+            this.defaultBg = newBg;
+            this.detectedBg = newBg;
             this.allDirty = true;
             this.bgHistogramValid = false;
         }
@@ -1740,6 +1767,7 @@ public class TerminalBuffer
         this.screen.CursorPosition = (this.cursorRow, this.cursorCol);
         this.screen.BackgroundColor = this.detectedBg;
         this.screen.ForegroundColor = ColorUtility.DeriveReadableForeground(this.detectedBg);
+        this.screen.Palette = new PaletteSnapshot(this.defaultFg, this.defaultBg, this.palette);
 
         return this.screen;
     }
@@ -1828,32 +1856,6 @@ public class TerminalBuffer
         return palette;
     }
 
-    private static void RemapCellDefaultColor(ref Cell cell, int oldFg, int newFg, int oldBg, int newBg)
-    {
-        bool changed = false;
-        int fg = cell.ForegroundColor;
-        int bg = cell.BackgroundColor;
-
-        if (fg == oldFg)
-        {
-            fg = newFg;
-            changed = true;
-        }
-
-        if (bg == oldBg)
-        {
-            bg = newBg;
-            changed = true;
-        }
-
-        if (changed)
-        {
-            cell.Set(
-                cell.Character,
-                new CellStyle(fg, bg, cell.SpecialColor, cell.Reverse, cell.Italic, cell.Bold, cell.Underline, cell.Undercurl));
-        }
-    }
-
     private static bool[] CreateDefaultTabStops(int cols)
     {
         var stops = new bool[cols];
@@ -1865,9 +1867,8 @@ public class TerminalBuffer
         return stops;
     }
 
-    private static bool IsDefaultBlank(Cell cell, int defaultFg, int defaultBg)
+    private static bool IsDefaultBlank(Cell cell)
     {
-        _ = defaultFg;
         if (cell.Character is null)
         {
             // Wide continuation — not "blank" for reflow purposes.
@@ -1879,7 +1880,11 @@ public class TerminalBuffer
             return false;
         }
 
-        if (cell.BackgroundColor != defaultBg)
+        // A cell counts as "default blank" only if its background is the
+        // default-bg sentinel (i.e. it was written with the user's default
+        // colors, not an explicit RGB / palette colour). This makes
+        // reflow's trailing-blank trimming immune to color-scheme changes.
+        if (!ColorRef.IsDefaultBg(cell.BackgroundColor))
         {
             return false;
         }
@@ -1943,9 +1948,9 @@ public class TerminalBuffer
         return GraphemeCluster.ComputeWidth(runes);
     }
 
-    private int ResolveFg() => this.currentFg == -1 ? this.defaultFg : this.currentFg;
+    private int ResolveFg() => this.currentFg;
 
-    private int ResolveBg() => this.currentBg == -1 ? this.defaultBg : this.currentBg;
+    private int ResolveBg() => this.currentBg;
 
     private void ApplyExtendedAttrs(ref Cell cell)
     {
@@ -2039,6 +2044,34 @@ public class TerminalBuffer
         }
     }
 
+    private int ResolveCellBg(Cell cell)
+    {
+        int logical = cell.BackgroundColor;
+        if (logical == ColorRef.DefaultBg)
+        {
+            return this.defaultBg;
+        }
+
+        if (logical == ColorRef.DefaultFg)
+        {
+            return this.defaultFg;
+        }
+
+        if (ColorRef.IsPalette(logical))
+        {
+            int idx = ColorRef.PaletteIndex(logical);
+            int[] p = this.palette;
+            if ((uint)idx < (uint)p.Length)
+            {
+                return p[idx];
+            }
+
+            return this.defaultBg;
+        }
+
+        return ColorRef.RgbValue(logical);
+    }
+
     private void RebuildHistogramFromCells()
     {
         this.bgHistogram.Clear();
@@ -2046,7 +2079,7 @@ public class TerminalBuffer
         {
             for (int j = 0; j < this.Cols; j++)
             {
-                int bg = this.cells[i, j].BackgroundColor;
+                int bg = this.ResolveCellBg(this.cells[i, j]);
                 this.bgHistogram[bg] = this.bgHistogram.GetValueOrDefault(bg) + 1;
             }
         }
@@ -2061,7 +2094,7 @@ public class TerminalBuffer
         {
             for (int j = 0; j < this.Cols; j++)
             {
-                int oldBg = oldCells[i, j].BackgroundColor;
+                int oldBg = this.ResolveCellBg(oldCells[i, j]);
                 if (this.bgHistogram.TryGetValue(oldBg, out int oldCount))
                 {
                     if (oldCount <= 1)
@@ -2074,7 +2107,7 @@ public class TerminalBuffer
                     }
                 }
 
-                int newBg = this.cells[i, j].BackgroundColor;
+                int newBg = this.ResolveCellBg(this.cells[i, j]);
                 this.bgHistogram[newBg] = this.bgHistogram.GetValueOrDefault(newBg) + 1;
             }
         }
@@ -2090,8 +2123,8 @@ public class TerminalBuffer
 
     private void ClearRow(int row)
     {
-        int fg = this.currentFg == -1 ? this.defaultFg : this.currentFg;
-        int bg = this.currentBg == -1 ? this.defaultBg : this.currentBg;
+        int fg = this.currentFg;
+        int bg = this.currentBg;
         for (int j = 0; j < this.Cols; j++)
         {
             this.cells[row, j].Clear(fg, bg, this.currentSpecial);
@@ -2108,8 +2141,8 @@ public class TerminalBuffer
         rowEnd = Math.Min(this.Rows - 1, rowEnd);
         colEnd = Math.Min(this.Cols - 1, colEnd);
 
-        int fg = this.currentFg == -1 ? this.defaultFg : this.currentFg;
-        int bg = this.currentBg == -1 ? this.defaultBg : this.currentBg;
+        int fg = this.currentFg;
+        int bg = this.currentBg;
         for (int i = rowStart; i <= rowEnd; i++)
         {
             int jStart = i == rowStart ? colStart : 0;
@@ -2326,7 +2359,7 @@ public class TerminalBuffer
             int startCol = i < copyRows ? copyCols : 0;
             for (int j = startCol; j < cols; j++)
             {
-                newCells[i, j].Clear(this.defaultFg, this.defaultBg, this.currentSpecial);
+                newCells[i, j].Clear(ColorRef.DefaultFg, ColorRef.DefaultBg, this.currentSpecial);
             }
         }
 
@@ -2472,7 +2505,7 @@ public class TerminalBuffer
         {
             var line = logicalLines[li];
             int keep = line.Count;
-            while (keep > 0 && IsDefaultBlank(line[keep - 1], this.defaultFg, this.defaultBg))
+            while (keep > 0 && IsDefaultBlank(line[keep - 1]))
             {
                 keep--;
             }
@@ -2503,7 +2536,7 @@ public class TerminalBuffer
 
             if (line.Count == 0)
             {
-                outRows.Add(BlankRow(newCols, this.defaultFg, this.defaultBg, this.currentSpecial));
+                outRows.Add(BlankRow(newCols, ColorRef.DefaultFg, ColorRef.DefaultBg, this.currentSpecial));
                 outWrapped.Add(false);
             }
             else
@@ -2531,7 +2564,7 @@ public class TerminalBuffer
                             // Pad with a blank, wrap.
                             while (current.Count < newCols)
                             {
-                                current.Add(DefaultBlankCell(this.defaultFg, this.defaultBg, this.currentSpecial));
+                                current.Add(DefaultBlankCell(ColorRef.DefaultFg, ColorRef.DefaultBg, this.currentSpecial));
                             }
 
                             outRows.Add(current.ToArray());
@@ -2564,7 +2597,7 @@ public class TerminalBuffer
                 // Pad last chunk to newCols.
                 while (current.Count < newCols)
                 {
-                    current.Add(DefaultBlankCell(this.defaultFg, this.defaultBg, this.currentSpecial));
+                    current.Add(DefaultBlankCell(ColorRef.DefaultFg, ColorRef.DefaultBg, this.currentSpecial));
                 }
 
                 outRows.Add(current.ToArray());
@@ -2638,7 +2671,7 @@ public class TerminalBuffer
             var row = outRows[i];
             for (int c = 0; c < newCols; c++)
             {
-                newLive[filled, c] = c < row.Length ? row[c] : DefaultBlankCell(this.defaultFg, this.defaultBg, this.currentSpecial);
+                newLive[filled, c] = c < row.Length ? row[c] : DefaultBlankCell(ColorRef.DefaultFg, ColorRef.DefaultBg, this.currentSpecial);
             }
 
             newLiveWrapped[filled] = outWrapped[i];
@@ -2648,7 +2681,7 @@ public class TerminalBuffer
         {
             for (int c = 0; c < newCols; c++)
             {
-                newLive[i, c] = DefaultBlankCell(this.defaultFg, this.defaultBg, this.currentSpecial);
+                newLive[i, c] = DefaultBlankCell(ColorRef.DefaultFg, ColorRef.DefaultBg, this.currentSpecial);
             }
 
             newLiveWrapped[i] = false;
@@ -2692,7 +2725,7 @@ public class TerminalBuffer
         {
             for (int c = 0; c < this.Cols; c++)
             {
-                if (!IsDefaultBlank(this.cells[r, c], this.defaultFg, this.defaultBg))
+                if (!IsDefaultBlank(this.cells[r, c]))
                 {
                     return r;
                 }

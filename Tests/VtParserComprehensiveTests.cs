@@ -916,7 +916,8 @@ public class VtParserComprehensiveTests
         parser.Process(Encoding.UTF8.GetBytes("\x1B[31mA"));
 
         var screen = buffer.GetScreen();
-        Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(0xCC0000));
+        Assert.That(screen!.Cells[0, 0].ResolveForeground(screen.Palette), Is.EqualTo(0xCC0000));
+        Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(ColorRef.Palette(1)));
     }
 
     /// <summary>
@@ -932,7 +933,8 @@ public class VtParserComprehensiveTests
         parser.Process(Encoding.UTF8.GetBytes("\x1B[42mA"));
 
         var screen = buffer.GetScreen();
-        Assert.That(screen!.Cells[0, 0].BackgroundColor, Is.EqualTo(0x00CC00));
+        Assert.That(screen!.Cells[0, 0].ResolveBackground(screen.Palette), Is.EqualTo(0x00CC00));
+        Assert.That(screen!.Cells[0, 0].BackgroundColor, Is.EqualTo(ColorRef.Palette(2)));
     }
 
     /// <summary>
@@ -948,7 +950,8 @@ public class VtParserComprehensiveTests
         parser.Process(Encoding.UTF8.GetBytes("\x1B[91mA"));
 
         var screen = buffer.GetScreen();
-        Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(0xFF5555));
+        Assert.That(screen!.Cells[0, 0].ResolveForeground(screen.Palette), Is.EqualTo(0xFF5555));
+        Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(ColorRef.Palette(9)));
     }
 
     /// <summary>
@@ -964,7 +967,8 @@ public class VtParserComprehensiveTests
         parser.Process(Encoding.UTF8.GetBytes("\x1B[102mA"));
 
         var screen = buffer.GetScreen();
-        Assert.That(screen!.Cells[0, 0].BackgroundColor, Is.EqualTo(0x55FF55));
+        Assert.That(screen!.Cells[0, 0].ResolveBackground(screen.Palette), Is.EqualTo(0x55FF55));
+        Assert.That(screen!.Cells[0, 0].BackgroundColor, Is.EqualTo(ColorRef.Palette(10)));
     }
 
     /// <summary>
@@ -980,8 +984,10 @@ public class VtParserComprehensiveTests
 
         var screen = buffer.GetScreen();
 
-        // After reset to default, foreground should be 0 (default)
-        Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(0));
+        // After reset to default, cell carries the DefaultFg sentinel and
+        // resolves to the buffer's current default foreground (0).
+        Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(ColorRef.DefaultFg));
+        Assert.That(screen!.Cells[0, 0].ResolveForeground(screen.Palette), Is.EqualTo(0));
     }
 
     /// <summary>
@@ -998,11 +1004,13 @@ public class VtParserComprehensiveTests
 
         var screen = buffer.GetScreen();
 
-        // Cell 'X' should have the custom bg
-        Assert.That(screen!.Cells[0, 0].BackgroundColor, Is.Not.EqualTo(buffer.DefaultBackground));
+        // Cell 'X' should NOT resolve to the default bg.
+        Assert.That(screen!.Cells[0, 0].ResolveBackground(screen.Palette), Is.Not.EqualTo(buffer.DefaultBackground));
 
-        // Cell 'A' should match the terminal's default background
-        Assert.That(screen.Cells[0, 1].BackgroundColor, Is.EqualTo(buffer.DefaultBackground));
+        // Cell 'A' should carry the DefaultBg sentinel and resolve to the
+        // terminal's default background.
+        Assert.That(screen.Cells[0, 1].BackgroundColor, Is.EqualTo(ColorRef.DefaultBg));
+        Assert.That(screen.Cells[0, 1].ResolveBackground(screen.Palette), Is.EqualTo(buffer.DefaultBackground));
     }
 
     /// <summary>
@@ -1018,7 +1026,8 @@ public class VtParserComprehensiveTests
         parser.Process(Encoding.UTF8.GetBytes("\x1B[38;5;196mA"));
 
         var screen = buffer.GetScreen();
-        Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(0xFF0000));
+        Assert.That(screen!.Cells[0, 0].ResolveForeground(screen.Palette), Is.EqualTo(0xFF0000));
+        Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(ColorRef.Palette(196)));
     }
 
     /// <summary>
@@ -1034,7 +1043,8 @@ public class VtParserComprehensiveTests
         parser.Process(Encoding.UTF8.GetBytes("\x1B[48;5;46mA"));
 
         var screen = buffer.GetScreen();
-        Assert.That(screen!.Cells[0, 0].BackgroundColor, Is.EqualTo(0x00FF00));
+        Assert.That(screen!.Cells[0, 0].ResolveBackground(screen.Palette), Is.EqualTo(0x00FF00));
+        Assert.That(screen!.Cells[0, 0].BackgroundColor, Is.EqualTo(ColorRef.Palette(46)));
     }
 
     /// <summary>

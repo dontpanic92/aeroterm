@@ -54,7 +54,7 @@ public class TerminalBufferBackgroundDetectionTests
 
         // Leave alt buffer (DECRST 1049). btop typically resets SGR before
         // exiting; emulate that.
-        buffer.SetBackgroundColor(-1);
+        buffer.SetDefaultBackground();
         buffer.SwitchToMainBuffer();
 
         // The shell now repaints its prompt area with default-bg erase-to-EOL
@@ -71,7 +71,7 @@ public class TerminalBufferBackgroundDetectionTests
         {
             for (int col = 0; col < 20; col++)
             {
-                Assert.That(restored.Cells[row, col].BackgroundColor, Is.EqualTo(UserDefaultBg), $"Cell [{row},{col}] should carry the user's default bg, not btop's bg.");
+                Assert.That(restored.Cells[row, col].ResolveBackground(restored.Palette), Is.EqualTo(UserDefaultBg), $"Cell [{row},{col}] should resolve to the user's default bg, not btop's bg.");
             }
         }
     }
@@ -145,14 +145,14 @@ public class TerminalBufferBackgroundDetectionTests
         buffer.SwitchToMainBuffer();
 
         // Default background SGR + erase line.
-        buffer.SetBackgroundColor(-1);
+        buffer.SetDefaultBackground();
         buffer.SetCursorPosition(0, 0);
         buffer.EraseInLine(2); // entire line
 
         var screen = buffer.GetScreen();
         for (int col = 0; col < 10; col++)
         {
-            Assert.That(screen!.Cells[0, col].BackgroundColor, Is.EqualTo(UserDefaultBg), $"Cell [0,{col}] must be the user's default bg after SGR 49 + erase-line.");
+            Assert.That(screen!.Cells[0, col].ResolveBackground(screen.Palette), Is.EqualTo(UserDefaultBg), $"Cell [0,{col}] must resolve to the user's default bg after SGR 49 + erase-line.");
         }
     }
 }

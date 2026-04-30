@@ -16,6 +16,13 @@ public sealed class Screen
     public required Cell[,] Cells { get; set; }
 
     /// <summary>
+    /// Gets or sets the palette snapshot used to resolve the logical
+    /// colors stored in <see cref="Cells"/>. Captured by
+    /// <see cref="TerminalBuffer"/> at frame production time.
+    /// </summary>
+    public PaletteSnapshot Palette { get; set; }
+
+    /// <summary>
     /// Gets or sets the cursor position.
     /// </summary>
     public (int Row, int Col) CursorPosition { get; set; }

@@ -1242,7 +1242,7 @@ public class TerminalControl : Control, IDisposable
                     string? ch = cell.Character;
                     if (!string.IsNullOrEmpty(ch) && ch != " ")
                     {
-                        fgPaint.Color = TerminalRenderer.GetSkColor(cell.ForegroundColor);
+                        fgPaint.Color = TerminalRenderer.GetSkColor(cell.ResolveForeground(screen.Palette));
                         float baselineY = rowY + (this.textParam.LineHeight * 0.8f);
                         canvas.DrawText(ch, x, baselineY, ghostFont, fgPaint);
                     }

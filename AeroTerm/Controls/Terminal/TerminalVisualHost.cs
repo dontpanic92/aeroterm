@@ -55,7 +55,7 @@ internal sealed class TerminalVisualHost
         int scrollbackStart = Math.Max(0, scrollbackCount - viewportOffset);
 
         var composed = new Cell[rows, cols];
-        var defaultStyle = new CellStyle(live.ForegroundColor, live.BackgroundColor, 0, false, false, false, false, false);
+        var defaultStyle = new CellStyle(ColorRef.DefaultFg, ColorRef.DefaultBg, 0, false, false, false, false, false);
 
         for (int i = 0; i < historyRows; i++)
         {
@@ -65,7 +65,7 @@ internal sealed class TerminalVisualHost
                 // Out-of-range (e.g. scrollback shrank mid-render) — fill blank.
                 for (int j = 0; j < cols; j++)
                 {
-                    composed[i, j].Clear(live.ForegroundColor, live.BackgroundColor, 0);
+                    composed[i, j].Clear(ColorRef.DefaultFg, ColorRef.DefaultBg, 0);
                 }
 
                 continue;
@@ -99,6 +99,7 @@ internal sealed class TerminalVisualHost
             CursorPosition = live.CursorPosition,
             ForegroundColor = live.ForegroundColor,
             BackgroundColor = live.BackgroundColor,
+            Palette = live.Palette,
             AllDirty = true,
             DirtyRows = null,
         };

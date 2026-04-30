@@ -124,7 +124,8 @@ public class VtParserTests
         var screen = buffer.GetScreen();
         Assert.That(screen, Is.Not.Null);
         Assert.That(screen!.Cells[0, 0].ForegroundColor, Is.EqualTo(0x112233));
-        Assert.That(screen.Cells[0, 0].BackgroundColor, Is.EqualTo(0x00FF00));
+        Assert.That(screen.Cells[0, 0].ResolveBackground(screen.Palette), Is.EqualTo(0x00FF00));
+        Assert.That(screen.Cells[0, 0].BackgroundColor, Is.EqualTo(ColorRef.Palette(46)));
     }
 
     /// <summary>
