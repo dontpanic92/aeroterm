@@ -96,6 +96,7 @@ public sealed class WindowEffectsService
         this.window.Background = Brushes.Transparent;
         this.UpdateTransparencyLevelHint();
         this.UpdateBackgroundOpacity();
+        this.ApplyDwmBackdrop();
         this.ApplyMaterialTone();
     }
 
@@ -350,6 +351,20 @@ public sealed class WindowEffectsService
 
     private WindowTransparencyLevel GetRequestedTransparencyLevel()
     {
+        // On Windows 11 22H2+ we render Mica/Acrylic ourselves via DWM
+        // (see ApplyDwmBackdrop) so that DWMWA_USE_IMMERSIVE_DARK_MODE
+        // can drive the material's tonal variant. Avalonia's
+        // compositional Mica/Acrylic surface paints on top of the DWM
+        // backdrop and ignores the immersive dark mode attribute, which
+        // is why MaterialTone has no visible effect when we let
+        // Avalonia composite the material itself. Requesting Transparent
+        // here tells Avalonia to leave the backdrop alone so the DWM
+        // material — and our tone control — is what the user sees.
+        if (this.UseDwmDirectBackdrop())
+        {
+            return WindowTransparencyLevel.Transparent;
+        }
+
         return this.settings.BlurType switch
         {
             BlurType.Gaussian => WindowTransparencyLevel.Blur,
@@ -379,6 +394,63 @@ public sealed class WindowEffectsService
         {
             this.window.TransparencyLevelHint = [WindowTransparencyLevel.None];
         }
+    }
+
+    /// <summary>
+    /// Returns whether we should bypass Avalonia's compositional blur on
+    /// Windows and render Mica/Acrylic ourselves via
+    /// <c>DWMWA_SYSTEMBACKDROP_TYPE</c>. This is the only path on which
+    /// the user's <see cref="IWindowEffectsSettings.MaterialTone"/>
+    /// choice can actually drive the backdrop tint, because Avalonia's
+    /// composition surface paints the material itself and ignores the
+    /// DWM immersive dark mode attribute. Requires Windows 11 22H2+ and
+    /// the <see cref="BlurType.Mica"/> or <see cref="BlurType.Acrylic"/>
+    /// material; older Windows builds and the Gaussian/Transparent
+    /// blur types fall back to Avalonia's existing path.
+    /// </summary>
+    private bool UseDwmDirectBackdrop()
+    {
+        if (!this.EffectiveBlurEnabled)
+        {
+            return false;
+        }
+
+        if (!WindowsInterop.IsSystemBackdropTypeSupported())
+        {
+            return false;
+        }
+
+        return this.settings.BlurType == BlurType.Mica
+            || this.settings.BlurType == BlurType.Acrylic;
+    }
+
+    /// <summary>
+    /// Applies (or clears) the DWM-rendered system backdrop on Windows.
+    /// When <see cref="UseDwmDirectBackdrop"/> is true the requested
+    /// material is set via <c>DWMWA_SYSTEMBACKDROP_TYPE</c>; otherwise
+    /// the attribute is reset to <c>DWMSBT_AUTO</c> so a previously
+    /// installed backdrop does not linger after the user switches to a
+    /// blur type Avalonia composites itself (Gaussian, Transparent) or
+    /// disables blur entirely. A no-op on non-Windows platforms.
+    /// </summary>
+    private void ApplyDwmBackdrop()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return;
+        }
+
+        var hwnd = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        int backdropType = this.UseDwmDirectBackdrop()
+            ? this.MapBlurTypeToDwmBackdrop()
+            : 0;
+
+        WindowsInterop.SetSystemBackdropType(hwnd, backdropType);
     }
 
     private int MapBlurTypeToDwmBackdrop()

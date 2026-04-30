@@ -152,6 +152,78 @@ public static class WindowsInterop
     }
 
     /// <summary>
+    /// Returns whether the running Windows version supports DWM-rendered
+    /// system backdrops (Mica and Acrylic via
+    /// <c>DWMWA_SYSTEMBACKDROP_TYPE</c>). Available on Windows 11 22H2
+    /// (build 22621) or later. Used to decide whether we can take direct
+    /// control of the backdrop — and therefore of its tonal variant via
+    /// <see cref="SetImmersiveDarkMode"/> — instead of letting Avalonia
+    /// composite its own Mica/Acrylic surface (which ignores the
+    /// immersive dark mode attribute and so cannot honor a user-chosen
+    /// material tone).
+    /// </summary>
+    /// <returns><c>true</c> on Windows 11 22H2 or later; <c>false</c> otherwise.</returns>
+    public static bool IsSystemBackdropTypeSupported()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return false;
+        }
+
+        var version = Environment.OSVersion.Version;
+        return version.Major > 10
+            || (version.Major == 10 && version.Build >= 22621);
+    }
+
+    /// <summary>
+    /// Sets the DWM <c>DWMWA_SYSTEMBACKDROP_TYPE</c> attribute on the
+    /// given window, asking the desktop compositor to render the named
+    /// system material (Mica, Acrylic, etc.) behind the window. Combined
+    /// with <see cref="SetImmersiveDarkMode"/>, this gives us full
+    /// control over both the backdrop kind and its tonal variant —
+    /// unlike Avalonia's compositional Mica/Acrylic, which paints its
+    /// own surface and ignores the immersive dark mode attribute.
+    /// </summary>
+    /// <remarks>
+    /// Silently no-ops on non-Windows platforms, when the OS does not
+    /// support the attribute (DWM returns a non-zero HRESULT, which we
+    /// ignore), or when <paramref name="hwnd"/> is zero. Callers should
+    /// gate use of this helper on
+    /// <see cref="IsSystemBackdropTypeSupported"/>.
+    /// </remarks>
+    /// <param name="hwnd">The native HWND to update.</param>
+    /// <param name="backdropType">
+    /// The DWM <c>DWM_SYSTEMBACKDROP_TYPE</c> value: 0 = AUTO, 1 = NONE,
+    /// 2 = MAINWINDOW (Mica), 3 = TRANSIENTWINDOW (Acrylic),
+    /// 4 = TABBEDWINDOW (Mica Alt).
+    /// </param>
+    public static void SetSystemBackdropType(IntPtr hwnd, int backdropType)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        int value = backdropType;
+        NativeMethods.DwmSetWindowAttribute(
+            hwnd,
+            DwmwaSystembackdropType,
+            ref value,
+            sizeof(int));
+
+        // Keep the blur-preservation subclass in sync so that on
+        // WM_NCACTIVATE the same backdrop type is reapplied (the
+        // subclass uses storedBackdropType > 0 as its "preserve me"
+        // gate). When the caller resets to AUTO/NONE we also clear
+        // the stored value so the subclass stops trying to restore
+        // a stale backdrop.
+        if (isPreservingBlur)
+        {
+            storedBackdropType = backdropType;
+        }
+    }
+
+    /// <summary>
     /// Sets the DWM <c>DWMWA_USE_IMMERSIVE_DARK_MODE</c> hint on the
     /// given window so that the system backdrop (acrylic / mica / blur)
     /// and the non-client area pick the dark or light tonal variant.
