@@ -1255,6 +1255,18 @@ public partial class MainWindow : Window
         var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
 
         this.Resources["TitleBarForegroundBrush"] = brush;
+
+        // Derive the hover / pressed background tints from the same
+        // foreground colour the tab strip uses, mirroring TabStrip's
+        // inactive/active hover-tint approach (foreground RGB at a low
+        // alpha). This keeps the titlebar buttons readable on both dark
+        // and light colour schemes without a separate dark-mode branch.
+        const byte hoverAlpha = 0x22;
+        const byte pressedAlpha = 0x45;
+        this.Resources["TitleBarButtonHoverBrush"] =
+            new SolidColorBrush(Color.FromArgb(hoverAlpha, r, g, b));
+        this.Resources["TitleBarButtonPressedBrush"] =
+            new SolidColorBrush(Color.FromArgb(pressedAlpha, r, g, b));
     }
 
     private void ApplyTabForegroundFromColorScheme()
