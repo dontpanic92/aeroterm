@@ -104,7 +104,17 @@ public partial class MainWindow : Window
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
         this.macChromeReservation = this.FindControl<Border>("MacChromeReservation")!;
 
-        // Title bar background is transparent; the floating blur effect is
+        // Wire the logo TextBlock into the same drag / double-click-to-zoom
+        // gesture as the rest of the title bar so users can grab the logo
+        // to move the window.
+        var logoText = this.FindControl<TextBlock>("LogoText");
+        if (logoText != null)
+        {
+            logoText.PointerPressed += this.TitleBar_PointerPressed;
+            logoText.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
+        }
+
+        // Title bar background is transparent;the floating blur effect is
         // rendered by TerminalControl's SkiaSharp pipeline via TopInset.
         this.titleBar.Background = Brushes.Transparent;
 

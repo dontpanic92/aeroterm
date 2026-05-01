@@ -114,6 +114,7 @@
             <TextBlock Grid.Column="1" Name="LogoText"
                        Text="AeroTerm" VerticalAlignment="Center"
                        Margin="12,0,8,0"
+                       Background="Transparent"
                        Foreground="{DynamicResource TitleBarForegroundBrush}"
                        FontSize="12" FontWeight="Bold" />
 

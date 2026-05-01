@@ -141,6 +141,32 @@ public static class ColorSchemePresets
         });
 
     /// <summary>
+    /// Gets the One Half Dark color scheme.
+    /// </summary>
+    public static ColorScheme OneHalfDark { get; } = new(
+        "One Half Dark",
+        Foreground: 0xDCDFE4,
+        Background: 0x282C34,
+        Palette: new[]
+        {
+            0x282C34, 0xE06C75, 0x98C379, 0xE5C07B, 0x61AFEF, 0xC678DD, 0x56B6C2, 0xDCDFE4,
+            0x5A6374, 0xE06C75, 0x98C379, 0xE5C07B, 0x61AFEF, 0xC678DD, 0x56B6C2, 0xFFFFFF,
+        });
+
+    /// <summary>
+    /// Gets the One Half Light color scheme.
+    /// </summary>
+    public static ColorScheme OneHalfLight { get; } = new(
+        "One Half Light",
+        Foreground: 0x383A42,
+        Background: 0xFAFAFA,
+        Palette: new[]
+        {
+            0x383A42, 0xE45649, 0x50A14F, 0xC18301, 0x0184BC, 0xA626A4, 0x0997B3, 0xFAFAFA,
+            0x4F525D, 0xDF6C75, 0x50A14F, 0xC18301, 0x0184BC, 0xA626A4, 0x0997B3, 0xFFFFFF,
+        });
+
+    /// <summary>
     /// Gets the High Contrast (Dark) color scheme.
     /// </summary>
     /// <remarks>
@@ -191,6 +217,8 @@ public static class ColorSchemePresets
         OneDark,
         TokyoNight,
         CatppuccinMocha,
+        OneHalfDark,
+        OneHalfLight,
         HighContrastDark,
         HighContrastLight,
     };
