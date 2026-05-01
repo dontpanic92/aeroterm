@@ -1,0 +1,166 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="using:Avalonia.Controls.Converters"
+        xmlns:sys="using:System">
+  <Styles.Resources>
+    <ResourceDictionary>
+    <conv:PlatformKeyGestureConverter x:Key="KeyGestureConverter" />
+
+  <ControlTheme x:Key="{x:Type MenuItem}"
+                TargetType="MenuItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
+    <Setter Property="MinHeight" Value="28" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Root"
+                Margin="2"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+          <Grid ColumnDefinitions="24,*,Auto,20">
+            <ContentControl Name="PART_ToggleIcon"
+                            Grid.Column="0"
+                            Width="16"
+                            Height="16"
+                            IsVisible="False"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+            <ContentControl Name="PART_Icon"
+                            Grid.Column="0"
+                            Width="16"
+                            Height="16"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Icon}" />
+            <ContentPresenter Name="PART_HeaderPresenter"
+                              Grid.Column="1"
+                              Margin="{TemplateBinding Padding}"
+                              VerticalAlignment="Center"
+                              RecognizesAccessKey="True"
+                              Content="{TemplateBinding Header}"
+                              ContentTemplate="{TemplateBinding HeaderTemplate}"
+                              Foreground="{TemplateBinding Foreground}">
+              <ContentPresenter.DataTemplates>
+                <DataTemplate DataType="sys:String">
+                  <AccessText Text="{Binding}" />
+                </DataTemplate>
+              </ContentPresenter.DataTemplates>
+            </ContentPresenter>
+            <TextBlock Name="PART_InputGestureText"
+                       Grid.Column="2"
+                       Margin="16,0,8,0"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       FontFamily="{DynamicResource FontFamilyUI}"
+                       FontSize="{DynamicResource FontSizeCaption}"
+                       Text="{TemplateBinding InputGesture, Converter={StaticResource KeyGestureConverter}}" />
+            <Path Name="PART_ChevronPath"
+                  Grid.Column="3"
+                  Width="4"
+                  Height="8"
+                  Margin="8,0,8,0"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Center"
+                  Data="M 0 0 L 4 4 L 0 8"
+                  Stroke="{TemplateBinding Foreground}"
+                  StrokeThickness="1.5" />
+            <Popup Name="PART_Popup"
+                   IsLightDismissEnabled="False"
+                   IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}"
+                   Placement="RightEdgeAlignedTop">
+              <Border MinWidth="{DynamicResource ControlMinWidth}"
+                      Padding="{DynamicResource ControlPaddingTight}"
+                      Background="{DynamicResource SurfaceOverlayBrush}"
+                      BorderBrush="{DynamicResource StrokeDefaultBrush}"
+                      BorderThickness="{DynamicResource BorderThicknessThin}"
+                      BoxShadow="{DynamicResource PopupBoxShadow}"
+                      CornerRadius="{DynamicResource CornerRadiusMd}">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto">
+                  <ItemsPresenter Name="PART_ItemsPresenter"
+                                  Grid.IsSharedSizeScope="True"
+                                  ItemsPanel="{TemplateBinding ItemsPanel}"
+                                  KeyboardNavigation.TabNavigation="Continue" />
+                </ScrollViewer>
+              </Border>
+            </Popup>
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:separator">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Separator />
+        </ControlTemplate>
+      </Setter>
+    </Style>
+
+    <Style Selector="^:pointerover /template/ Border#PART_Root">
+      <Setter Property="Background" Value="{DynamicResource ControlFillSubtleHoverBrush}" />
+    </Style>
+
+    <Style Selector="^:pressed /template/ Border#PART_Root">
+      <Setter Property="Background" Value="{DynamicResource ControlFillSubtlePressedBrush}" />
+    </Style>
+
+    <Style Selector="^:selected /template/ Border#PART_Root, ^:focus /template/ Border#PART_Root">
+      <Setter Property="Background" Value="{DynamicResource ControlFillSubtleHoverBrush}" />
+    </Style>
+
+    <Style Selector="^:empty /template/ Path#PART_ChevronPath">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+
+    <Style Selector="^:disabled /template/ TextBlock#PART_InputGestureText">
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+
+    <Style Selector="^:toggle /template/ ContentControl#PART_ToggleIcon, ^:radio /template/ ContentControl#PART_ToggleIcon">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <Style Selector="^:toggle /template/ ContentControl#PART_Icon, ^:radio /template/ ContentControl#PART_Icon">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+
+    <Style Selector="^:checked:toggle /template/ ContentControl#PART_ToggleIcon">
+      <Setter Property="Content">
+        <Template>
+          <Path Width="10"
+                Height="10"
+                VerticalAlignment="Center"
+                Data="F1 M 10 1.2 L 4.7 9.1 L 4.5 9.1 L 0 5.2 L 1.3 3.5 L 4.3 6.1 L 8.3 0 Z"
+                Fill="{Binding $parent[MenuItem].Foreground}" />
+        </Template>
+      </Setter>
+    </Style>
+
+    <Style Selector="^:checked:radio /template/ ContentControl#PART_ToggleIcon">
+      <Setter Property="Content">
+        <Template>
+          <Ellipse Width="8"
+                   Height="8"
+                   Margin="4"
+                   Fill="{Binding $parent[MenuItem].Foreground}" />
+        </Template>
+      </Setter>
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

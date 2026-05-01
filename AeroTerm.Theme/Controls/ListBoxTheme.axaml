@@ -1,0 +1,122 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+  <ControlTheme x:Key="{x:Type ListBox}"
+                TargetType="ListBox">
+    <Setter Property="Background" Value="{DynamicResource SurfaceLayer1Brush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeDefaultBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+    <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+    <Setter Property="ScrollViewer.IsScrollChainingEnabled" Value="True" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="PART_Root"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+          <ScrollViewer Name="PART_ScrollViewer"
+                        AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
+                        BringIntoViewOnFocusChange="{TemplateBinding (ScrollViewer.BringIntoViewOnFocusChange)}"
+                        Background="Transparent"
+                        HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                        IsDeferredScrollingEnabled="{TemplateBinding (ScrollViewer.IsDeferredScrollingEnabled)}"
+                        IsScrollChainingEnabled="{TemplateBinding (ScrollViewer.IsScrollChainingEnabled)}"
+                        VerticalScrollBarVisibility="{TemplateBinding (ScrollViewer.VerticalScrollBarVisibility)}"
+                        VerticalSnapPointsType="{TemplateBinding (ScrollViewer.VerticalSnapPointsType)}"
+                        HorizontalSnapPointsType="{TemplateBinding (ScrollViewer.HorizontalSnapPointsType)}">
+            <ItemsPresenter Name="PART_ItemsPresenter"
+                            Margin="{TemplateBinding Padding}"
+                            ItemsPanel="{TemplateBinding ItemsPanel}" />
+          </ScrollViewer>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:focus /template/ Border#PART_Root">
+      <Setter Property="BorderBrush" Value="{DynamicResource StrokeFocusBrush}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+
+    <Style Selector="^:focus-visible /template/ Border#PART_Root">
+      <Setter Property="BorderBrush" Value="{DynamicResource StrokeFocusBrush}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type ListBoxItem}"
+                TargetType="ListBoxItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Panel>
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Padding="{TemplateBinding Padding}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            CornerRadius="{TemplateBinding CornerRadius}" />
+          <Border Name="PART_FocusVisual"
+                  IsVisible="False"
+                  BorderBrush="{DynamicResource StrokeFocusBrush}"
+                  BorderThickness="{DynamicResource BorderThicknessFocus}"
+                  CornerRadius="{TemplateBinding CornerRadius}" />
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemHoverBrush}" />
+    </Style>
+
+    <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemPressedBrush}" />
+    </Style>
+
+    <Style Selector="^:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemSelectedBrush}" />
+    </Style>
+
+    <Style Selector="^:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemSelectedHoverBrush}" />
+    </Style>
+
+    <Style Selector="^:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemPressedBrush}" />
+    </Style>
+
+    <Style Selector="^:selected /template/ TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <Style Selector="^:focus /template/ Border#PART_FocusVisual">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <Style Selector="^:focus-visible /template/ Border#PART_FocusVisual">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

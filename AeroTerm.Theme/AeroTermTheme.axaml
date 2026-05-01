@@ -1,0 +1,58 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="AeroTerm.Theme.AeroTermTheme">
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <!-- Tokens (variant-aware via ThemeDictionaries). -->
+        <ResourceInclude Source="avares://AeroTerm.Theme/Tokens/Brushes.axaml" />
+        <ResourceInclude Source="avares://AeroTerm.Theme/Tokens/Typography.axaml" />
+        <ResourceInclude Source="avares://AeroTerm.Theme/Tokens/Metrics.axaml" />
+        <ResourceInclude Source="avares://AeroTerm.Theme/Tokens/Motion.axaml" />
+        <ResourceInclude Source="avares://AeroTerm.Theme/Tokens/CompatibilityKeys.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <!--
+    Control themes are merged in dependency-tier order: primitives first, then
+    scrolling/selection containers, popups, and finally composed controls.
+    Each include is itself a Styles file containing one or more ControlThemes.
+  -->
+
+  <!-- Tier A — primitives -->
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/TextBlockTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/BorderTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/SeparatorTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ButtonTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/RepeatButtonTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ToggleButtonTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/HyperlinkButtonTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/CheckBoxTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/RadioButtonTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ProgressBarTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/SliderTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/GroupBoxTheme.axaml" />
+
+  <!-- Tier B — containers / scrolling -->
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ScrollBarTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ScrollViewerTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ItemsControlTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ListBoxTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/TabControlTheme.axaml" />
+
+  <!-- Tier C — popups / menus -->
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/FlyoutPresenterTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/MenuFlyoutPresenterTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/MenuItemTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ContextMenuTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/MenuFlyoutTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ToolTipTheme.axaml" />
+
+  <!-- Tier D — composed -->
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/TextBoxTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/NumericUpDownTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/ComboBoxTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/SplitButtonTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/WindowTheme.axaml" />
+</Styles>

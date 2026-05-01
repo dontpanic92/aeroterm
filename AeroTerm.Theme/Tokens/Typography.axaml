@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <!-- Typography tokens. Sizes follow a Caption / Body / Subtitle / Title scale. -->
+
+  <FontFamily x:Key="FontFamilyUI">
+    Segoe UI Variable, Segoe UI, -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", Helvetica, "Liberation Sans", Arial, sans-serif
+  </FontFamily>
+
+  <FontFamily x:Key="FontFamilyMono">
+    Cascadia Mono, Cascadia Code, SF Mono, Menlo, Consolas, "Liberation Mono", "DejaVu Sans Mono", monospace
+  </FontFamily>
+
+  <sys:Double x:Key="FontSizeCaption">11</sys:Double>
+  <sys:Double x:Key="FontSizeBody">12</sys:Double>
+  <sys:Double x:Key="FontSizeBodyStrong">12</sys:Double>
+  <sys:Double x:Key="FontSizeSubtitle">14</sys:Double>
+  <sys:Double x:Key="FontSizeTitle">18</sys:Double>
+  <sys:Double x:Key="FontSizeTitleLarge">22</sys:Double>
+
+  <FontWeight x:Key="FontWeightRegular">Normal</FontWeight>
+  <FontWeight x:Key="FontWeightMedium">Medium</FontWeight>
+  <FontWeight x:Key="FontWeightSemiBold">SemiBold</FontWeight>
+  <FontWeight x:Key="FontWeightBold">Bold</FontWeight>
+</ResourceDictionary>

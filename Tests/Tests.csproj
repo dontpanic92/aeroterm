@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AeroTerm.WindowEffects\AeroTerm.WindowEffects.csproj" />
     <ProjectReference Include="..\AeroTerm.Pty\AeroTerm.Pty.csproj" />
+    <ProjectReference Include="..\AeroTerm.Theme\AeroTerm.Theme.csproj" />
     <ProjectReference Include="..\AeroTerm\AeroTerm.csproj" />
   </ItemGroup>
 

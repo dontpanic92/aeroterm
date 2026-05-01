@@ -1,0 +1,127 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+  <ControlTheme x:Key="{x:Type TabControl}"
+                TargetType="TabControl">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeMutedBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+          <DockPanel>
+            <Border DockPanel.Dock="Top"
+                    Background="Transparent"
+                    BorderBrush="{DynamicResource StrokeMutedBrush}"
+                    BorderThickness="0,0,0,1">
+              <ItemsPresenter Name="PART_ItemsPresenter"
+                              ItemsPanel="{TemplateBinding ItemsPanel}" />
+            </Border>
+            <Panel ClipToBounds="True">
+              <ContentPresenter Name="PART_SelectedContentHost2"
+                                Margin="{TemplateBinding Padding}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                IsVisible="False" />
+              <ContentPresenter Name="PART_SelectedContentHost"
+                                Margin="{TemplateBinding Padding}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+            </Panel>
+          </DockPanel>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.5" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type TabItem}"
+                TargetType="TabItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingDefault}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid>
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Padding="{TemplateBinding Padding}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Content="{TemplateBinding Header}"
+                            ContentTemplate="{TemplateBinding HeaderTemplate}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            RecognizesAccessKey="True" />
+          <Border Name="PART_SelectedIndicator"
+                  Height="{DynamicResource FocusStrokeThickness}"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Bottom"
+                  Background="{DynamicResource AccentPrimaryBrush}"
+                  CornerRadius="{DynamicResource CornerRadiusPill}"
+                  IsVisible="False" />
+          <Border Name="PART_FocusVisual"
+                  IsVisible="False"
+                  BorderBrush="{DynamicResource StrokeFocusBrush}"
+                  BorderThickness="{DynamicResource BorderThicknessFocus}"
+                  CornerRadius="{TemplateBinding CornerRadius}" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ControlFillSubtleHoverBrush}" />
+    </Style>
+
+    <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ControlFillSubtlePressedBrush}" />
+    </Style>
+
+    <Style Selector="^:selected">
+      <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    </Style>
+
+    <Style Selector="^:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SurfaceLayer1Brush}" />
+    </Style>
+
+    <Style Selector="^:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SurfaceLayer1Brush}" />
+    </Style>
+
+    <Style Selector="^:selected /template/ Border#PART_SelectedIndicator">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <Style Selector="^:focus /template/ Border#PART_FocusVisual">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <Style Selector="^:focus-visible /template/ Border#PART_FocusVisual">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.5" />
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

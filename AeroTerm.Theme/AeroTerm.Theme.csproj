@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>AeroTerm.Theme</RootNamespace>
+    <AssemblyName>AeroTerm.Theme</AssemblyName>
+
+    <!-- NuGet package metadata (shared metadata lives in Directory.Build.props). -->
+    <PackageId>AeroTerm.Theme</PackageId>
+    <Description>Unified Fluent-flavored Avalonia theme for AeroTerm. Provides Light + Dark variants, accent-aware brushes, and modern control templates that look identical on Windows, macOS, and Linux. No dependency on Avalonia.Themes.Fluent or Avalonia.Themes.Simple.</Description>
+    <PackageTags>avalonia;theme;fluent;dark-mode;controls;styles</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="Avalonia" Version="12.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tests" />
+  </ItemGroup>
+
+</Project>

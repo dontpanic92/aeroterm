@@ -1,0 +1,76 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+  <ControlTheme TargetType="RadioButton" x:Key="{x:Type RadioButton}">
+    <Setter Property="Background" Value="{x:Null}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderRestBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Padding" Value="{DynamicResource CheckableContentMargin}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid ColumnDefinitions="Auto,*">
+          <Grid Width="{DynamicResource CheckableGlyphSize}"
+                Height="{DynamicResource CheckableGlyphSize}"
+                VerticalAlignment="Center">
+            <Ellipse Name="OuterEllipse"
+                     Fill="{TemplateBinding Background}"
+                     Stroke="{TemplateBinding BorderBrush}"
+                     StrokeThickness="{DynamicResource CheckableBorderThickness}" />
+            <Ellipse Name="InnerEllipse"
+                     Width="{DynamicResource RadioInnerGlyphSize}"
+                     Height="{DynamicResource RadioInnerGlyphSize}"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     Fill="{DynamicResource AccentPrimaryBrush}"
+                     IsVisible="False" />
+            <Ellipse Name="FocusRing"
+                     Stroke="{DynamicResource ControlBorderFocusBrush}"
+                     StrokeThickness="{DynamicResource FocusStrokeThickness}"
+                     IsHitTestVisible="False"
+                     IsVisible="False" />
+          </Grid>
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Grid.Column="1"
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            RecognizesAccessKey="True"
+                            TextElement.Foreground="{TemplateBinding Foreground}" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:pointerover /template/ Ellipse#OuterEllipse">
+      <Setter Property="Stroke" Value="{DynamicResource ControlBorderHoverBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Ellipse#OuterEllipse">
+      <Setter Property="Fill" Value="{DynamicResource ControlFillPressedBrush}" />
+    </Style>
+    <Style Selector="^:checked /template/ Ellipse#OuterEllipse">
+      <Setter Property="Stroke" Value="{DynamicResource AccentPrimaryBrush}" />
+    </Style>
+    <Style Selector="^:checked /template/ Ellipse#InnerEllipse">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:focus /template/ Ellipse#FocusRing">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+    <Style Selector="^:disabled /template/ Ellipse#OuterEllipse">
+      <Setter Property="Stroke" Value="{DynamicResource ControlBorderDisabledBrush}" />
+      <Setter Property="Fill" Value="{DynamicResource ControlFillDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

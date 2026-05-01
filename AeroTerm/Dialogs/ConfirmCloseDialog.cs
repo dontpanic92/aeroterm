@@ -48,7 +48,7 @@ internal sealed class ConfirmCloseDialog : Window
             Content = Strings.ButtonClose,
             Width = 96,
             IsDefault = false,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0x65, 0x5A)),
+            Foreground = this.ResolveThemeBrush("DangerFillBrush", Color.FromRgb(0xFF, 0x65, 0x5A)),
         };
         AutomationProperties.SetName(closeButton, Strings.ConfirmCloseAllTabs);
         closeButton.Click += (_, _) =>
@@ -99,6 +99,24 @@ internal sealed class ConfirmCloseDialog : Window
     {
         var result = await this.ShowDialog<bool?>(owner);
         return this.confirmed || result == true;
+    }
+
+    private IBrush ResolveThemeBrush(string key, Color fallback)
+    {
+        if (this.TryGetResource(key, this.ActualThemeVariant, out var value))
+        {
+            if (value is IBrush brush)
+            {
+                return brush;
+            }
+
+            if (value is Color color)
+            {
+                return new SolidColorBrush(color);
+            }
+        }
+
+        return new SolidColorBrush(fallback);
     }
 
     private void OnKeyDownHandler(object? sender, KeyEventArgs e)

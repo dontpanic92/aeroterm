@@ -1,0 +1,78 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+  <ControlTheme TargetType="ProgressBar" x:Key="{x:Type ProgressBar}">
+    <Setter Property="Background" Value="{DynamicResource SurfaceLayer2Brush}" />
+    <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryBrush}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusPill}" />
+    <Setter Property="Template">
+      <ControlTemplate TargetType="ProgressBar">
+        <Grid>
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  ClipToBounds="True">
+            <Panel>
+              <Border Name="PART_Indicator"
+                      Background="{TemplateBinding Foreground}"
+                      CornerRadius="{TemplateBinding CornerRadius}"
+                      IsVisible="{Binding !IsIndeterminate, RelativeSource={RelativeSource TemplatedParent}}" />
+              <Border Name="PART_IndeterminateIndicator"
+                      Background="{TemplateBinding Foreground}"
+                      CornerRadius="{TemplateBinding CornerRadius}"
+                      IsVisible="{Binding IsIndeterminate, RelativeSource={RelativeSource TemplatedParent}}" />
+            </Panel>
+          </Border>
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:horizontal">
+      <Setter Property="MinHeight" Value="{DynamicResource ProgressBarThickness}" />
+    </Style>
+    <Style Selector="^:vertical">
+      <Setter Property="MinWidth" Value="{DynamicResource ProgressBarThickness}" />
+    </Style>
+    <Style Selector="^:horizontal /template/ Border#PART_Indicator">
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="^:vertical /template/ Border#PART_Indicator">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+    </Style>
+    <Style Selector="^:horizontal:indeterminate /template/ Border#PART_IndeterminateIndicator">
+      <Setter Property="Width" Value="{Binding TemplateSettings.ContainerWidth, RelativeSource={RelativeSource TemplatedParent}}" />
+      <Style.Animations>
+        <Animation Duration="{DynamicResource MotionIndeterminate}" Easing="LinearEasing" IterationCount="Infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="TranslateTransform.X" Value="{Binding $parent[ProgressBar].TemplateSettings.IndeterminateStartingOffset}" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="TranslateTransform.X" Value="{Binding $parent[ProgressBar].TemplateSettings.IndeterminateEndingOffset}" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="^:vertical:indeterminate /template/ Border#PART_IndeterminateIndicator">
+      <Setter Property="Height" Value="{Binding TemplateSettings.ContainerWidth, RelativeSource={RelativeSource TemplatedParent}}" />
+      <Style.Animations>
+        <Animation Duration="{DynamicResource MotionIndeterminate}" Easing="LinearEasing" IterationCount="Infinite">
+          <KeyFrame Cue="0%">
+            <Setter Property="TranslateTransform.Y" Value="{Binding $parent[ProgressBar].TemplateSettings.IndeterminateStartingOffset}" />
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="TranslateTransform.Y" Value="{Binding $parent[ProgressBar].TemplateSettings.IndeterminateEndingOffset}" />
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource AccentDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

@@ -16,14 +16,6 @@
         TransparencyLevelHint="Transparent"
         Background="Transparent"
         Title="{x:Static strings:Strings.CommandPaletteTitle}">
-  <Window.Resources>
-    <SolidColorBrush x:Key="PaletteBackground" Color="#E01E1E22" />
-    <SolidColorBrush x:Key="PaletteBorder" Color="#66FFFFFF" />
-    <SolidColorBrush x:Key="PaletteForeground" Color="#F0FFFFFF" />
-    <SolidColorBrush x:Key="PaletteMuted" Color="#90FFFFFF" />
-    <SolidColorBrush x:Key="PaletteSelection" Color="#4C6CB6FF" />
-  </Window.Resources>
-
   <Window.Styles>
     <Style Selector="ListBoxItem">
       <Setter Property="Padding" Value="10,5" />

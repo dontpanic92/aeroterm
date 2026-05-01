@@ -1,0 +1,173 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+    <ControlTheme x:Key="{x:Type ComboBoxItem}"
+                TargetType="ComboBoxItem">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <ContentPresenter Name="PART_ContentPresenter"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          CornerRadius="{TemplateBinding CornerRadius}"
+                          Foreground="{TemplateBinding Foreground}"
+                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                          Padding="{TemplateBinding Padding}"
+                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemHoverBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemPressedBrush}" />
+    </Style>
+    <Style Selector="^:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemSelectedBrush}" />
+    </Style>
+    <Style Selector="^:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ListItemSelectedHoverBrush}" />
+    </Style>
+    <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type ComboBox}"
+                TargetType="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource SurfaceLayer1Brush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderRestBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource TextTertiaryBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="MinHeight" Value="{DynamicResource ControlMinHeight}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
+    <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid>
+          <Border Name="LayoutRoot"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Name="PlaceholderTextBlock"
+                         Grid.Column="0"
+                         Foreground="{TemplateBinding PlaceholderForeground}"
+                         HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                         Margin="{TemplateBinding Padding}"
+                         Text="{TemplateBinding PlaceholderText}"
+                         VerticalAlignment="{TemplateBinding VerticalContentAlignment}">
+                <TextBlock.IsVisible>
+                  <MultiBinding Converter="{x:Static BoolConverters.And}">
+                    <Binding Path="SelectionBoxItem" RelativeSource="{RelativeSource TemplatedParent}" Converter="{x:Static ObjectConverters.IsNull}" />
+                    <Binding Path="!IsEditable" RelativeSource="{RelativeSource TemplatedParent}" />
+                  </MultiBinding>
+                </TextBlock.IsVisible>
+              </TextBlock>
+              <ContentPresenter Name="PART_ContentPresenter"
+                                Grid.Column="0"
+                                Content="{TemplateBinding SelectionBoxItem}"
+                                ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                Foreground="{TemplateBinding Foreground}"
+                                HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                Margin="{TemplateBinding Padding}"
+                                VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                IsVisible="{TemplateBinding IsEditable, Converter={x:Static BoolConverters.Not}}" />
+              <TextBox Name="PART_EditableTextBox"
+                       Grid.Column="0"
+                       Background="Transparent"
+                       BorderThickness="0"
+                       Foreground="{TemplateBinding Foreground}"
+                       HorizontalAlignment="Stretch"
+                       HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                       IsVisible="{TemplateBinding IsEditable}"
+                       Padding="{TemplateBinding Padding}"
+                       PlaceholderText="{TemplateBinding PlaceholderText}"
+                       Text="{TemplateBinding Text, Mode=TwoWay}"
+                       VerticalAlignment="Stretch"
+                       VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+              <Path Name="ChevronGlyph"
+                    Grid.Column="1"
+                    Width="10"
+                    Height="6"
+                    Margin="0,0,10,0"
+                    Data="M 0 0 L 5 6 L 10 0 Z"
+                    Fill="{TemplateBinding Foreground}"
+                    RenderTransformOrigin="50%,50%"
+                    Stretch="Uniform"
+                    VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+
+          <Popup Name="PART_Popup"
+                 MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}"
+                 MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                 IsLightDismissEnabled="True"
+                 IsOpen="{TemplateBinding IsDropDownOpen, Mode=TwoWay}"
+                 PlacementTarget="{TemplateBinding}"
+                 InheritsTransform="True">
+            <Border Name="PART_PopupContent"
+                    Background="{DynamicResource SurfaceOverlayBrush}"
+                    BorderBrush="{DynamicResource StrokeDefaultBrush}"
+                    BorderThickness="{DynamicResource BorderThicknessThin}"
+                    BoxShadow="{DynamicResource PopupBoxShadow}"
+                    CornerRadius="{DynamicResource CornerRadiusMd}"
+                    Padding="{DynamicResource ControlPaddingTight}">
+              <ScrollViewer HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                            IsDeferredScrollingEnabled="{TemplateBinding (ScrollViewer.IsDeferredScrollingEnabled)}"
+                            ScrollViewer.IsScrollChainingEnabled="False"
+                            VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                <ItemsPresenter Name="PART_ItemsPresenter"
+                                ItemsPanel="{TemplateBinding ItemsPanel}" />
+              </ScrollViewer>
+            </Border>
+          </Popup>
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:pointerover /template/ Border#LayoutRoot">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderHoverBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Border#LayoutRoot">
+      <Setter Property="Background" Value="{DynamicResource ControlFillPressedBrush}" />
+    </Style>
+    <Style Selector="^:focus /template/ Border#LayoutRoot">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:focus-within /template/ Border#LayoutRoot">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:dropdownopen /template/ Path#ChevronGlyph">
+      <Setter Property="RenderTransform" Value="rotate(180deg)" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderDisabledBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+      <Setter Property="PlaceholderForeground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

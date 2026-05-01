@@ -1,0 +1,19 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Helper Border classes for elevated surfaces. -->
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource SurfaceLayer1Brush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource StrokeDefaultBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusMd}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingDefault}" />
+  </Style>
+
+  <Style Selector="Border.surface-1">
+    <Setter Property="Background" Value="{DynamicResource SurfaceLayer1Brush}" />
+  </Style>
+
+  <Style Selector="Border.surface-2">
+    <Setter Property="Background" Value="{DynamicResource SurfaceLayer2Brush}" />
+  </Style>
+</Styles>

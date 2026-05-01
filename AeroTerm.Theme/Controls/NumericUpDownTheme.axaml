@@ -1,0 +1,151 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+    <ControlTheme x:Key="AeroTermNumericSpinnerButtonTheme"
+                TargetType="RepeatButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <ContentPresenter Name="PART_ContentPresenter"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          HorizontalContentAlignment="Center"
+                          Padding="{TemplateBinding Padding}"
+                          VerticalContentAlignment="Center" />
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover">
+      <Setter Property="Background" Value="{DynamicResource ControlFillSubtleHoverBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentPrimaryBrush}" />
+    </Style>
+    <Style Selector="^:pressed">
+      <Setter Property="Background" Value="{DynamicResource ControlFillSubtlePressedBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource AccentPressedBrush}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type NumericUpDown}"
+                TargetType="NumericUpDown">
+    <Setter Property="Background" Value="{DynamicResource SurfaceLayer1Brush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderRestBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="PlaceholderForeground" Value="{DynamicResource TextTertiaryBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="MinHeight" Value="{DynamicResource ControlMinHeight}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <DataValidationErrors>
+          <ButtonSpinner Name="PART_Spinner"
+                         AllowSpin="{TemplateBinding AllowSpin}"
+                         Background="{TemplateBinding Background}"
+                         BorderBrush="{TemplateBinding BorderBrush}"
+                         BorderThickness="{TemplateBinding BorderThickness}"
+                         ButtonSpinnerLocation="{TemplateBinding ButtonSpinnerLocation}"
+                         CornerRadius="{TemplateBinding CornerRadius}"
+                         HorizontalContentAlignment="Stretch"
+                         IsTabStop="False"
+                         Padding="0"
+                         ShowButtonSpinner="{TemplateBinding ShowButtonSpinner}"
+                         VerticalContentAlignment="Stretch">
+            <ButtonSpinner.Template>
+              <ControlTemplate>
+                <Border Name="LayoutRoot"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}">
+                  <DockPanel LastChildFill="True">
+                    <UniformGrid Name="PART_SpinnerPanel"
+                                 DockPanel.Dock="Right"
+                                 IsVisible="{TemplateBinding ShowButtonSpinner}"
+                                 Rows="2"
+                                 Width="24">
+                      <RepeatButton Name="PART_IncreaseButton"
+                                    Theme="{StaticResource AeroTermNumericSpinnerButtonTheme}">
+                        <Path Width="8"
+                              Height="5"
+                              Data="M 0 5 L 4 0 L 8 5 Z"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RepeatButton}}"
+                              Stretch="Uniform" />
+                      </RepeatButton>
+                      <RepeatButton Name="PART_DecreaseButton"
+                                    Theme="{StaticResource AeroTermNumericSpinnerButtonTheme}">
+                        <Path Width="8"
+                              Height="5"
+                              Data="M 0 0 L 8 0 L 4 5 Z"
+                              Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RepeatButton}}"
+                              Stretch="Uniform" />
+                      </RepeatButton>
+                    </UniformGrid>
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}" />
+                  </DockPanel>
+                </Border>
+              </ControlTemplate>
+            </ButtonSpinner.Template>
+            <TextBox Name="PART_TextBox"
+                     AcceptsReturn="False"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Foreground="{TemplateBinding Foreground}"
+                     HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                     InnerLeftContent="{Binding InnerLeftContent, RelativeSource={RelativeSource TemplatedParent}}"
+                     InnerRightContent="{Binding InnerRightContent, RelativeSource={RelativeSource TemplatedParent}}"
+                     IsReadOnly="{TemplateBinding IsReadOnly}"
+                     MinWidth="20"
+                     Padding="{TemplateBinding Padding}"
+                     PlaceholderForeground="{TemplateBinding PlaceholderForeground}"
+                     PlaceholderText="{TemplateBinding PlaceholderText}"
+                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                     Text="{TemplateBinding Text}"
+                     TextAlignment="{TemplateBinding TextAlignment}"
+                     TextWrapping="NoWrap"
+                     VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+          </ButtonSpinner>
+        </DataValidationErrors>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:pointerover /template/ ButtonSpinner#PART_Spinner">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderHoverBrush}" />
+    </Style>
+    <Style Selector="^:focus-within /template/ ButtonSpinner#PART_Spinner">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:focus /template/ ButtonSpinner#PART_Spinner">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:error /template/ ButtonSpinner#PART_Spinner">
+      <Setter Property="BorderBrush" Value="{DynamicResource DangerFillBrush}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderDisabledBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+      <Setter Property="PlaceholderForeground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

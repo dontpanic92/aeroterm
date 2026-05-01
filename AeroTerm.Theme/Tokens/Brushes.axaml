@@ -1,0 +1,103 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    Brush tokens. Each brush is bound to a Color from Palette.axaml via
+    DynamicResource so that switching ActualThemeVariant Light <-> Dark
+    flows through automatically.
+  -->
+
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceInclude Source="avares://AeroTerm.Theme/Tokens/Palette.axaml" />
+  </ResourceDictionary.MergedDictionaries>
+
+  <!-- Surfaces -->
+  <SolidColorBrush x:Key="SurfaceBackgroundBrush" Color="{DynamicResource SurfaceBackgroundColor}" />
+  <SolidColorBrush x:Key="SurfaceLayer1Brush" Color="{DynamicResource SurfaceLayer1Color}" />
+  <SolidColorBrush x:Key="SurfaceLayer2Brush" Color="{DynamicResource SurfaceLayer2Color}" />
+  <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="{DynamicResource SurfaceOverlayColor}" />
+  <SolidColorBrush x:Key="SurfaceScrimBrush" Color="{DynamicResource SurfaceScrimColor}" />
+
+  <!-- Strokes -->
+  <SolidColorBrush x:Key="StrokeDefaultBrush" Color="{DynamicResource StrokeDefaultColor}" />
+  <SolidColorBrush x:Key="StrokeMutedBrush" Color="{DynamicResource StrokeMutedColor}" />
+  <SolidColorBrush x:Key="StrokeFocusBrush" Color="{DynamicResource StrokeFocusColor}" />
+  <SolidColorBrush x:Key="StrokeAccentBrush" Color="{DynamicResource StrokeAccentColor}" />
+
+  <!-- Text -->
+  <SolidColorBrush x:Key="TextPrimaryBrush" Color="{DynamicResource TextPrimaryColor}" />
+  <SolidColorBrush x:Key="TextSecondaryBrush" Color="{DynamicResource TextSecondaryColor}" />
+  <SolidColorBrush x:Key="TextTertiaryBrush" Color="{DynamicResource TextTertiaryColor}" />
+  <SolidColorBrush x:Key="TextDisabledBrush" Color="{DynamicResource TextDisabledColor}" />
+  <SolidColorBrush x:Key="TextOnAccentBrush" Color="{DynamicResource TextOnAccentColor}" />
+  <SolidColorBrush x:Key="TextLinkBrush" Color="{DynamicResource TextLinkColor}" />
+
+  <!-- Accent -->
+  <SolidColorBrush x:Key="AccentPrimaryBrush" Color="{DynamicResource AccentPrimaryColor}" />
+  <SolidColorBrush x:Key="AccentSecondaryBrush" Color="{DynamicResource AccentSecondaryColor}" />
+  <SolidColorBrush x:Key="AccentMutedBrush" Color="{DynamicResource AccentMutedColor}" />
+  <SolidColorBrush x:Key="AccentPressedBrush" Color="{DynamicResource AccentPressedColor}" />
+  <SolidColorBrush x:Key="AccentDisabledBrush" Color="{DynamicResource AccentDisabledColor}" />
+
+  <!-- Control fill -->
+  <SolidColorBrush x:Key="ControlFillRestBrush" Color="{DynamicResource ControlFillRestColor}" />
+  <SolidColorBrush x:Key="ControlFillHoverBrush" Color="{DynamicResource ControlFillHoverColor}" />
+  <SolidColorBrush x:Key="ControlFillPressedBrush" Color="{DynamicResource ControlFillPressedColor}" />
+  <SolidColorBrush x:Key="ControlFillDisabledBrush" Color="{DynamicResource ControlFillDisabledColor}" />
+  <SolidColorBrush x:Key="ControlFillSubtleHoverBrush" Color="{DynamicResource ControlFillSubtleHoverColor}" />
+  <SolidColorBrush x:Key="ControlFillSubtlePressedBrush" Color="{DynamicResource ControlFillSubtlePressedColor}" />
+
+  <!-- Control border -->
+  <SolidColorBrush x:Key="ControlBorderRestBrush" Color="{DynamicResource ControlBorderRestColor}" />
+  <SolidColorBrush x:Key="ControlBorderHoverBrush" Color="{DynamicResource ControlBorderHoverColor}" />
+  <SolidColorBrush x:Key="ControlBorderFocusBrush" Color="{DynamicResource ControlBorderFocusColor}" />
+  <SolidColorBrush x:Key="ControlBorderDisabledBrush" Color="{DynamicResource ControlBorderDisabledColor}" />
+
+  <!-- Status -->
+  <SolidColorBrush x:Key="SuccessFillBrush" Color="{DynamicResource SuccessFillColor}" />
+  <SolidColorBrush x:Key="SuccessForegroundBrush" Color="{DynamicResource SuccessForegroundColor}" />
+  <SolidColorBrush x:Key="WarningFillBrush" Color="{DynamicResource WarningFillColor}" />
+  <SolidColorBrush x:Key="WarningForegroundBrush" Color="{DynamicResource WarningForegroundColor}" />
+  <SolidColorBrush x:Key="DangerFillBrush" Color="{DynamicResource DangerFillColor}" />
+  <SolidColorBrush x:Key="DangerForegroundBrush" Color="{DynamicResource DangerForegroundColor}" />
+  <SolidColorBrush x:Key="InfoFillBrush" Color="{DynamicResource InfoFillColor}" />
+  <SolidColorBrush x:Key="InfoForegroundBrush" Color="{DynamicResource InfoForegroundColor}" />
+
+  <!-- Selection -->
+  <SolidColorBrush x:Key="SelectionFillBrush" Color="{DynamicResource SelectionFillColor}" />
+  <SolidColorBrush x:Key="SelectionFillInactiveBrush" Color="{DynamicResource SelectionFillInactiveColor}" />
+  <SolidColorBrush x:Key="SelectionForegroundBrush" Color="{DynamicResource SelectionForegroundColor}" />
+  <SolidColorBrush x:Key="ListItemHoverBrush" Color="{DynamicResource ListItemHoverColor}" />
+  <SolidColorBrush x:Key="ListItemPressedBrush" Color="{DynamicResource ListItemPressedColor}" />
+  <SolidColorBrush x:Key="ListItemSelectedBrush" Color="{DynamicResource ListItemSelectedColor}" />
+  <SolidColorBrush x:Key="ListItemSelectedHoverBrush" Color="{DynamicResource ListItemSelectedHoverColor}" />
+
+  <!-- Title bar -->
+  <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="{DynamicResource TitleBarForegroundColor}" />
+  <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="{DynamicResource TitleBarButtonHoverColor}" />
+  <SolidColorBrush x:Key="TitleBarButtonPressedBrush" Color="{DynamicResource TitleBarButtonPressedColor}" />
+  <SolidColorBrush x:Key="TitleBarCloseHoverBrush" Color="{DynamicResource TitleBarCloseHoverColor}" />
+  <SolidColorBrush x:Key="TitleBarClosePressedBrush" Color="{DynamicResource TitleBarClosePressedColor}" />
+
+  <!-- Command palette -->
+  <SolidColorBrush x:Key="PaletteBackground" Color="{DynamicResource PaletteBackgroundColor}" />
+  <SolidColorBrush x:Key="PaletteForeground" Color="{DynamicResource PaletteForegroundColor}" />
+  <SolidColorBrush x:Key="PaletteBorder" Color="{DynamicResource PaletteBorderColor}" />
+  <SolidColorBrush x:Key="PaletteSelection" Color="{DynamicResource PaletteSelectionColor}" />
+  <SolidColorBrush x:Key="PaletteMuted" Color="{DynamicResource PaletteMutedColor}" />
+
+  <!-- Search overlay -->
+  <SolidColorBrush x:Key="SearchOverlayBackground" Color="{DynamicResource SearchOverlayBackgroundColor}" />
+  <SolidColorBrush x:Key="SearchOverlayForeground" Color="{DynamicResource SearchOverlayForegroundColor}" />
+  <SolidColorBrush x:Key="SearchOverlayBorder" Color="{DynamicResource SearchOverlayBorderColor}" />
+  <SolidColorBrush x:Key="SearchOverlayMuted" Color="{DynamicResource SearchOverlayMutedColor}" />
+  <SolidColorBrush x:Key="SearchOverlayButtonHover" Color="{DynamicResource SearchOverlayButtonHoverColor}" />
+  <SolidColorBrush x:Key="SearchOverlayButtonPressed" Color="{DynamicResource SearchOverlayButtonPressedColor}" />
+  <SolidColorBrush x:Key="SearchOverlayToggleOn" Color="{DynamicResource SearchOverlayToggleOnColor}" />
+
+  <!-- Tab strip -->
+  <SolidColorBrush x:Key="TabStripDividerBrush" Color="{DynamicResource TabStripDividerColor}" />
+  <SolidColorBrush x:Key="TabStripCloseHoverBrush" Color="{DynamicResource TabStripCloseHoverColor}" />
+  <SolidColorBrush x:Key="TabStripActiveAccentBrush" Color="{DynamicResource TabStripActiveAccentColor}" />
+  <SolidColorBrush x:Key="TabStripForegroundBrush" Color="{DynamicResource TabStripForegroundColor}" />
+  <SolidColorBrush x:Key="TabStripMutedForegroundBrush" Color="{DynamicResource TabStripMutedForegroundColor}" />
+</ResourceDictionary>

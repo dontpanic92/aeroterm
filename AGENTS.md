@@ -6,6 +6,7 @@ AeroTerm provides reusable terminal infrastructure as NuGet packages:
 
 - **AeroTerm.WindowEffects** — Cross-platform window blur, acrylic, mica, and transparency effects for Avalonia applications.
 - **AeroTerm.Pty** — Cross-platform pseudo-terminal (PTY) library with ANSI/VT escape sequence parser, terminal buffer, and input encoder.
+- **AeroTerm.Theme** — Unified Fluent-flavored Avalonia theme with Light + Dark variants and accent-aware brushes.
 
 ## Tech Stack
 

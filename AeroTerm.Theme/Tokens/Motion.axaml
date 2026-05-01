@@ -1,0 +1,14 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+  <!-- Motion tokens. -->
+
+  <sys:TimeSpan x:Key="MotionFast">00:00:00.1000000</sys:TimeSpan>
+  <sys:TimeSpan x:Key="MotionStandard">00:00:00.1670000</sys:TimeSpan>
+  <sys:TimeSpan x:Key="MotionSlow">00:00:00.2500000</sys:TimeSpan>
+  <sys:TimeSpan x:Key="MotionIndeterminate">00:00:03</sys:TimeSpan>
+
+  <SplineEasing x:Key="EasingStandard" X1="0.8" Y1="0" X2="0.2" Y2="1" />
+  <SplineEasing x:Key="EasingDecelerate" X1="0.1" Y1="0.9" X2="0.2" Y2="1" />
+  <SplineEasing x:Key="EasingAccelerate" X1="0.7" Y1="0" X2="1" Y2="0.5" />
+</ResourceDictionary>

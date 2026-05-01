@@ -1,0 +1,94 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+  <ControlTheme TargetType="CheckBox" x:Key="{x:Type CheckBox}">
+    <Setter Property="Background" Value="{x:Null}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderRestBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Padding" Value="{DynamicResource CheckableContentMargin}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid ColumnDefinitions="Auto,*">
+          <Grid Width="{DynamicResource CheckableGlyphSize}"
+                Height="{DynamicResource CheckableGlyphSize}"
+                VerticalAlignment="Center">
+            <Border Name="Box"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="{TemplateBinding CornerRadius}" />
+            <Path Name="CheckGlyph"
+                  Data="M 3 8 L 7 12 L 13 4"
+                  IsVisible="False"
+                  Stroke="{DynamicResource TextOnAccentBrush}"
+                  StrokeLineCap="Round"
+                  StrokeThickness="{DynamicResource CheckableMarkThickness}" />
+            <Border Name="IndeterminateGlyph"
+                    Width="{DynamicResource CheckableMarkLength}"
+                    Height="{DynamicResource CheckableMarkThickness}"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource TextOnAccentBrush}"
+                    CornerRadius="{DynamicResource CornerRadiusPill}"
+                    IsVisible="False" />
+            <Border Name="FocusRing"
+                    BorderBrush="{DynamicResource ControlBorderFocusBrush}"
+                    BorderThickness="{DynamicResource BorderThicknessFocus}"
+                    CornerRadius="{TemplateBinding CornerRadius}"
+                    IsHitTestVisible="False"
+                    IsVisible="False" />
+          </Grid>
+          <ContentPresenter Name="PART_ContentPresenter"
+                            Grid.Column="1"
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            RecognizesAccessKey="True"
+                            TextElement.Foreground="{TemplateBinding Foreground}" />
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:pointerover /template/ Border#Box">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderHoverBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Border#Box">
+      <Setter Property="Background" Value="{DynamicResource ControlFillPressedBrush}" />
+    </Style>
+    <Style Selector="^:checked /template/ Border#Box">
+      <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentPrimaryBrush}" />
+    </Style>
+    <Style Selector="^:checked /template/ Path#CheckGlyph">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:indeterminate /template/ Border#Box">
+      <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource StrokeAccentBrush}" />
+    </Style>
+    <Style Selector="^:indeterminate /template/ Border#IndeterminateGlyph">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:focus /template/ Border#FocusRing">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+    <Style Selector="^:disabled /template/ Border#Box">
+      <Setter Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

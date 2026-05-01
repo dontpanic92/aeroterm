@@ -1,0 +1,36 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    Compatibility shim: well-known resource keys that existing AeroTerm code
+    consumes today and must continue to resolve while the migration completes.
+
+    * SystemAccentColor / SystemAccentColorBrush — read by BellService
+      (AeroTerm/Services/BellService.cs:191-197). Kept synchronized with the
+      theme's accent token so a single source of truth governs both.
+
+    * ThemeBorderLowColor / ThemeBorderMidColor — set to Colors.Transparent
+      by AeroTerm/Controls/TabStrip.cs (lines 725, 726, 756, 757) to suppress
+      SimpleTheme's default SplitButton inner-button borders. The TabStrip
+      cleanup todo will remove those overrides; this shim keeps the world
+      sane in the interim.
+  -->
+
+  <ResourceDictionary.MergedDictionaries>
+    <ResourceInclude Source="avares://AeroTerm.Theme/Tokens/Palette.axaml" />
+  </ResourceDictionary.MergedDictionaries>
+
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <Color x:Key="SystemAccentColor">#FF3574F0</Color>
+      <Color x:Key="ThemeBorderLowColor">#FFEBECF0</Color>
+      <Color x:Key="ThemeBorderMidColor">#FFD3D5DB</Color>
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <Color x:Key="SystemAccentColor">#FF548AF7</Color>
+      <Color x:Key="ThemeBorderLowColor">#FF2B2D30</Color>
+      <Color x:Key="ThemeBorderMidColor">#FF393B40</Color>
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+
+  <SolidColorBrush x:Key="SystemAccentColorBrush" Color="{DynamicResource SystemAccentColor}" />
+</ResourceDictionary>

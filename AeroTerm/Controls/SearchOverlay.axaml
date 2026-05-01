@@ -5,16 +5,6 @@
              VerticalAlignment="Top"
              Margin="0,8,12,0"
              IsVisible="False">
-  <UserControl.Resources>
-    <SolidColorBrush x:Key="SearchOverlayBackground" Color="#E01E1E22" />
-    <SolidColorBrush x:Key="SearchOverlayBorder" Color="#66FFFFFF" />
-    <SolidColorBrush x:Key="SearchOverlayForeground" Color="#F0FFFFFF" />
-    <SolidColorBrush x:Key="SearchOverlayMuted" Color="#90FFFFFF" />
-    <SolidColorBrush x:Key="SearchOverlayButtonHover" Color="#25FFFFFF" />
-    <SolidColorBrush x:Key="SearchOverlayButtonPressed" Color="#40FFFFFF" />
-    <SolidColorBrush x:Key="SearchOverlayToggleOn" Color="#4C6CB6FF" />
-  </UserControl.Resources>
-
   <UserControl.Styles>
     <Style Selector="Button.overlay-btn">
       <Setter Property="Background" Value="Transparent" />

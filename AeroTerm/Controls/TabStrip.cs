@@ -102,16 +102,16 @@ public sealed class TabStrip : UserControl
     private const byte ActiveTintAlpha = 0x30;
     private const byte ActiveHoverTintAlpha = 0x45;
 
-    private static readonly IBrush DividerBrush = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
-    private static readonly IBrush CloseHoverBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
-    private static readonly IBrush ActiveAccentBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF));
-
     /// <summary>
     /// Duration of the smooth-scroll animation triggered by the
     /// scroll-indicator buttons. Matches the 150 ms used for tab header
     /// background transitions.
     /// </summary>
     private static readonly TimeSpan ScrollAnimationDuration = TimeSpan.FromMilliseconds(150);
+
+    private readonly IBrush dividerBrush;
+    private readonly IBrush closeHoverBrush;
+    private readonly IBrush activeAccentBrush;
 
     // Instance brushes so the strip can recolor itself when the active
     // color scheme changes. Mutating SolidColorBrush.Color propagates to
@@ -166,6 +166,9 @@ public sealed class TabStrip : UserControl
     public TabStrip()
     {
         this.Focusable = false;
+        this.dividerBrush = this.ResolveThemeBrush("TabStripDividerBrush", Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
+        this.closeHoverBrush = this.ResolveThemeBrush("TabStripCloseHoverBrush", Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
+        this.activeAccentBrush = this.ResolveThemeBrush("TabStripActiveAccentBrush", Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF));
         this.tabsPanel = new TabHeaderPanel
         {
             Orientation = Orientation.Horizontal,
@@ -450,11 +453,11 @@ public sealed class TabStrip : UserControl
         this.activeTabBrush.Color = Color.FromArgb(ActiveTintAlpha, r, g, b);
         this.activeHoverBrush.Color = Color.FromArgb(ActiveHoverTintAlpha, r, g, b);
 
-        // The SimpleTheme SplitButton template resolves its per-state
-        // background and foreground via theme Color resources rather than
-        // brushes, so a plain brush mutation does not propagate. Refresh
-        // the locally-scoped resource overrides whenever the palette
-        // changes so the "+" / menu button keeps tracking the tabs.
+        // The SplitButton template resolves its per-state background and
+        // foreground via theme Color resources rather than brushes, so a
+        // plain brush mutation does not propagate. Refresh the locally-
+        // scoped resource overrides whenever the palette changes so the
+        // "+" / menu button keeps tracking the tabs.
         this.RefreshNewTabButtonStateBrushes();
         this.RefreshScrollButtonStateBrushes(this.scrollLeftButton);
         this.RefreshScrollButtonStateBrushes(this.scrollRightButton);
@@ -496,7 +499,7 @@ public sealed class TabStrip : UserControl
         {
             this.externalDropIndicator = new Border
             {
-                Background = ActiveAccentBrush,
+                Background = this.activeAccentBrush,
                 IsHitTestVisible = false,
                 ZIndex = 2,
             };
@@ -659,6 +662,24 @@ public sealed class TabStrip : UserControl
         };
     }
 
+    private IBrush ResolveThemeBrush(string key, Color fallback)
+    {
+        if (this.TryGetResource(key, this.ActualThemeVariant, out var value))
+        {
+            if (value is IBrush brush)
+            {
+                return brush;
+            }
+
+            if (value is Color color)
+            {
+                return new SolidColorBrush(color);
+            }
+        }
+
+        return new SolidColorBrush(fallback);
+    }
+
     /// <summary>
     /// Builds a scroll-indicator <see cref="RepeatButton"/> with a
     /// left-pointing or right-pointing chevron glyph. The button is
@@ -710,7 +731,7 @@ public sealed class TabStrip : UserControl
     }
 
     /// <summary>
-    /// Applies the same SimpleTheme resource overrides used by
+    /// Applies the same per-state resource overrides used by
     /// <see cref="RefreshNewTabButtonStateBrushes"/> to a scroll-
     /// indicator button so its hover / pressed states track the tab
     /// strip palette.
@@ -722,16 +743,13 @@ public sealed class TabStrip : UserControl
         resources["ThemeControlMidColor"] = this.inactiveHoverBrush.Color;
         resources["ThemeBorderHighColor"] = this.inactiveTabBrush.Color;
         resources["ThemeForegroundColor"] = this.tabForegroundBrush.Color;
-        resources["ThemeBorderLowColor"] = Colors.Transparent;
-        resources["ThemeBorderMidColor"] = Colors.Transparent;
     }
 
     /// <summary>
-    /// Overrides the SimpleTheme color tokens consumed by the
-    /// <see cref="SplitButton"/> template at the button's local
-    /// resource scope so the trailing "+" / menu button paints with
-    /// the tab strip's own foreground / hover / pressed brushes
-    /// instead of the global theme palette.
+    /// Overrides the color tokens consumed by the <see cref="SplitButton"/>
+    /// template at the button's local resource scope so the trailing "+" /
+    /// menu button paints with the tab strip's own foreground / hover /
+    /// pressed brushes instead of the global theme palette.
     /// </summary>
     private void RefreshNewTabButtonStateBrushes()
     {
@@ -748,13 +766,6 @@ public sealed class TabStrip : UserControl
 
         // Foreground in every interactive state.
         resources["ThemeForegroundColor"] = this.tabForegroundBrush.Color;
-
-        // Suppress the SimpleTheme borders on the inner buttons —
-        // BorderThickness is already zero on the outer SplitButton, but
-        // the inner buttons re-resolve these tokens for their own
-        // ContentPresenter borders.
-        resources["ThemeBorderLowColor"] = Colors.Transparent;
-        resources["ThemeBorderMidColor"] = Colors.Transparent;
     }
 
     /// <summary>
@@ -1946,7 +1957,7 @@ public sealed class TabStrip : UserControl
             // owning strip's orientation; ApplyOrientation() re-anchors it.
             this.activeIndicator = new Rectangle
             {
-                Fill = ActiveAccentBrush,
+                Fill = owner.activeAccentBrush,
                 IsHitTestVisible = false,
                 IsVisible = false,
             };
@@ -2003,7 +2014,7 @@ public sealed class TabStrip : UserControl
                 Focusable = false,
                 IsVisible = false,
             };
-            this.closeButton.PointerEntered += (_, _) => this.closeButton.Background = CloseHoverBrush;
+            this.closeButton.PointerEntered += (_, _) => this.closeButton.Background = owner.closeHoverBrush;
             this.closeButton.PointerExited += (_, _) => this.closeButton.Background = Brushes.Transparent;
             AutomationProperties.SetName(this.closeButton, $"Close tab: {tab.Title}");
             this.closeButton.Click += (_, e) =>
@@ -2020,7 +2031,7 @@ public sealed class TabStrip : UserControl
                 Width = 1,
                 VerticalAlignment = VerticalAlignment.Stretch,
                 Margin = new Thickness(0, 6, 0, 6),
-                Fill = DividerBrush,
+                Fill = owner.dividerBrush,
                 IsVisible = false,
             };
             Grid.SetRow(this.divider, 1);

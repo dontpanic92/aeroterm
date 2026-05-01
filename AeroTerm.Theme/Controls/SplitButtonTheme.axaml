@@ -1,0 +1,148 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+    <ControlTheme x:Key="AeroTermSplitButtonPartTheme"
+                TargetType="Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingDefault}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <ContentPresenter Name="PART_ContentPresenter"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          Content="{TemplateBinding Content}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Foreground="{TemplateBinding Foreground}"
+                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                          Padding="{TemplateBinding Padding}"
+                          RecognizesAccessKey="True"
+                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:pointerover">
+      <Setter Property="Background" Value="{DynamicResource ControlFillHoverBrush}" />
+    </Style>
+    <Style Selector="^:pressed">
+      <Setter Property="Background" Value="{DynamicResource ControlFillPressedBrush}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+    <Style Selector="^[Tag=flyout-open]">
+      <Setter Property="Background" Value="{DynamicResource ControlFillPressedBrush}" />
+    </Style>
+    <Style Selector="^[Tag=checked]">
+      <Setter Property="Background" Value="{DynamicResource AccentMutedBrush}" />
+    </Style>
+    <Style Selector="^[Tag=checked-flyout-open]">
+      <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+    </Style>
+  </ControlTheme>
+
+  <ControlTheme x:Key="{x:Type SplitButton}"
+                TargetType="SplitButton">
+    <Setter Property="Background" Value="{DynamicResource ControlFillRestBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderRestBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="KeyboardNavigation.IsTabStop" Value="True" />
+    <Setter Property="Focusable" Value="True" />
+    <Setter Property="MinHeight" Value="{DynamicResource ControlMinHeight}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingDefault}" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="LayoutRoot"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                ClipToBounds="True">
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <Button Name="PART_PrimaryButton"
+                    Grid.Column="0"
+                    Theme="{StaticResource AeroTermSplitButtonPartTheme}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{TemplateBinding Command}"
+                    CommandParameter="{TemplateBinding CommandParameter}"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}"
+                    FontFamily="{TemplateBinding FontFamily}"
+                    FontSize="{TemplateBinding FontSize}"
+                    FontWeight="{TemplateBinding FontWeight}"
+                    Foreground="{TemplateBinding Foreground}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    IsTabStop="False"
+                    Padding="{TemplateBinding Padding}"
+                    VerticalAlignment="Stretch"
+                    VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+
+            <Border Name="SeparatorBorder"
+                    Grid.Column="1"
+                    Background="{DynamicResource ControlBorderRestBrush}"
+                    Width="1" />
+
+            <Button Name="PART_SecondaryButton"
+                    Grid.Column="2"
+                    Theme="{StaticResource AeroTermSplitButtonPartTheme}"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Foreground="{TemplateBinding Foreground}"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Center"
+                    IsTabStop="False"
+                    MinWidth="28"
+                    Padding="0"
+                    VerticalAlignment="Stretch"
+                    VerticalContentAlignment="Center">
+              <Path Width="10"
+                    Height="6"
+                    Data="M 0 0 L 5 6 L 10 0 Z"
+                    Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                    Stretch="Uniform" />
+            </Button>
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:pointerover /template/ Border#LayoutRoot">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderHoverBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Border#LayoutRoot">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderHoverBrush}" />
+    </Style>
+    <Style Selector="^:focus /template/ Border#LayoutRoot">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderDisabledBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+    <Style Selector="^:flyout-open /template/ Button">
+      <Setter Property="Tag" Value="flyout-open" />
+    </Style>
+    <Style Selector="^:checked /template/ Button">
+      <Setter Property="Tag" Value="checked" />
+    </Style>
+    <Style Selector="^:checked:flyout-open /template/ Button">
+      <Setter Property="Tag" Value="checked-flyout-open" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

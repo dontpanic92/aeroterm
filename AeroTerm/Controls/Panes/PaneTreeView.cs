@@ -239,7 +239,7 @@ internal sealed class PaneTreeView : UserControl
     {
         if (this.settings is null)
         {
-            return new SolidColorBrush(DefaultActiveAccent);
+            return new SolidColorBrush(this.ResolveActiveAccentColor());
         }
 
         int rgb = this.settings.ForegroundColor;
@@ -247,5 +247,23 @@ internal sealed class PaneTreeView : UserControl
         byte g = (byte)((rgb >> 8) & 0xFF);
         byte b = (byte)(rgb & 0xFF);
         return new SolidColorBrush(Color.FromArgb(0xA0, r, g, b));
+    }
+
+    private Color ResolveActiveAccentColor()
+    {
+        if (this.TryGetResource("AccentPrimaryBrush", this.ActualThemeVariant, out var value))
+        {
+            if (value is ISolidColorBrush brush)
+            {
+                return brush.Color;
+            }
+
+            if (value is Color color)
+            {
+                return color;
+            }
+        }
+
+        return DefaultActiveAccent;
     }
 }

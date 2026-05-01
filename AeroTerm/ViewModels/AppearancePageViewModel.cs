@@ -16,6 +16,7 @@ using AeroTerm.Models;
 using AeroTerm.Services;
 using AeroTerm.Utilities;
 using AeroTerm.WindowEffects;
+using Avalonia;
 using Avalonia.Media;
 
 /// <summary>
@@ -561,8 +562,8 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     /// </summary>
     public IBrush QuakeHotkeyStatusBrush =>
         KeyChordParser.TryParse(this.quakeHotkey, out _)
-            ? new SolidColorBrush(Color.FromRgb(0x2E, 0xA0, 0x43))
-            : new SolidColorBrush(Color.FromRgb(0xC0, 0x39, 0x2B));
+            ? ResolveApplicationThemeBrush("SuccessFillBrush", Color.FromRgb(0x2E, 0xA0, 0x43))
+            : ResolveApplicationThemeBrush("DangerFillBrush", Color.FromRgb(0xC0, 0x39, 0x2B));
 
     /// <summary>
     /// Gets a platform-specific warning displayed when Quake-mode cannot
@@ -653,6 +654,24 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             this.SelectedFontIndex = index + 1;
             this.UpdateFontPriorityLive();
         }
+    }
+
+    private static IBrush ResolveApplicationThemeBrush(string key, Color fallback)
+    {
+        if (Application.Current is { } app && app.TryGetResource(key, null, out var value))
+        {
+            if (value is IBrush brush)
+            {
+                return brush;
+            }
+
+            if (value is Color color)
+            {
+                return new SolidColorBrush(color);
+            }
+        }
+
+        return new SolidColorBrush(fallback);
     }
 
     private static string? GetRawFontEntry(object? item)

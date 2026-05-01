@@ -21,12 +21,6 @@ internal sealed class DragPreviewWindow : Window
     private const double PreviewWidth = 200;
     private const double PreviewHeight = 36;
 
-    private static readonly IBrush PreviewBackground =
-        new SolidColorBrush(Color.FromArgb(0xD0, 0x30, 0x30, 0x30));
-
-    private static readonly IBrush PreviewForeground =
-        new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF));
-
     private readonly TextBlock iconBlock;
     private readonly TextBlock titleBlock;
     private bool isMergeMode;
@@ -52,10 +46,13 @@ internal sealed class DragPreviewWindow : Window
         this.TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
         this.Background = Brushes.Transparent;
 
+        var previewBackground = this.ResolveThemeBrush("SurfaceOverlayBrush", Color.FromArgb(0xD0, 0x30, 0x30, 0x30));
+        var previewForeground = this.ResolveThemeBrush("TextPrimaryBrush", Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF));
+
         this.iconBlock = new TextBlock
         {
             Text = "\u29C9", // ⧉ — new-window icon
-            Foreground = PreviewForeground,
+            Foreground = previewForeground,
             FontSize = 14,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(10, 0, 6, 0),
@@ -64,7 +61,7 @@ internal sealed class DragPreviewWindow : Window
         this.titleBlock = new TextBlock
         {
             Text = tabTitle,
-            Foreground = PreviewForeground,
+            Foreground = previewForeground,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -80,7 +77,7 @@ internal sealed class DragPreviewWindow : Window
 
         this.Content = new Border
         {
-            Background = PreviewBackground,
+            Background = previewBackground,
             CornerRadius = new CornerRadius(6),
             Child = panel,
             ClipToBounds = true,
@@ -123,5 +120,23 @@ internal sealed class DragPreviewWindow : Window
         {
             // Position may throw on some platforms before the window is shown.
         }
+    }
+
+    private IBrush ResolveThemeBrush(string key, Color fallback)
+    {
+        if (this.TryGetResource(key, this.ActualThemeVariant, out var value))
+        {
+            if (value is IBrush brush)
+            {
+                return brush;
+            }
+
+            if (value is Color color)
+            {
+                return new SolidColorBrush(color);
+            }
+        }
+
+        return new SolidColorBrush(fallback);
     }
 }

@@ -1,0 +1,206 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    Color tokens, split by theme variant. Brushes.axaml binds named brush keys
+    to these colors via ThemeDictionaries so DynamicResource lookups resolve
+    correctly under Avalonia's ActualThemeVariant.
+  -->
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <!-- ================================================================= -->
+    <!-- LIGHT VARIANT                                                     -->
+    <!-- ================================================================= -->
+    <ResourceDictionary x:Key="Light">
+
+      <!-- Surfaces -->
+      <Color x:Key="SurfaceBackgroundColor">#FFF7F8FA</Color>
+      <Color x:Key="SurfaceLayer1Color">#FFFFFFFF</Color>
+      <Color x:Key="SurfaceLayer2Color">#FFEBECF0</Color>
+      <Color x:Key="SurfaceOverlayColor">#FFFFFFFF</Color>
+      <Color x:Key="SurfaceScrimColor">#33000000</Color>
+
+      <!-- Strokes -->
+      <Color x:Key="StrokeDefaultColor">#FFD3D5DB</Color>
+      <Color x:Key="StrokeMutedColor">#FFEBECF0</Color>
+      <Color x:Key="StrokeFocusColor">#FF3574F0</Color>
+      <Color x:Key="StrokeAccentColor">#FF3574F0</Color>
+
+      <!-- Text -->
+      <Color x:Key="TextPrimaryColor">#FF1E1F22</Color>
+      <Color x:Key="TextSecondaryColor">#FF5A5D63</Color>
+      <Color x:Key="TextTertiaryColor">#FF818594</Color>
+      <Color x:Key="TextDisabledColor">#FFB4B8BF</Color>
+      <Color x:Key="TextOnAccentColor">#FFFFFFFF</Color>
+      <Color x:Key="TextLinkColor">#FF3574F0</Color>
+
+      <!-- Accent -->
+      <Color x:Key="AccentPrimaryColor">#FF3574F0</Color>
+      <Color x:Key="AccentSecondaryColor">#FF4682FA</Color>
+      <Color x:Key="AccentMutedColor">#FFA1BDF8</Color>
+      <Color x:Key="AccentPressedColor">#FF2862CD</Color>
+      <Color x:Key="AccentDisabledColor">#FFCCDBFB</Color>
+
+      <!-- Control fill states (flat IDE style — transparent rest, subtle gray on hover) -->
+      <Color x:Key="ControlFillRestColor">#00000000</Color>
+      <Color x:Key="ControlFillHoverColor">#FFEBECF0</Color>
+      <Color x:Key="ControlFillPressedColor">#FFDFE1E5</Color>
+      <Color x:Key="ControlFillDisabledColor">#FFF2F3F5</Color>
+      <Color x:Key="ControlFillSubtleHoverColor">#FFEBECF0</Color>
+      <Color x:Key="ControlFillSubtlePressedColor">#FFDFE1E5</Color>
+
+      <!-- Control border states (very subtle by default; accent on focus) -->
+      <Color x:Key="ControlBorderRestColor">#FFD3D5DB</Color>
+      <Color x:Key="ControlBorderHoverColor">#FFB4B8BF</Color>
+      <Color x:Key="ControlBorderFocusColor">#FF3574F0</Color>
+      <Color x:Key="ControlBorderDisabledColor">#FFEBECF0</Color>
+
+      <!-- Status -->
+      <Color x:Key="SuccessFillColor">#FF208A3C</Color>
+      <Color x:Key="SuccessForegroundColor">#FFFFFFFF</Color>
+      <Color x:Key="WarningFillColor">#FFE0A309</Color>
+      <Color x:Key="WarningForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="DangerFillColor">#FFDB3B4B</Color>
+      <Color x:Key="DangerForegroundColor">#FFFFFFFF</Color>
+      <Color x:Key="InfoFillColor">#FF3574F0</Color>
+      <Color x:Key="InfoForegroundColor">#FFFFFFFF</Color>
+
+      <!-- Selection (IDE-style: accent at low alpha for surface tint) -->
+      <Color x:Key="SelectionFillColor">#FFD4E2FF</Color>
+      <Color x:Key="SelectionFillInactiveColor">#FFEBECF0</Color>
+      <Color x:Key="SelectionForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="ListItemHoverColor">#FFEBECF0</Color>
+      <Color x:Key="ListItemPressedColor">#FFDFE1E5</Color>
+      <Color x:Key="ListItemSelectedColor">#FFD4E2FF</Color>
+      <Color x:Key="ListItemSelectedHoverColor">#FFC2D6FF</Color>
+
+      <!-- Title bar -->
+      <Color x:Key="TitleBarForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="TitleBarButtonHoverColor">#19000000</Color>
+      <Color x:Key="TitleBarButtonPressedColor">#33000000</Color>
+      <Color x:Key="TitleBarCloseHoverColor">#FFDB3B4B</Color>
+      <Color x:Key="TitleBarClosePressedColor">#FFB22A1C</Color>
+
+      <!-- Command palette -->
+      <Color x:Key="PaletteBackgroundColor">#FFFFFFFF</Color>
+      <Color x:Key="PaletteForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="PaletteBorderColor">#FFD3D5DB</Color>
+      <Color x:Key="PaletteSelectionColor">#FFD4E2FF</Color>
+      <Color x:Key="PaletteMutedColor">#FF5A5D63</Color>
+
+      <!-- Search overlay -->
+      <Color x:Key="SearchOverlayBackgroundColor">#FFFFFFFF</Color>
+      <Color x:Key="SearchOverlayForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="SearchOverlayBorderColor">#FFD3D5DB</Color>
+      <Color x:Key="SearchOverlayMutedColor">#FF5A5D63</Color>
+      <Color x:Key="SearchOverlayButtonHoverColor">#FFEBECF0</Color>
+      <Color x:Key="SearchOverlayButtonPressedColor">#FFDFE1E5</Color>
+      <Color x:Key="SearchOverlayToggleOnColor">#FF3574F0</Color>
+
+      <!-- Tab strip -->
+      <Color x:Key="TabStripDividerColor">#FFD3D5DB</Color>
+      <Color x:Key="TabStripCloseHoverColor">#FFEBECF0</Color>
+      <Color x:Key="TabStripActiveAccentColor">#FF3574F0</Color>
+      <Color x:Key="TabStripForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="TabStripMutedForegroundColor">#FF5A5D63</Color>
+    </ResourceDictionary>
+
+    <!-- ================================================================= -->
+    <!-- DARK VARIANT                                                      -->
+    <!-- ================================================================= -->
+    <ResourceDictionary x:Key="Dark">
+
+      <!-- Surfaces (IntelliJ IDEA New UI dark — bluish neutral grays) -->
+      <Color x:Key="SurfaceBackgroundColor">#FF1E1F22</Color>
+      <Color x:Key="SurfaceLayer1Color">#FF2B2D30</Color>
+      <Color x:Key="SurfaceLayer2Color">#FF393B40</Color>
+      <Color x:Key="SurfaceOverlayColor">#FF2B2D30</Color>
+      <Color x:Key="SurfaceScrimColor">#80000000</Color>
+
+      <!-- Strokes -->
+      <Color x:Key="StrokeDefaultColor">#FF393B40</Color>
+      <Color x:Key="StrokeMutedColor">#FF2B2D30</Color>
+      <Color x:Key="StrokeFocusColor">#FF548AF7</Color>
+      <Color x:Key="StrokeAccentColor">#FF548AF7</Color>
+
+      <!-- Text -->
+      <Color x:Key="TextPrimaryColor">#FFDFE1E5</Color>
+      <Color x:Key="TextSecondaryColor">#FF9DA0A8</Color>
+      <Color x:Key="TextTertiaryColor">#FF6F737A</Color>
+      <Color x:Key="TextDisabledColor">#FF555861</Color>
+      <Color x:Key="TextOnAccentColor">#FFFFFFFF</Color>
+      <Color x:Key="TextLinkColor">#FF548AF7</Color>
+
+      <!-- Accent -->
+      <Color x:Key="AccentPrimaryColor">#FF548AF7</Color>
+      <Color x:Key="AccentSecondaryColor">#FF6798F8</Color>
+      <Color x:Key="AccentMutedColor">#FF3D5A8C</Color>
+      <Color x:Key="AccentPressedColor">#FF4078E0</Color>
+      <Color x:Key="AccentDisabledColor">#FF2E3D5C</Color>
+
+      <!-- Control fill states (flat IDE style) -->
+      <Color x:Key="ControlFillRestColor">#00000000</Color>
+      <Color x:Key="ControlFillHoverColor">#FF393B40</Color>
+      <Color x:Key="ControlFillPressedColor">#FF43464C</Color>
+      <Color x:Key="ControlFillDisabledColor">#FF2B2D30</Color>
+      <Color x:Key="ControlFillSubtleHoverColor">#FF393B40</Color>
+      <Color x:Key="ControlFillSubtlePressedColor">#FF43464C</Color>
+
+      <!-- Control border states -->
+      <Color x:Key="ControlBorderRestColor">#FF43464C</Color>
+      <Color x:Key="ControlBorderHoverColor">#FF555861</Color>
+      <Color x:Key="ControlBorderFocusColor">#FF548AF7</Color>
+      <Color x:Key="ControlBorderDisabledColor">#FF2B2D30</Color>
+
+      <!-- Status -->
+      <Color x:Key="SuccessFillColor">#FF49B266</Color>
+      <Color x:Key="SuccessForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="WarningFillColor">#FFE0A309</Color>
+      <Color x:Key="WarningForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="DangerFillColor">#FFE55765</Color>
+      <Color x:Key="DangerForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="InfoFillColor">#FF548AF7</Color>
+      <Color x:Key="InfoForegroundColor">#FF1E1F22</Color>
+
+      <!-- Selection (IDE style: accent at low alpha) -->
+      <Color x:Key="SelectionFillColor">#FF2E436E</Color>
+      <Color x:Key="SelectionFillInactiveColor">#FF393B40</Color>
+      <Color x:Key="SelectionForegroundColor">#FFDFE1E5</Color>
+      <Color x:Key="ListItemHoverColor">#FF393B40</Color>
+      <Color x:Key="ListItemPressedColor">#FF43464C</Color>
+      <Color x:Key="ListItemSelectedColor">#FF2E436E</Color>
+      <Color x:Key="ListItemSelectedHoverColor">#FF3A537F</Color>
+
+      <!-- Title bar -->
+      <Color x:Key="TitleBarForegroundColor">#FFDFE1E5</Color>
+      <Color x:Key="TitleBarButtonHoverColor">#1FFFFFFF</Color>
+      <Color x:Key="TitleBarButtonPressedColor">#33FFFFFF</Color>
+      <Color x:Key="TitleBarCloseHoverColor">#FFDB3B4B</Color>
+      <Color x:Key="TitleBarClosePressedColor">#FFB22A1C</Color>
+
+      <!-- Command palette -->
+      <Color x:Key="PaletteBackgroundColor">#FF2B2D30</Color>
+      <Color x:Key="PaletteForegroundColor">#FFDFE1E5</Color>
+      <Color x:Key="PaletteBorderColor">#FF43464C</Color>
+      <Color x:Key="PaletteSelectionColor">#FF2E436E</Color>
+      <Color x:Key="PaletteMutedColor">#FF9DA0A8</Color>
+
+      <!-- Search overlay -->
+      <Color x:Key="SearchOverlayBackgroundColor">#FF2B2D30</Color>
+      <Color x:Key="SearchOverlayForegroundColor">#FFDFE1E5</Color>
+      <Color x:Key="SearchOverlayBorderColor">#FF43464C</Color>
+      <Color x:Key="SearchOverlayMutedColor">#FF9DA0A8</Color>
+      <Color x:Key="SearchOverlayButtonHoverColor">#FF393B40</Color>
+      <Color x:Key="SearchOverlayButtonPressedColor">#FF43464C</Color>
+      <Color x:Key="SearchOverlayToggleOnColor">#FF548AF7</Color>
+
+      <!-- Tab strip -->
+      <Color x:Key="TabStripDividerColor">#FF393B40</Color>
+      <Color x:Key="TabStripCloseHoverColor">#FF43464C</Color>
+      <Color x:Key="TabStripActiveAccentColor">#FF548AF7</Color>
+      <Color x:Key="TabStripForegroundColor">#FFDFE1E5</Color>
+      <Color x:Key="TabStripMutedForegroundColor">#FF9DA0A8</Color>
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

@@ -1252,6 +1252,9 @@ public partial class MainWindow : Window
         byte r = (byte)((rgb >> 16) & 0xFF);
         byte g = (byte)((rgb >> 8) & 0xFF);
         byte b = (byte)(rgb & 0xFF);
+
+        // Intentionally derived from the active terminal background/foreground
+        // contrast instead of the global theme tokens.
         var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
 
         this.Resources["TitleBarForegroundBrush"] = brush;

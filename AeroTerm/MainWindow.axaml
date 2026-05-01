@@ -3,21 +3,13 @@
         xmlns:strings="using:AeroTerm.Resources"
         x:Class="AeroTerm.MainWindow"
         Title="{x:Static strings:Strings.AppTitle}"
-        RequestedThemeVariant="Light"
+        RequestedThemeVariant="Default"
         TransparencyLevelHint="None"
         Background="Transparent"
         TransparencyBackgroundFallback="Transparent"
         ExtendClientAreaToDecorationsHint="True"
         ExtendClientAreaTitleBarHeightHint="38"
         WindowDecorations="Full">
-
-    <Window.Resources>
-        <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="White" />
-        <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="#20FFFFFF" />
-        <SolidColorBrush x:Key="TitleBarButtonPressedBrush" Color="#40FFFFFF" />
-        <SolidColorBrush x:Key="TitleBarCloseHoverBrush" Color="#C42B1C" />
-        <SolidColorBrush x:Key="TitleBarClosePressedBrush" Color="#B22A1C" />
-    </Window.Resources>
 
     <Window.Styles>
         <Style Selector="Button.titlebar-btn">
