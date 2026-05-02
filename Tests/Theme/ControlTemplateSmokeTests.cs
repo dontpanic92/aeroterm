@@ -27,6 +27,7 @@ public class ControlTemplateSmokeTests
     private static readonly (string Name, Func<Control> Factory, bool ExpectVisualChildren)[] ControlFactories =
     [
         ("Button", () => new Button { Content = "Button" }, true),
+        ("PathIcon", () => new PathIcon { Data = Avalonia.Media.Geometry.Parse("M0 0L16 0L16 16L0 16Z") }, true),
         ("ToggleButton", () => new ToggleButton { Content = "Toggle" }, true),
         ("CheckBox", () => new CheckBox { Content = "Check" }, true),
         ("RadioButton", () => new RadioButton { Content = "Radio" }, true),

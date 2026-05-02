@@ -24,6 +24,7 @@
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/TextBlockTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/BorderTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/SeparatorTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/PathIconTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/ButtonTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/RepeatButtonTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/ToggleButtonTheme.axaml" />

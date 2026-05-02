@@ -13,6 +13,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.NUnit;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using NUnit.Framework;
@@ -333,6 +334,63 @@ public class TabStripHeadlessTests
 
             Assert.That(leftBtn.IsVisible, Is.True, "Left scroll button should be visible at scroll end.");
             Assert.That(rightBtn.IsVisible, Is.False, "Right scroll button should be hidden at scroll end.");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// The new-tab SplitButton keeps the master-branch plus / chevron glyph
+    /// pairing while resolving its hover / pressed resources from the custom
+    /// AeroTerm theme rather than SimpleTheme compatibility keys, and its
+    /// inner buttons do not steal terminal keyboard focus.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_NewTabButton_UsesCustomThemeGlyphsResourcesAndNonFocusableParts()
+    {
+        var (window, strip, _) = BuildHostedStrip();
+        try
+        {
+            var addBtn = FindNewTabButton(strip);
+            Assert.That(addBtn, Is.Not.Null);
+
+            addBtn!.ApplyTemplate();
+            Dispatcher.UIThread.RunJobs();
+
+            var buttons = addBtn.GetVisualDescendants()
+                .OfType<Button>()
+                .ToList();
+            var primaryButton = buttons.SingleOrDefault(b => b.Name == "PART_PrimaryButton");
+            Assert.That(primaryButton, Is.Not.Null);
+            var primary = primaryButton!;
+            Assert.That(primary.Focusable, Is.False);
+            Assert.That(KeyboardNavigation.GetIsTabStop(primary), Is.False);
+
+            var secondaryButton = buttons.SingleOrDefault(b => b.Name == "PART_SecondaryButton");
+            Assert.That(secondaryButton, Is.Not.Null);
+            var secondary = secondaryButton!;
+            Assert.That(secondary.Focusable, Is.False);
+            Assert.That(KeyboardNavigation.GetIsTabStop(secondary), Is.False);
+            Assert.That(
+                secondary.TryFindResource("AeroTermSplitButtonPartHoverBrush", secondary.ActualThemeVariant, out var hoverBrush),
+                Is.True);
+            Assert.That(hoverBrush, Is.SameAs(addBtn.Resources["AeroTermSplitButtonPartHoverBrush"]));
+
+            var plus = addBtn.Content as PathIcon;
+            Assert.That(plus, Is.Not.Null);
+            Assert.That(plus!.Foreground, Is.SameAs(addBtn.Resources["AeroTermSplitButtonPartForegroundBrush"]));
+
+            var chevron = secondary.GetVisualDescendants()
+                .OfType<PathIcon>()
+                .SingleOrDefault();
+            Assert.That(chevron, Is.Not.Null);
+            Assert.That(chevron!.Width, Is.EqualTo(12));
+            Assert.That(chevron.Height, Is.EqualTo(12));
+            Assert.That(chevron.Foreground, Is.SameAs(addBtn.Resources["AeroTermSplitButtonPartForegroundBrush"]));
+            Assert.That(chevron.Data, Is.Not.Null);
+            Assert.That(chevron.Data!.Bounds, Is.EqualTo(Geometry.Parse("M1939 486L2029 576L1024 1581L19 576L109 486L1024 1401L1939 486Z").Bounds));
         }
         finally
         {

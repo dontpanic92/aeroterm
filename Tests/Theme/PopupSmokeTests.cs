@@ -7,11 +7,15 @@ namespace AeroTerm.Tests.Theme;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.NUnit;
+using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using NUnit.Framework;
 
 /// <summary>
@@ -204,13 +208,45 @@ public class PopupSmokeTests
             splitButton.ApplyTemplate();
             flyout.ShowAt(splitButton);
             PumpJobs();
+
+            var parts = splitButton.GetVisualDescendants()
+                .OfType<Button>()
+                .ToList();
+            var primary = parts.Single(b => b.Name == "PART_PrimaryButton");
+            var secondary = parts.Single(b => b.Name == "PART_SecondaryButton");
+            AssertSplitButtonPartPressed(splitButton, primary);
+            AssertSplitButtonPartPressed(splitButton, secondary);
+
+            flyout.Hide();
+            splitButton.Classes.Add("native-menu-open");
+            PumpJobs();
+            AssertSplitButtonPartPressed(splitButton, primary);
+            AssertSplitButtonPartPressed(splitButton, secondary);
         }
         finally
         {
+            splitButton.Classes.Remove("native-menu-open");
             flyout.Hide();
             window.Close();
             PumpJobs();
         }
+    }
+
+    private static void AssertSplitButtonPartPressed(SplitButton splitButton, Button part)
+    {
+        Assert.That(part.Tag, Is.EqualTo("flyout-open"));
+        Assert.That(
+            splitButton.TryFindResource("AeroTermSplitButtonPartPressedBrush", splitButton.ActualThemeVariant, out var pressedResource),
+            Is.True);
+        Assert.That(pressedResource, Is.InstanceOf<IBrush>());
+
+        var pressedBrush = (IBrush)pressedResource!;
+        Assert.That(part.Background, Is.SameAs(pressedBrush));
+
+        var presenter = part.GetVisualDescendants()
+            .OfType<ContentPresenter>()
+            .Single(cp => cp.Name == "PART_ContentPresenter");
+        Assert.That(presenter.Background, Is.SameAs(pressedBrush));
     }
 
     private static void PumpJobs()

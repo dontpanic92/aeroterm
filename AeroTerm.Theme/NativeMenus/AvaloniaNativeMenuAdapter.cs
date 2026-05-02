@@ -34,6 +34,11 @@ internal sealed class AvaloniaNativeMenuAdapter : INativeMenuPlatformAdapter
         }
 
         this.activeMenus[flyout] = menu;
+        menu.Closed += (_, _) =>
+        {
+            this.activeMenus.Remove(flyout);
+            flyout.NotifyClosed();
+        };
         menu.ShowAt(target, showAtPointer);
         return true;
     }

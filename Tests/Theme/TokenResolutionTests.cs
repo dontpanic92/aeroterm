@@ -87,6 +87,10 @@ public class TokenResolutionTests
         "TabStripActiveAccentBrush",
         "TabStripForegroundBrush",
         "TabStripMutedForegroundBrush",
+        "AeroTermSplitButtonPartHoverBrush",
+        "AeroTermSplitButtonPartPressedBrush",
+        "AeroTermSplitButtonPartForegroundBrush",
+        "AeroTermSplitButtonSeparatorBrush",
     ];
 
     /// <summary>
@@ -122,8 +126,6 @@ public class TokenResolutionTests
 
         AssertResource(window, "SystemAccentColor", variant, typeof(Color));
         AssertResource(window, "SystemAccentColorBrush", variant, typeof(IBrush));
-        AssertResource(window, "ThemeBorderLowColor", variant, typeof(Color));
-        AssertResource(window, "ThemeBorderMidColor", variant, typeof(Color));
 
         window.Close();
     }
