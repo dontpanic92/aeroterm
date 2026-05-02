@@ -158,6 +158,41 @@ Use `RequestedThemeVariant="Default"`, or omit the property, to let Avalonia fol
 </Application>
 ```
 
+## Native menu wrappers
+
+`AeroTerm.Theme.Controls.NativeMenuFlyout` and `NativeContextMenu` provide an Avalonia-friendly wrapper for context menus and flyout menus:
+
+- macOS uses real AppKit `NSMenu` / `NSMenuItem` instances, so the operating system supplies the current native menu styling, including Liquid Glass on supported macOS versions.
+- Windows and Linux use the existing Avalonia `MenuFlyout`, `ContextMenu`, `MenuItem`, and AeroTerm.Theme menu templates.
+
+Windows intentionally does not include WinUI 3 / Windows App SDK menu support in this package. WinUI 3 requires package/runtime dependencies and XAML hosting setup that cannot be implemented as simple native interop like AppKit menus. A future optional companion package can add that path without making the base theme package heavier.
+
+```xml
+<Button xmlns:menus="using:AeroTerm.Theme.Controls"
+        Content="Profiles">
+  <Button.Flyout>
+    <menus:NativeMenuFlyout>
+      <menus:NativeMenuItem Header="Default" />
+      <menus:NativeMenuSeparator />
+      <menus:NativeMenuItem Header="Manage profiles…" />
+    </menus:NativeMenuFlyout>
+  </Button.Flyout>
+</Button>
+```
+
+For context menus, attach `NativeContextMenu.Menu` to the target control:
+
+```xml
+<Border xmlns:menus="using:AeroTerm.Theme.Controls">
+  <menus:NativeContextMenu.Menu>
+    <menus:NativeContextMenu>
+      <menus:NativeMenuItem Header="Duplicate tab" />
+      <menus:NativeMenuItem Header="Close tab" />
+    </menus:NativeContextMenu>
+  </menus:NativeContextMenu.Menu>
+</Border>
+```
+
 ## Compatibility keys
 
 The theme also provides legacy compatibility resources used by existing AeroTerm code and older consumers:

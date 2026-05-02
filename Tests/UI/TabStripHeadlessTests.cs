@@ -16,6 +16,8 @@ using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using NUnit.Framework;
+using ThemeNativeContextMenu = AeroTerm.Theme.Controls.NativeContextMenu;
+using ThemeNativeMenuItem = AeroTerm.Theme.Controls.NativeMenuItem;
 
 /// <summary>
 /// Headless UI tests for <see cref="TabStrip"/>. These focus on the visual
@@ -49,7 +51,7 @@ public class TabStripHeadlessTests
     }
 
     /// <summary>
-    /// The per-header <see cref="ContextMenu"/> contains "Duplicate tab"
+    /// The per-header native context menu contains "Duplicate tab"
     /// and "Close tab" items, matching the Session 12 tab follow-up contract.
     /// </summary>
     [AvaloniaTest]
@@ -63,9 +65,10 @@ public class TabStripHeadlessTests
             Dispatcher.UIThread.RunJobs();
 
             var header = FindHeaders(strip).First();
-            Assert.That(header.ContextMenu, Is.Not.Null);
-            var headers = header.ContextMenu!.Items
-                .OfType<MenuItem>()
+            var menu = ThemeNativeContextMenu.GetMenu(header);
+            Assert.That(menu, Is.Not.Null);
+            var headers = menu!.Items
+                .OfType<ThemeNativeMenuItem>()
                 .Select(m => m.Header?.ToString())
                 .ToArray();
             Assert.That(headers, Does.Contain("Duplicate tab"));

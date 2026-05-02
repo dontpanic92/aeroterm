@@ -23,6 +23,10 @@ using Avalonia.Media;
 using Avalonia.Media.Transformation;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ThemeNativeContextMenu = AeroTerm.Theme.Controls.NativeContextMenu;
+using ThemeNativeMenuFlyout = AeroTerm.Theme.Controls.NativeMenuFlyout;
+using ThemeNativeMenuItem = AeroTerm.Theme.Controls.NativeMenuItem;
+using ThemeNativeMenuSeparator = AeroTerm.Theme.Controls.NativeMenuSeparator;
 
 /// <summary>
 /// Horizontal tab strip for a <see cref="TabView"/>. Renders the active /
@@ -141,7 +145,7 @@ public sealed class TabStrip : UserControl
     private readonly SplitButton newTabButton;
     private readonly RepeatButton scrollLeftButton;
     private readonly RepeatButton scrollRightButton;
-    private readonly MenuFlyout profileFlyout;
+    private readonly ThemeNativeMenuFlyout profileFlyout;
     private readonly Dictionary<TabSession, TabHeader> headers = new();
     private readonly DockPanel rootDock;
     private readonly ScrollViewer tabsScroller;
@@ -198,7 +202,7 @@ public sealed class TabStrip : UserControl
         // tab strip's own foreground / hover / pressed brushes.
         this.RefreshNewTabButtonStateBrushes();
 
-        this.profileFlyout = new MenuFlyout();
+        this.profileFlyout = new ThemeNativeMenuFlyout();
         this.newTabButton.Flyout = this.profileFlyout;
         AutomationProperties.SetName(this.newTabButton, "New tab");
         this.newTabButton.Click += (_, _) => this.NewTabRequested?.Invoke();
@@ -1623,7 +1627,7 @@ public sealed class TabStrip : UserControl
         foreach (var profile in this.profiles)
         {
             var captured = profile;
-            var item = new MenuItem
+            var item = new ThemeNativeMenuItem
             {
                 Header = string.IsNullOrWhiteSpace(captured.Name) ? "(unnamed)" : captured.Name,
             };
@@ -1633,10 +1637,10 @@ public sealed class TabStrip : UserControl
 
         if (this.profiles.Count > 0)
         {
-            this.profileFlyout.Items.Add(new Separator());
+            this.profileFlyout.Items.Add(new ThemeNativeMenuSeparator());
         }
 
-        var manage = new MenuItem { Header = "Manage profiles…" };
+        var manage = new ThemeNativeMenuItem { Header = "Manage profiles…" };
         manage.Click += (_, _) => this.ManageProfilesRequested?.Invoke();
         this.profileFlyout.Items.Add(manage);
     }
@@ -2248,48 +2252,48 @@ public sealed class TabStrip : UserControl
 
         private void AttachContextMenu()
         {
-            var duplicateItem = new MenuItem { Header = "Duplicate tab" };
+            var duplicateItem = new ThemeNativeMenuItem { Header = "Duplicate tab" };
             duplicateItem.Click += (_, _) => this.DuplicateRequested?.Invoke(this.tab);
 
-            var closeItem = new MenuItem { Header = "Close tab" };
+            var closeItem = new ThemeNativeMenuItem { Header = "Close tab" };
             closeItem.Click += (_, _) => this.CloseRequested?.Invoke(this.tab);
 
-            var addToGroupItem = new MenuItem { Header = "Add to group" };
+            var addToGroupItem = new ThemeNativeMenuItem { Header = "Add to group" };
             var store = this.owner.groupStore;
             if (store is not null)
             {
                 foreach (var g in store.Groups)
                 {
                     var captured = g;
-                    var sub = new MenuItem { Header = captured.Name };
+                    var sub = new ThemeNativeMenuItem { Header = captured.Name };
                     sub.Click += (_, _) => this.GroupAssignmentRequested?.Invoke(this.tab, captured.Id);
                     addToGroupItem.Items.Add(sub);
                 }
 
                 if (store.Groups.Count > 0)
                 {
-                    addToGroupItem.Items.Add(new Separator());
+                    addToGroupItem.Items.Add(new ThemeNativeMenuSeparator());
                 }
             }
 
-            var newGroupItem = new MenuItem { Header = "New group…" };
+            var newGroupItem = new ThemeNativeMenuItem { Header = "New group…" };
             newGroupItem.Click += (_, _) => this.GroupAssignmentRequested?.Invoke(this.tab, CreateGroupSentinel);
             addToGroupItem.Items.Add(newGroupItem);
 
-            var removeFromGroupItem = new MenuItem
+            var removeFromGroupItem = new ThemeNativeMenuItem
             {
                 Header = "Remove from group",
                 IsEnabled = !string.IsNullOrEmpty(this.tab.GroupId),
             };
             removeFromGroupItem.Click += (_, _) => this.GroupAssignmentRequested?.Invoke(this.tab, null);
 
-            var menu = new ContextMenu();
+            var menu = new ThemeNativeContextMenu();
             menu.Items.Add(duplicateItem);
             menu.Items.Add(closeItem);
-            menu.Items.Add(new Separator());
+            menu.Items.Add(new ThemeNativeMenuSeparator());
             menu.Items.Add(addToGroupItem);
             menu.Items.Add(removeFromGroupItem);
-            this.ContextMenu = menu;
+            ThemeNativeContextMenu.SetMenu(this, menu);
         }
     }
 }

@@ -18,6 +18,8 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using NUnit.Framework;
 using IOPath = System.IO.Path;
+using ThemeNativeContextMenu = AeroTerm.Theme.Controls.NativeContextMenu;
+using ThemeNativeMenuItem = AeroTerm.Theme.Controls.NativeMenuItem;
 
 /// <summary>
 /// Headless UI tests for the tab-group visuals: the colored pill above
@@ -147,8 +149,9 @@ public class TabStripGroupHeadlessTests
                     .OfType<Border>()
                     .First(b => b.GetLogicalParent() is StackPanel sp
                         && sp.Orientation == Avalonia.Layout.Orientation.Horizontal);
-                Assert.That(header.ContextMenu, Is.Not.Null);
-                var items = header.ContextMenu!.Items.OfType<MenuItem>().ToList();
+                var menu = ThemeNativeContextMenu.GetMenu(header);
+                Assert.That(menu, Is.Not.Null);
+                var items = menu!.Items.OfType<ThemeNativeMenuItem>().ToList();
                 var headers = items.Select(m => m.Header?.ToString()).ToList();
                 Assert.That(headers, Does.Contain("Add to group"));
                 Assert.That(headers, Does.Contain("Remove from group"));
@@ -158,7 +161,7 @@ public class TabStripGroupHeadlessTests
 
                 var addSubmenu = items.First(m => m.Header?.ToString() == "Add to group");
                 var subHeaders = addSubmenu.Items
-                    .OfType<MenuItem>()
+                    .OfType<ThemeNativeMenuItem>()
                     .Select(m => m.Header?.ToString())
                     .ToList();
                 Assert.That(subHeaders, Does.Contain("Focus"));
@@ -172,7 +175,9 @@ public class TabStripGroupHeadlessTests
                     .OfType<Border>()
                     .First(b => b.GetLogicalParent() is StackPanel sp
                         && sp.Orientation == Avalonia.Layout.Orientation.Horizontal);
-                var items2 = header2.ContextMenu!.Items.OfType<MenuItem>().ToList();
+                var menu2 = ThemeNativeContextMenu.GetMenu(header2);
+                Assert.That(menu2, Is.Not.Null);
+                var items2 = menu2!.Items.OfType<ThemeNativeMenuItem>().ToList();
                 var remove2 = items2.First(m => m.Header?.ToString() == "Remove from group");
                 Assert.That(remove2.IsEnabled, Is.True, "remove should be enabled after assignment");
             }
