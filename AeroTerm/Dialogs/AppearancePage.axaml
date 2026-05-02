@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:AeroTerm.ViewModels"
-             xmlns:models="using:AeroTerm.Models"
              xmlns:dialogs="using:AeroTerm.Dialogs"
+             xmlns:themeControls="using:AeroTerm.Theme.Controls"
              xmlns:strings="using:AeroTerm.Resources"
              x:Class="AeroTerm.Dialogs.AppearancePage"
              x:CompileBindings="True"
@@ -153,16 +153,11 @@
         <GroupBox Header="{x:Static strings:Strings.AppearanceColorSchemeHeader}" Padding="8,8">
             <StackPanel dialogs:SettingsSearch.Label="Color Scheme"
                         Spacing="8">
-                <ComboBox ItemsSource="{Binding ColorSchemes}"
-                          AutomationProperties.Name="Color scheme"
-                          SelectedItem="{Binding SelectedColorScheme, Mode=TwoWay}"
-                          Width="250" HorizontalAlignment="Left">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:ColorScheme">
-                            <TextBlock Text="{Binding Name}" />
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
+                <themeControls:NativeDropdown ItemsSource="{Binding ColorSchemes}"
+                                              DisplayMemberPath="Name"
+                                              AutomationProperties.Name="Color scheme"
+                                              SelectedValue="{Binding SelectedColorScheme, Mode=TwoWay}"
+                                              Width="250" HorizontalAlignment="Left" />
 
                 <!-- Preview swatches: first 6 palette colors -->
                 <ItemsControl ItemsSource="{Binding PreviewSwatches}">
@@ -190,10 +185,10 @@
                         Spacing="5">
                 <TextBlock Text="Action when the terminal sends BEL (Ctrl+G)"
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
-                <ComboBox ItemsSource="{Binding BellActions}"
-                          AutomationProperties.Name="Bell action"
-                          SelectedItem="{Binding BellAction, Mode=TwoWay}"
-                          Width="200" HorizontalAlignment="Left" />
+                <themeControls:NativeDropdown ItemsSource="{Binding BellActions}"
+                                              AutomationProperties.Name="Bell action"
+                                              SelectedValue="{Binding BellAction, Mode=TwoWay}"
+                                              Width="200" HorizontalAlignment="Left" />
             </StackPanel>
         </GroupBox>
 
@@ -222,10 +217,10 @@
                             Orientation="Horizontal" Spacing="8">
                     <TextBlock Name="TabBarOrientationLabel"
                                Text="Tab bar orientation" VerticalAlignment="Center" />
-                    <ComboBox ItemsSource="{Binding TabBarOrientations}"
-                              AutomationProperties.LabeledBy="{Binding #TabBarOrientationLabel}"
-                              SelectedItem="{Binding TabBarOrientation, Mode=TwoWay}"
-                              Width="160" HorizontalAlignment="Left" />
+                    <themeControls:NativeDropdown ItemsSource="{Binding TabBarOrientations}"
+                                                  AutomationProperties.LabeledBy="{Binding #TabBarOrientationLabel}"
+                                                  SelectedValue="{Binding TabBarOrientation, Mode=TwoWay}"
+                                                  Width="160" HorizontalAlignment="Left" />
                 </StackPanel>
                 <TextBlock Text="Horizontal renders tabs as a strip above the terminal. Vertical renders them as a narrow rail on the left side."
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />

@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:AeroTerm.ViewModels"
+             xmlns:themeControls="using:AeroTerm.Theme.Controls"
              xmlns:dialogs="using:AeroTerm.Dialogs"
              x:Class="AeroTerm.Dialogs.UpdatesPage"
              x:CompileBindings="True"
@@ -26,11 +27,11 @@
                     Orientation="Horizontal" Spacing="6"
                     IsEnabled="{Binding SupportsAutoUpdate}">
             <TextBlock Text="Channel:" FontWeight="SemiBold" VerticalAlignment="Center" />
-            <ComboBox SelectedIndex="{Binding SelectedChannelIndex}" Width="140"
-                      AutomationProperties.Name="Update channel">
-                <ComboBoxItem Content="Stable" />
-                <ComboBoxItem Content="CI" IsEnabled="{Binding CanSwitchToCI}" />
-            </ComboBox>
+            <themeControls:NativeDropdown SelectedIndex="{Binding SelectedChannelIndex}" Width="140"
+                                          AutomationProperties.Name="Update channel">
+                <themeControls:NativeDropdownItem Content="Stable" />
+                <themeControls:NativeDropdownItem Content="CI" IsEnabled="{Binding CanSwitchToCI}" />
+            </themeControls:NativeDropdown>
         </StackPanel>
 
         <!-- Auto-check toggle -->

@@ -158,7 +158,7 @@ Use `RequestedThemeVariant="Default"`, or omit the property, to let Avalonia fol
 </Application>
 ```
 
-## Native menu wrappers
+## Native menu and dropdown wrappers
 
 `AeroTerm.Theme.Controls.NativeMenuFlyout` and `NativeContextMenu` provide an Avalonia-friendly wrapper for context menus and flyout menus:
 
@@ -192,6 +192,18 @@ For context menus, attach `NativeContextMenu.Menu` to the target control:
   </menus:NativeContextMenu.Menu>
 </Border>
 ```
+
+`NativeDropdown` uses the same platform menu path for its dropdown list. On macOS, choices are displayed with the AppKit native menu implementation; on Windows and Linux, choices are displayed with AeroTerm.Theme's Avalonia menu fallback.
+
+```xml
+<menus:NativeDropdown xmlns:menus="using:AeroTerm.Theme.Controls"
+                      PlaceholderText="Choose profile">
+  <menus:NativeDropdownItem Content="Default" Value="default" />
+  <menus:NativeDropdownItem Content="Admin" Value="admin" />
+</menus:NativeDropdown>
+```
+
+Use `SelectedIndex`, `SelectedItem`, `SelectedValue`, and `SelectionChanged` to observe or update selection from code or bindings.
 
 ## Compatibility keys
 

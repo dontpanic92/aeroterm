@@ -184,7 +184,10 @@ public class AutomationPropertiesTests
     {
         var doc = Load("Dialogs/AppearancePage.axaml");
         foreach (var el in doc.Descendants().Where(e =>
-            e.Name == Av + "Slider" || e.Name == Av + "NumericUpDown" || e.Name == Av + "ComboBox"))
+            e.Name == Av + "Slider"
+            || e.Name == Av + "NumericUpDown"
+            || e.Name == Av + "ComboBox"
+            || e.Name.LocalName == "NativeDropdown"))
         {
             Assert.That(
                 HasAutomationName(el) || HasLabeledBy(el),

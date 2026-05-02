@@ -53,6 +53,7 @@
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/TextBoxTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/NumericUpDownTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/ComboBoxTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/NativeDropdownTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/SplitButtonTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/WindowTheme.axaml" />
 </Styles>

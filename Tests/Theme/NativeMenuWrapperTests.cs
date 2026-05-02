@@ -13,6 +13,8 @@ using Avalonia.Controls;
 using NUnit.Framework;
 using AvaloniaMenuItem = Avalonia.Controls.MenuItem;
 using ThemeNativeContextMenu = AeroTerm.Theme.Controls.NativeContextMenu;
+using ThemeNativeDropdown = AeroTerm.Theme.Controls.NativeDropdown;
+using ThemeNativeDropdownItem = AeroTerm.Theme.Controls.NativeDropdownItem;
 using ThemeNativeMenuItem = AeroTerm.Theme.Controls.NativeMenuItem;
 using ThemeNativeMenuSeparator = AeroTerm.Theme.Controls.NativeMenuSeparator;
 
@@ -105,6 +107,117 @@ public class NativeMenuWrapperTests
 
         Assert.That(ThemeNativeContextMenu.GetMenu(target), Is.SameAs(menu));
     }
+
+    /// <summary>
+    /// Selecting a dropdown item updates selected item, selected value, and displayed content.
+    /// </summary>
+    [Test]
+    public void NativeDropdown_SelectedIndex_UpdatesSelectionState()
+    {
+        var dropdown = new ThemeNativeDropdown();
+        dropdown.Items.Add(new ThemeNativeDropdownItem { Content = "One", Value = 1 });
+        dropdown.Items.Add(new ThemeNativeDropdownItem { Content = "Two", Value = 2 });
+        NativeDropdownSelectionSnapshot? snapshot = null;
+        dropdown.SelectionChanged += (_, e) =>
+        {
+            snapshot = new NativeDropdownSelectionSnapshot(e.OldIndex, e.NewIndex, e.NewItem?.Content);
+        };
+
+        dropdown.SelectedIndex = 1;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dropdown.SelectedItem, Is.SameAs(dropdown.Items[1]));
+            Assert.That(dropdown.SelectedValue, Is.EqualTo(2));
+            Assert.That(dropdown.Content, Is.EqualTo("Two"));
+            Assert.That(snapshot?.OldIndex, Is.EqualTo(-1));
+            Assert.That(snapshot?.NewIndex, Is.EqualTo(1));
+            Assert.That(snapshot?.NewContent, Is.EqualTo("Two"));
+        });
+    }
+
+    /// <summary>
+    /// Dropdown menus are generated as checked native menu items that select their source item.
+    /// </summary>
+    [Test]
+    public void NativeDropdown_RebuildMenu_CreatesSelectableNativeMenuItems()
+    {
+        var dropdown = new ThemeNativeDropdown();
+        dropdown.Items.Add(new ThemeNativeDropdownItem { Content = "One" });
+        dropdown.Items.Add(new ThemeNativeDropdownItem { Content = "Two", IsEnabled = false });
+        dropdown.Items.Add(new ThemeNativeDropdownItem { Content = "Hidden", IsVisible = false });
+        dropdown.SelectedIndex = 0;
+
+        dropdown.RebuildMenu();
+
+        var items = dropdown.GetMenuFlyout().Items.OfType<ThemeNativeMenuItem>().ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(items.Select(i => i.Header), Is.EqualTo(new[] { "One", "Two" }));
+            Assert.That(items[0].IsChecked, Is.True);
+            Assert.That(items[1].IsEnabled, Is.False);
+        });
+
+        items[1].Invoke();
+        Assert.That(dropdown.SelectedIndex, Is.EqualTo(0));
+
+        items[0].Invoke();
+        Assert.That(dropdown.SelectedIndex, Is.EqualTo(0));
+    }
+
+    /// <summary>
+    /// Item-source dropdowns preserve an externally supplied selected value
+    /// until the matching source items arrive.
+    /// </summary>
+    [Test]
+    public void NativeDropdown_ItemsSource_MatchesPreselectedValue()
+    {
+        var dropdown = new ThemeNativeDropdown
+        {
+            SelectedValue = "Two",
+        };
+
+        dropdown.ItemsSource = new[] { "One", "Two" };
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(dropdown.SelectedIndex, Is.EqualTo(1));
+            Assert.That(dropdown.SelectedValue, Is.EqualTo("Two"));
+            Assert.That(dropdown.Content, Is.EqualTo("Two"));
+        });
+    }
+
+    /// <summary>
+    /// Item-source dropdowns can display a property while selecting the
+    /// original source object as the value.
+    /// </summary>
+    [Test]
+    public void NativeDropdown_ItemsSource_UsesDisplayMemberPath()
+    {
+        var first = new DisplayItem("One");
+        var second = new DisplayItem("Two");
+        var dropdown = new ThemeNativeDropdown
+        {
+            ItemsSource = new[] { first, second },
+            DisplayMemberPath = nameof(DisplayItem.Name),
+            SelectedValue = second,
+        };
+
+        dropdown.RebuildMenu();
+
+        var items = dropdown.GetMenuFlyout().Items.OfType<ThemeNativeMenuItem>().ToList();
+        Assert.Multiple(() =>
+        {
+            Assert.That(dropdown.SelectedIndex, Is.EqualTo(1));
+            Assert.That(dropdown.Content, Is.EqualTo("Two"));
+            Assert.That(items.Select(i => i.Header), Is.EqualTo(new[] { "One", "Two" }));
+            Assert.That(items[1].IsChecked, Is.True);
+        });
+    }
+
+    private sealed record NativeDropdownSelectionSnapshot(int OldIndex, int NewIndex, object? NewContent);
+
+    private sealed record DisplayItem(string Name);
 
     private sealed class RecordingCommand : ICommand
     {

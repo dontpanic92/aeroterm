@@ -1,0 +1,67 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:AeroTerm.Theme.Controls">
+  <Styles.Resources>
+    <ResourceDictionary>
+  <ControlTheme x:Key="{x:Type controls:NativeDropdown}"
+                TargetType="controls:NativeDropdown">
+    <Setter Property="Background" Value="{DynamicResource SurfaceLayer1Brush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderRestBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="MinHeight" Value="{DynamicResource ControlMinHeight}" />
+    <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="LayoutRoot"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}">
+          <Grid ColumnDefinitions="*,Auto">
+            <ContentPresenter Name="PART_ContentPresenter"
+                              Grid.Column="0"
+                              Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              Foreground="{TemplateBinding Foreground}"
+                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              Margin="{TemplateBinding Padding}"
+                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+            <Path Name="ChevronGlyph"
+                  Grid.Column="1"
+                  Width="10"
+                  Height="6"
+                  Margin="0,0,10,0"
+                  Data="M 0 0 L 5 6 L 10 0 Z"
+                  Fill="{TemplateBinding Foreground}"
+                  Stretch="Uniform"
+                  VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+
+    <Style Selector="^:pointerover /template/ Border#LayoutRoot">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderHoverBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Border#LayoutRoot">
+      <Setter Property="Background" Value="{DynamicResource ControlFillPressedBrush}" />
+    </Style>
+    <Style Selector="^:focus /template/ Border#LayoutRoot">
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
+      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderDisabledBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextDisabledBrush}" />
+    </Style>
+  </ControlTheme>
+    </ResourceDictionary>
+  </Styles.Resources>
+</Styles>

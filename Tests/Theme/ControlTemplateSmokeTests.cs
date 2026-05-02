@@ -15,6 +15,8 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using NUnit.Framework;
+using ThemeNativeDropdown = AeroTerm.Theme.Controls.NativeDropdown;
+using ThemeNativeDropdownItem = AeroTerm.Theme.Controls.NativeDropdownItem;
 
 /// <summary>
 /// Headless smoke tests for the AeroTerm control themes.
@@ -35,6 +37,7 @@ public class ControlTemplateSmokeTests
         ("Slider", () => new Slider { Minimum = 0, Maximum = 100, Value = 50 }, true),
         ("ProgressBar", () => new ProgressBar { Minimum = 0, Maximum = 100, Value = 50 }, true),
         ("ComboBox", () => new ComboBox { ItemsSource = new[] { "One", "Two" }, SelectedIndex = 0 }, true),
+        ("NativeDropdown", CreateNativeDropdown, true),
         ("NumericUpDown", () => new NumericUpDown { Minimum = 0, Maximum = 10, Value = 3 }, true),
         ("SplitButton", () => new SplitButton { Content = "Split" }, true),
         ("TabControl", CreateTabControl, true),
@@ -151,6 +154,15 @@ public class ControlTemplateSmokeTests
         {
             ItemsSource = new[] { new MenuItem { Header = "One" } },
         };
+    }
+
+    private static ThemeNativeDropdown CreateNativeDropdown()
+    {
+        var dropdown = new ThemeNativeDropdown();
+        dropdown.Items.Add(new ThemeNativeDropdownItem { Content = "One" });
+        dropdown.Items.Add(new ThemeNativeDropdownItem { Content = "Two" });
+        dropdown.SelectedIndex = 0;
+        return dropdown;
     }
 
     private static TabControl CreateTabControl()
