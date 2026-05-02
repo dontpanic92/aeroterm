@@ -14,6 +14,7 @@
   <sys:Double x:Key="FontSizeCaption">11</sys:Double>
   <sys:Double x:Key="FontSizeBody">12</sys:Double>
   <sys:Double x:Key="FontSizeBodyStrong">12</sys:Double>
+  <sys:Double x:Key="FontSizeMenu">14</sys:Double>
   <sys:Double x:Key="FontSizeSubtitle">14</sys:Double>
   <sys:Double x:Key="FontSizeTitle">18</sys:Double>
   <sys:Double x:Key="FontSizeTitleLarge">22</sys:Double>

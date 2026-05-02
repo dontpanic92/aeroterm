@@ -11,25 +11,26 @@
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource MenuItemCornerRadius}" />
     <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
-    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeMenu}" />
     <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
-    <Setter Property="MinHeight" Value="28" />
+    <Setter Property="MinHeight" Value="24" />
     <Setter Property="Template">
       <ControlTemplate>
         <Border Name="PART_Root"
-                Margin="2"
+                Margin="0"
                 Background="{TemplateBinding Background}"
                 BorderBrush="{TemplateBinding BorderBrush}"
                 BorderThickness="{TemplateBinding BorderThickness}"
                 CornerRadius="{TemplateBinding CornerRadius}">
-          <Grid ColumnDefinitions="24,*,Auto,20">
+          <Grid ColumnDefinitions="Auto,*,Auto,Auto">
             <ContentControl Name="PART_ToggleIcon"
                             Grid.Column="0"
                             Width="16"
                             Height="16"
+                            Margin="6,0,0,0"
                             IsVisible="False"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center" />
@@ -37,20 +38,24 @@
                             Grid.Column="0"
                             Width="16"
                             Height="16"
+                            Margin="6,0,0,0"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Content="{TemplateBinding Icon}" />
             <ContentPresenter Name="PART_HeaderPresenter"
                               Grid.Column="1"
-                              Margin="{TemplateBinding Padding}"
-                              VerticalAlignment="Center"
+                              Margin="4,0"
+                              Padding="0,2,0,0"
+                              VerticalAlignment="Stretch"
+                              HorizontalContentAlignment="Left"
+                              VerticalContentAlignment="Center"
                               RecognizesAccessKey="True"
                               Content="{TemplateBinding Header}"
                               ContentTemplate="{TemplateBinding HeaderTemplate}"
                               Foreground="{TemplateBinding Foreground}">
               <ContentPresenter.DataTemplates>
                 <DataTemplate DataType="sys:String">
-                  <AccessText Text="{Binding}" />
+                  <AccessText VerticalAlignment="Center" Text="{Binding}" />
                 </DataTemplate>
               </ContentPresenter.DataTemplates>
             </ContentPresenter>
@@ -67,7 +72,7 @@
                   Grid.Column="3"
                   Width="4"
                   Height="8"
-                  Margin="8,0,8,0"
+                  Margin="0,0,8,0"
                   HorizontalAlignment="Right"
                   VerticalAlignment="Center"
                   Data="M 0 0 L 4 4 L 0 8"
@@ -77,8 +82,8 @@
                    IsLightDismissEnabled="False"
                    IsOpen="{TemplateBinding IsSubMenuOpen, Mode=TwoWay}"
                    Placement="RightEdgeAlignedTop">
-              <Border MinWidth="{DynamicResource ControlMinWidth}"
-                      Padding="{DynamicResource ControlPaddingTight}"
+              <Border MinWidth="{DynamicResource MenuMinWidth}"
+                      Padding="3"
                       Background="{DynamicResource SurfaceOverlayBrush}"
                       BorderBrush="{DynamicResource StrokeDefaultBrush}"
                       BorderThickness="{DynamicResource BorderThicknessThin}"
@@ -107,15 +112,42 @@
     </Style>
 
     <Style Selector="^:pointerover /template/ Border#PART_Root">
-      <Setter Property="Background" Value="{DynamicResource ControlFillSubtleHoverBrush}" />
+      <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+    </Style>
+    <Style Selector="^:pointerover /template/ ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+    </Style>
+    <Style Selector="^:pointerover /template/ TextBlock#PART_InputGestureText">
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+    </Style>
+    <Style Selector="^:pointerover /template/ Path#PART_ChevronPath">
+      <Setter Property="Stroke" Value="{DynamicResource TextOnAccentBrush}" />
     </Style>
 
     <Style Selector="^:pressed /template/ Border#PART_Root">
-      <Setter Property="Background" Value="{DynamicResource ControlFillSubtlePressedBrush}" />
+      <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ TextBlock#PART_InputGestureText">
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+    </Style>
+    <Style Selector="^:pressed /template/ Path#PART_ChevronPath">
+      <Setter Property="Stroke" Value="{DynamicResource TextOnAccentBrush}" />
     </Style>
 
     <Style Selector="^:selected /template/ Border#PART_Root, ^:focus /template/ Border#PART_Root">
-      <Setter Property="Background" Value="{DynamicResource ControlFillSubtleHoverBrush}" />
+      <Setter Property="Background" Value="{DynamicResource AccentPrimaryBrush}" />
+    </Style>
+    <Style Selector="^:selected /template/ ContentPresenter#PART_HeaderPresenter, ^:focus /template/ ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+    </Style>
+    <Style Selector="^:selected /template/ TextBlock#PART_InputGestureText, ^:focus /template/ TextBlock#PART_InputGestureText">
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentBrush}" />
+    </Style>
+    <Style Selector="^:selected /template/ Path#PART_ChevronPath, ^:focus /template/ Path#PART_ChevronPath">
+      <Setter Property="Stroke" Value="{DynamicResource TextOnAccentBrush}" />
     </Style>
 
     <Style Selector="^:empty /template/ Path#PART_ChevronPath">

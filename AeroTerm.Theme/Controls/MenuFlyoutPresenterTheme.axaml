@@ -8,8 +8,8 @@
     <Setter Property="BorderBrush" Value="{DynamicResource StrokeDefaultBrush}" />
     <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
     <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusMd}" />
-    <Setter Property="Padding" Value="{DynamicResource ControlPaddingTight}" />
-    <Setter Property="MinWidth" Value="{DynamicResource ControlMinWidth}" />
+    <Setter Property="Padding" Value="3" />
+    <Setter Property="MinWidth" Value="{DynamicResource MenuMinWidth}" />
     <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
     <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />

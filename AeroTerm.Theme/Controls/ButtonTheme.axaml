@@ -4,8 +4,8 @@
     <ResourceDictionary>
   <ControlTheme TargetType="Button" x:Key="{x:Type Button}">
     <Setter Property="Background" Value="{DynamicResource ControlFillRestBrush}" />
-    <Setter Property="BorderBrush" Value="{x:Null}" />
-    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderRestBrush}" />
+    <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
     <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusSm}" />
     <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
     <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
@@ -41,6 +41,7 @@
 
     <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource ControlFillHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderHoverBrush}" />
     </Style>
     <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource ControlFillPressedBrush}" />
@@ -53,9 +54,10 @@
     </Style>
     <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource ControlFillDisabledBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderDisabledBrush}" />
     </Style>
 
-    <!-- Outlined variant: thin border on rest, hover changes background only. -->
+    <!-- Outlined variant: alias for default — kept for explicit clarity. -->
     <Style Selector="^.outlined">
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderRestBrush}" />
       <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
@@ -84,12 +86,20 @@
       <Setter Property="BorderBrush" Value="{DynamicResource AccentDisabledBrush}" />
     </Style>
 
-    <!-- Subtle = same as default; kept as alias for backwards compat. -->
-    <Style Selector="^.subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource ControlFillSubtleHoverBrush}" />
+    <!-- Flat / subtle variant: invisible at rest, only hover background.
+         Use for icon buttons, command-bar triggers, and toolbar actions. -->
+    <Style Selector="^.flat, ^.subtle">
+      <Setter Property="Background" Value="{x:Null}" />
+      <Setter Property="BorderBrush" Value="{x:Null}" />
+      <Setter Property="BorderThickness" Value="0" />
     </Style>
-    <Style Selector="^.subtle:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="^.flat:pointerover /template/ ContentPresenter#PART_ContentPresenter, ^.subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ControlFillSubtleHoverBrush}" />
+      <Setter Property="BorderBrush" Value="{x:Null}" />
+    </Style>
+    <Style Selector="^.flat:pressed /template/ ContentPresenter#PART_ContentPresenter, ^.subtle:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource ControlFillSubtlePressedBrush}" />
+      <Setter Property="BorderBrush" Value="{x:Null}" />
     </Style>
   </ControlTheme>
     </ResourceDictionary>

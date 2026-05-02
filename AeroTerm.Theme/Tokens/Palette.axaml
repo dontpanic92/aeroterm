@@ -17,7 +17,7 @@
       <Color x:Key="SurfaceBackgroundColor">#FFF7F8FA</Color>
       <Color x:Key="SurfaceLayer1Color">#FFFFFFFF</Color>
       <Color x:Key="SurfaceLayer2Color">#FFEBECF0</Color>
-      <Color x:Key="SurfaceOverlayColor">#FFFFFFFF</Color>
+      <Color x:Key="SurfaceOverlayColor">#80FFFFFF</Color>
       <Color x:Key="SurfaceScrimColor">#33000000</Color>
 
       <!-- Strokes -->
@@ -41,8 +41,9 @@
       <Color x:Key="AccentPressedColor">#FF2862CD</Color>
       <Color x:Key="AccentDisabledColor">#FFCCDBFB</Color>
 
-      <!-- Control fill states (flat IDE style — transparent rest, subtle gray on hover) -->
-      <Color x:Key="ControlFillRestColor">#00000000</Color>
+      <!-- Control fill states: visible fill so buttons stand out against
+           window background; subtle hover/pressed transitions. -->
+      <Color x:Key="ControlFillRestColor">#FFFFFFFF</Color>
       <Color x:Key="ControlFillHoverColor">#FFEBECF0</Color>
       <Color x:Key="ControlFillPressedColor">#FFDFE1E5</Color>
       <Color x:Key="ControlFillDisabledColor">#FFF2F3F5</Color>
@@ -114,7 +115,7 @@
       <Color x:Key="SurfaceBackgroundColor">#FF1E1F22</Color>
       <Color x:Key="SurfaceLayer1Color">#FF2B2D30</Color>
       <Color x:Key="SurfaceLayer2Color">#FF393B40</Color>
-      <Color x:Key="SurfaceOverlayColor">#FF2B2D30</Color>
+      <Color x:Key="SurfaceOverlayColor">#802B2D30</Color>
       <Color x:Key="SurfaceScrimColor">#80000000</Color>
 
       <!-- Strokes -->
@@ -138,10 +139,12 @@
       <Color x:Key="AccentPressedColor">#FF4078E0</Color>
       <Color x:Key="AccentDisabledColor">#FF2E3D5C</Color>
 
-      <!-- Control fill states (flat IDE style) -->
-      <Color x:Key="ControlFillRestColor">#00000000</Color>
-      <Color x:Key="ControlFillHoverColor">#FF393B40</Color>
-      <Color x:Key="ControlFillPressedColor">#FF43464C</Color>
+      <!-- Control fill states: IntelliJ-style dark dialog buttons.
+           Visible fill at rest (slightly lighter than panel surface) so
+           buttons are distinguishable against the window background. -->
+      <Color x:Key="ControlFillRestColor">#FF3C3F44</Color>
+      <Color x:Key="ControlFillHoverColor">#FF4A4D52</Color>
+      <Color x:Key="ControlFillPressedColor">#FF55585E</Color>
       <Color x:Key="ControlFillDisabledColor">#FF2B2D30</Color>
       <Color x:Key="ControlFillSubtleHoverColor">#FF393B40</Color>
       <Color x:Key="ControlFillSubtlePressedColor">#FF43464C</Color>

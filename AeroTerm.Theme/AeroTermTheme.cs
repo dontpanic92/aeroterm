@@ -5,8 +5,8 @@
 
 namespace AeroTerm.Theme;
 
+using AeroTerm.Theme.Helpers;
 using Avalonia.Markup.Xaml;
-using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
 
 /// <summary>
@@ -37,5 +37,6 @@ public sealed class AeroTermTheme : Styles
     public AeroTermTheme()
     {
         AvaloniaXamlLoader.Load(this);
+        PopupTransparencyHelper.Initialize();
     }
 }
