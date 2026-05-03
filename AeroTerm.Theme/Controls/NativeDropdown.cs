@@ -9,6 +9,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using Avalonia;
@@ -345,6 +346,10 @@ public class NativeDropdown : Button
         };
     }
 
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2075",
+        Justification = "DisplayMemberPath is a caller-provided UI path; AOT apps must statically root displayed members.")]
     private object? GetDisplayValue(object? source)
     {
         if (source is null || string.IsNullOrWhiteSpace(this.DisplayMemberPath))

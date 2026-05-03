@@ -204,6 +204,7 @@ For context menus, attach `NativeContextMenu.Menu` to the target control:
 ```
 
 Use `SelectedIndex`, `SelectedItem`, `SelectedValue`, and `SelectionChanged` to observe or update selection from code or bindings.
+When using `ItemsSource` with `DisplayMemberPath` in a trimmed or NativeAOT application, make sure the displayed source property is otherwise statically rooted so the linker preserves it.
 
 ## Native message boxes
 
