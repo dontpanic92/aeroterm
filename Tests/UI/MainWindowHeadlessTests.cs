@@ -15,6 +15,8 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.NUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using NUnit.Framework;
 
@@ -111,6 +113,24 @@ public class MainWindowHeadlessTests
 
         PumpJobs();
         Assert.That(tabs.Tabs, Has.Count.EqualTo(1));
+    }
+
+    /// <summary>
+    /// Clicking the close button on the only tab follows the same result as
+    /// closing the window: the window is no longer visible.
+    /// </summary>
+    [AvaloniaTest]
+    public void CloseButton_OnOnlyTab_ClosesWindow()
+    {
+        var window = OpenWindow();
+        var strip = GetTabStrip(window);
+        var closeButton = FindTabCloseButtons(strip).Single();
+        Assert.That(closeButton.IsVisible, Is.True);
+
+        closeButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        PumpJobs();
+
+        Assert.That(window.IsVisible, Is.False);
     }
 
     /// <summary>
@@ -262,6 +282,26 @@ public class MainWindowHeadlessTests
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
             ?? throw new System.InvalidOperationException("tabView field missing.");
         return (TabView)field.GetValue(window)!;
+    }
+
+    private static TabStrip GetTabStrip(MainWindow window)
+    {
+        var field = typeof(MainWindow).GetField(
+            "tabStrip",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new System.InvalidOperationException("tabStrip field missing.");
+        return (TabStrip)field.GetValue(window)!;
+    }
+
+    private static System.Collections.Generic.IEnumerable<Button> FindTabCloseButtons(TabStrip strip)
+    {
+        return strip.GetLogicalDescendants()
+            .OfType<Button>()
+            .Where(b =>
+            {
+                var name = Avalonia.Automation.AutomationProperties.GetName(b);
+                return name is not null && name.StartsWith("Close tab:", System.StringComparison.Ordinal);
+            });
     }
 
     private static void AddFakeTab(TabView tabs)

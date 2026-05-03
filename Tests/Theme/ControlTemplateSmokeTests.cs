@@ -8,9 +8,12 @@ namespace AeroTerm.Tests.Theme;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.NUnit;
+using Avalonia.Input;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -48,6 +51,12 @@ public class ControlTemplateSmokeTests
         ("ContextMenu", CreateContextMenu, true),
     ];
 
+    private static readonly (string Name, Func<ToggleButton> Factory)[] CheckableControlFactories =
+    [
+        ("CheckBox", () => new CheckBox { Content = "Check" }),
+        ("RadioButton", () => new RadioButton { Content = "Radio" }),
+    ];
+
     /// <summary>
     /// Gets themed controls paired with the light and dark variants.
     /// </summary>
@@ -63,6 +72,36 @@ public class ControlTemplateSmokeTests
                         .SetName($"ControlTemplate_{variant}_{name}");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Gets checkable controls paired with the light and dark variants.
+    /// </summary>
+    public static IEnumerable<TestCaseData> CheckableControlCases
+    {
+        get
+        {
+            foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+            {
+                foreach (var (name, factory) in CheckableControlFactories)
+                {
+                    yield return new TestCaseData(variant, name, factory)
+                        .SetName($"CheckableIndicatorClick_{variant}_{name}");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the theme variants covered by focused template assertions.
+    /// </summary>
+    public static IEnumerable<TestCaseData> ThemeVariants
+    {
+        get
+        {
+            yield return new TestCaseData(ThemeVariant.Light).SetName("TemplateFocus_Light");
+            yield return new TestCaseData(ThemeVariant.Dark).SetName("TemplateFocus_Dark");
         }
     }
 
@@ -144,9 +183,110 @@ public class ControlTemplateSmokeTests
         }
     }
 
+    /// <summary>
+    /// Verifies the themed checkbox and radio indicator area participates in pointer hit testing.
+    /// </summary>
+    /// <param name="variant">The requested theme variant.</param>
+    /// <param name="controlName">The display name of the control under test.</param>
+    /// <param name="factory">Factory that creates the control under test.</param>
+    [AvaloniaTest]
+    [TestCaseSource(nameof(CheckableControlCases))]
+    public void CheckableIndicatorClickTogglesControl(ThemeVariant variant, string controlName, Func<ToggleButton> factory)
+    {
+        var control = factory();
+        var window = new Window
+        {
+            Width = 240,
+            Height = 80,
+            RequestedThemeVariant = variant,
+            Content = control,
+        };
+
+        try
+        {
+            window.Show();
+            PumpJobs();
+            control.ApplyTemplate();
+            PumpJobs();
+
+            var indicatorCenter = control.TranslatePoint(
+                new Point(8, control.Bounds.Height / 2),
+                window) ?? throw new InvalidOperationException($"Could not translate {controlName} indicator coordinates.");
+
+            window.MouseMove(indicatorCenter, RawInputModifiers.None);
+            window.MouseDown(indicatorCenter, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(indicatorCenter, MouseButton.Left, RawInputModifiers.None);
+            PumpJobs();
+
+            Assert.That(control.IsChecked, Is.True, $"{controlName} should toggle when its indicator is clicked.");
+        }
+        finally
+        {
+            window.Close();
+            PumpJobs();
+        }
+    }
+
+    /// <summary>
+    /// Verifies NumericUpDown focus is rendered by the outer spinner chrome only.
+    /// </summary>
+    /// <param name="variant">The requested theme variant.</param>
+    [AvaloniaTest]
+    [TestCaseSource(nameof(ThemeVariants))]
+    public void NumericUpDownFocusUsesSingleOuterBorder(ThemeVariant variant)
+    {
+        var control = new NumericUpDown
+        {
+            Minimum = 0,
+            Maximum = 10,
+            Value = 3,
+        };
+        var window = new Window
+        {
+            Width = 240,
+            Height = 80,
+            RequestedThemeVariant = variant,
+            Content = control,
+        };
+
+        try
+        {
+            window.Show();
+            PumpJobs();
+            control.ApplyTemplate();
+            PumpJobs();
+
+            var spinner = FindTemplatePart<ButtonSpinner>(control, "PART_Spinner");
+            var textBox = FindTemplatePart<TextBox>(control, "PART_TextBox");
+
+            textBox.Focus(NavigationMethod.Tab, KeyModifiers.None);
+            PumpJobs();
+
+            var innerTextBoxBorder = textBox.GetVisualDescendants()
+                .OfType<Border>()
+                .Single(border => border.Name == "LayoutRoot");
+
+            Assert.That(spinner.BorderThickness, Is.EqualTo(new Thickness(2)));
+            Assert.That(innerTextBoxBorder.BorderThickness, Is.EqualTo(new Thickness(0)));
+        }
+        finally
+        {
+            window.Close();
+            PumpJobs();
+        }
+    }
+
     private static bool HasVisualChildren(Control control)
     {
         return control.GetVisualChildren().Any();
+    }
+
+    private static T FindTemplatePart<T>(Control control, string name)
+        where T : Control
+    {
+        return control.GetVisualDescendants()
+            .OfType<T>()
+            .Single(part => part.Name == name);
     }
 
     private static ContextMenu CreateContextMenu()

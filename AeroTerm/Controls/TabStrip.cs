@@ -1102,11 +1102,10 @@ public sealed class TabStrip : UserControl
             return;
         }
 
-        int count = this.tabView.Tabs.Count;
         var active = this.tabView.ActiveTab;
         foreach (var (tab, header) in this.headers)
         {
-            header.SetState(ReferenceEquals(tab, active), count);
+            header.SetState(ReferenceEquals(tab, active));
         }
     }
 
@@ -1930,7 +1929,6 @@ public sealed class TabStrip : UserControl
         private readonly Rectangle activeIndicator;
         private readonly Grid layoutGrid;
         private bool isActive;
-        private bool hasMultipleTabs;
 
         public TabHeader(TabSession tab, TabStrip owner)
         {
@@ -2074,13 +2072,12 @@ public sealed class TabStrip : UserControl
             this.tab.PropertyChanged -= this.OnTabPropertyChanged;
         }
 
-        public void SetState(bool active, int tabCount)
+        public void SetState(bool active)
         {
             this.isActive = active;
-            this.hasMultipleTabs = tabCount > 1;
             this.Background = this.PickBackgroundBrush();
             this.divider.IsVisible = false;
-            this.closeButton.IsVisible = this.hasMultipleTabs && (active || this.IsPointerOver);
+            this.closeButton.IsVisible = active || this.IsPointerOver;
             this.activeIndicator.IsVisible = false;
         }
 
@@ -2216,17 +2213,14 @@ public sealed class TabStrip : UserControl
         {
             this.Background = this.PickBackgroundBrush();
 
-            if (this.hasMultipleTabs)
-            {
-                this.closeButton.IsVisible = true;
-            }
+            this.closeButton.IsVisible = true;
         }
 
         private void OnPointerExited(object? sender, PointerEventArgs e)
         {
             this.Background = this.PickBackgroundBrush();
 
-            if (this.hasMultipleTabs && !this.isActive)
+            if (!this.isActive)
             {
                 this.closeButton.IsVisible = false;
             }

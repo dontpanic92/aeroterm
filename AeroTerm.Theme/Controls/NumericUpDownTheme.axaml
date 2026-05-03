@@ -2,6 +2,17 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <Styles.Resources>
     <ResourceDictionary>
+    <ControlTheme x:Key="AeroTermNumericTextBoxTheme"
+                  BasedOn="{StaticResource {x:Type TextBox}}"
+                  TargetType="TextBox">
+      <Style Selector="^:focus-within /template/ Border#LayoutRoot">
+        <Setter Property="BorderThickness" Value="0" />
+      </Style>
+      <Style Selector="^:focus /template/ Border#LayoutRoot">
+        <Setter Property="BorderThickness" Value="0" />
+      </Style>
+    </ControlTheme>
+
     <ControlTheme x:Key="AeroTermNumericSpinnerButtonTheme"
                 TargetType="RepeatButton">
     <Setter Property="Background" Value="Transparent" />
@@ -118,6 +129,7 @@
                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
                      Text="{TemplateBinding Text}"
                      TextAlignment="{TemplateBinding TextAlignment}"
+                     Theme="{StaticResource AeroTermNumericTextBoxTheme}"
                      TextWrapping="NoWrap"
                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
           </ButtonSpinner>

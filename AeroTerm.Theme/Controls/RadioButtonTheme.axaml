@@ -14,7 +14,8 @@
     <Setter Property="Padding" Value="{DynamicResource CheckableContentMargin}" />
     <Setter Property="Template">
       <ControlTemplate>
-        <Grid ColumnDefinitions="Auto,*">
+        <Grid Background="Transparent"
+              ColumnDefinitions="Auto,*">
           <Grid Width="{DynamicResource CheckableGlyphSize}"
                 Height="{DynamicResource CheckableGlyphSize}"
                 VerticalAlignment="Center">

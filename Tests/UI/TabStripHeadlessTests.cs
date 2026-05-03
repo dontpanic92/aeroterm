@@ -82,6 +82,29 @@ public class TabStripHeadlessTests
     }
 
     /// <summary>
+    /// The active tab's close affordance remains visible even when it is
+    /// the only tab, allowing that click path to close the owning window.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_SingleActiveTab_ShowsCloseButton()
+    {
+        var (window, strip, view) = BuildHostedStrip();
+        try
+        {
+            view.AddTab(new TabSession(new FakeTabContent("only")));
+            Dispatcher.UIThread.RunJobs();
+
+            var closeButton = FindCloseButtons(strip).SingleOrDefault();
+            Assert.That(closeButton, Is.Not.Null);
+            Assert.That(closeButton!.IsVisible, Is.True);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
     /// Middle-click on a tab header closes that tab.
     /// <para>
     /// TODO (headless-ui-tests, Session 14): re-enable once
@@ -442,6 +465,17 @@ public class TabStripHeadlessTests
         return strip.GetLogicalDescendants()
             .OfType<SplitButton>()
             .FirstOrDefault();
+    }
+
+    private static System.Collections.Generic.IEnumerable<Button> FindCloseButtons(TabStrip strip)
+    {
+        return strip.GetLogicalDescendants()
+            .OfType<Button>()
+            .Where(b =>
+            {
+                var name = Avalonia.Automation.AutomationProperties.GetName(b);
+                return name is not null && name.StartsWith("Close tab:", System.StringComparison.Ordinal);
+            });
     }
 
     private static System.Collections.Generic.IEnumerable<Avalonia.Controls.RepeatButton> FindScrollButtons(TabStrip strip)
