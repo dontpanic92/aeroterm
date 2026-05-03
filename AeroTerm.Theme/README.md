@@ -205,6 +205,39 @@ For context menus, attach `NativeContextMenu.Menu` to the target control:
 
 Use `SelectedIndex`, `SelectedItem`, `SelectedValue`, and `SelectionChanged` to observe or update selection from code or bindings.
 
+## Native message boxes
+
+`AeroTerm.Theme.Controls.NativeMessageBox` provides small modal message boxes with native presentation where practical:
+
+- macOS uses AppKit `NSAlert`.
+- Windows and Linux use an AeroTerm-themed Avalonia modal window.
+- Supported variants are OK-only and Yes/No.
+
+```csharp
+await NativeMessageBox.ShowOkAsync(owner, "Saved", "Settings were saved.");
+
+NativeMessageBoxResult result = await NativeMessageBox.ShowYesNoAsync(
+    owner,
+    "Close window?",
+    "2 tabs are open. Close them all?");
+
+if (result == NativeMessageBoxResult.Yes)
+{
+    owner.Close();
+}
+```
+
+Button labels default to English `OK`, `Yes`, and `No`. Applications that localize their own UI can pass localized labels:
+
+```csharp
+await NativeMessageBox.ShowYesNoAsync(
+    owner,
+    title,
+    message,
+    yesText: "Close",
+    noText: "Cancel");
+```
+
 ## Compatibility keys
 
 The theme also provides legacy compatibility resources used by existing AeroTerm code and older consumers:

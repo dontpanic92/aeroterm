@@ -37,8 +37,6 @@ public class WindowSmokeTests
                     .SetName($"WindowSmoke_{variant}_SettingsWindow");
                 yield return new TestCaseData(variant, "CommandPaletteWindow", new Func<Window>(() => new CommandPaletteWindow()))
                     .SetName($"WindowSmoke_{variant}_CommandPaletteWindow");
-                yield return new TestCaseData(variant, "ConfirmCloseDialog", new Func<Window>(() => new ConfirmCloseDialog(2)))
-                    .SetName($"WindowSmoke_{variant}_ConfirmCloseDialog");
                 yield return new TestCaseData(variant, "QuakeWindow", new Func<Window>(() => new QuakeWindow(new AppSettings())))
                     .SetName($"WindowSmoke_{variant}_QuakeWindow");
                 yield return new TestCaseData(variant, "FontPickerWindow", new Func<Window>(() => new FontPickerWindow()))

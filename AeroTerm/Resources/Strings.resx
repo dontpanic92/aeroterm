@@ -117,7 +117,4 @@
     <value>{0} tabs are open. Close them all?</value>
     <comment>{0} is the count of open tabs in the window being closed.</comment>
   </data>
-  <data name="ConfirmCloseAllTabs" xml:space="preserve">
-    <value>Close all tabs</value>
-  </data>
 </root>

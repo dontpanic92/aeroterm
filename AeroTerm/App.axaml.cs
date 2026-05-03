@@ -131,7 +131,7 @@ public class App : Application
     /// <summary>
     /// Gets or sets a test-only seam. When set, <see cref="MainWindow.OnClosing"/>'s
     /// confirm-close flow delegates to this function instead of showing the
-    /// real modal <see cref="Dialogs.ConfirmCloseDialog"/>. The returned
+    /// real modal native message box. The returned
     /// task should resolve to <c>true</c> when the window should proceed
     /// with closing, or <c>false</c> to keep it open.
     /// </summary>

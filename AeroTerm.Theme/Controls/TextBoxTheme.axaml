@@ -41,7 +41,7 @@
                             HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
                             IsScrollChainingEnabled="{TemplateBinding (ScrollViewer.IsScrollChainingEnabled)}"
                             VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
-                <Panel>
+                <Grid>
                   <TextBlock Name="PART_Watermark"
                              Foreground="{TemplateBinding PlaceholderForeground}"
                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
@@ -70,8 +70,9 @@
                                  SelectionStart="{TemplateBinding SelectionStart}"
                                  Text="{TemplateBinding Text, Mode=TwoWay}"
                                  TextAlignment="{TemplateBinding TextAlignment}"
-                                 TextWrapping="{TemplateBinding TextWrapping}" />
-                </Panel>
+                                 TextWrapping="{TemplateBinding TextWrapping}"
+                                 VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Grid>
                 <ScrollViewer.Styles>
                   <Style Selector="ScrollContentPresenter#PART_ContentPresenter">
                     <Setter Property="Cursor" Value="IBeam" />

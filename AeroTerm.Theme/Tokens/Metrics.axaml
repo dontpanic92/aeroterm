@@ -14,9 +14,10 @@
   <Thickness x:Key="BorderThicknessFocus">2</Thickness>
 
   <!-- IDE-style compact padding. -->
-  <Thickness x:Key="ControlPaddingTight">6,2</Thickness>
-  <Thickness x:Key="ControlPaddingDefault">10,4</Thickness>
-  <Thickness x:Key="ControlPaddingRoomy">14,6</Thickness>
+  <Thickness x:Key="ControlPaddingTight">6,3,6,1</Thickness>
+  <Thickness x:Key="ControlPaddingDefault">10,5,10,3</Thickness>
+  <Thickness x:Key="ControlPaddingRoomy">14,7,14,5</Thickness>
+  <Thickness x:Key="ControlTextBaselinePadding">0,1,0,0</Thickness>
 
   <sys:Double x:Key="SpacingXs">4</sys:Double>
   <sys:Double x:Key="SpacingSm">8</sys:Double>

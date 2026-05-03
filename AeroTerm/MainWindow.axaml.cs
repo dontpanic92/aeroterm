@@ -6,11 +6,14 @@
 namespace AeroTerm;
 
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.InteropServices;
 using AeroTerm.Controls;
 using AeroTerm.Diagnostics;
+using AeroTerm.Resources;
 using AeroTerm.Services;
+using AeroTerm.Theme.Controls;
 using AeroTerm.WindowEffects;
 using Avalonia;
 using Avalonia.Controls;
@@ -285,8 +288,17 @@ public partial class MainWindow : Window
             }
             else
             {
-                var dlg = new Dialogs.ConfirmCloseDialog(tabCount);
-                confirmed = await dlg.ShowConfirmAsync(this);
+                string message = string.Format(
+                    CultureInfo.CurrentCulture,
+                    Strings.ConfirmCloseMessageFormat,
+                    tabCount);
+                NativeMessageBoxResult result = await NativeMessageBox.ShowYesNoAsync(
+                    this,
+                    Strings.ConfirmCloseTitle,
+                    message,
+                    Strings.ButtonClose,
+                    Strings.ButtonCancel);
+                confirmed = result == NativeMessageBoxResult.Yes;
             }
         }
         catch (Exception ex)

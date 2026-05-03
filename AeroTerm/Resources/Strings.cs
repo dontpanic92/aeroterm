@@ -115,8 +115,5 @@ public static class Strings
     /// </summary>
     public static string ConfirmCloseMessageFormat => Get(nameof(ConfirmCloseMessageFormat));
 
-    /// <summary>Gets the accessibility name for the "Close all tabs" confirm button.</summary>
-    public static string ConfirmCloseAllTabs => Get(nameof(ConfirmCloseAllTabs));
-
     private static string Get(string key) => LocalizationHost.GetString(key);
 }

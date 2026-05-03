@@ -7,8 +7,8 @@
 
     <!-- NuGet package metadata (shared metadata lives in Directory.Build.props). -->
     <PackageId>AeroTerm.Theme</PackageId>
-    <Description>Unified Fluent-flavored Avalonia theme for AeroTerm. Provides Light + Dark variants, accent-aware brushes, modern control templates, and native menu/dropdown wrappers that use AppKit menus on macOS with Avalonia fallbacks on Windows and Linux. No dependency on Avalonia.Themes.Fluent or Avalonia.Themes.Simple.</Description>
-    <PackageTags>avalonia;theme;fluent;dark-mode;controls;styles;native-menu;dropdown</PackageTags>
+    <Description>Unified Fluent-flavored Avalonia theme for AeroTerm. Provides Light + Dark variants, accent-aware brushes, modern control templates, native menu/dropdown wrappers, and native message boxes that use AppKit on macOS with Avalonia fallbacks on Windows and Linux. No dependency on Avalonia.Themes.Fluent or Avalonia.Themes.Simple.</Description>
+    <PackageTags>avalonia;theme;fluent;dark-mode;controls;styles;native-menu;dropdown;message-box</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
