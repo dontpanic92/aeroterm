@@ -1960,7 +1960,7 @@ public sealed class TabStrip : UserControl
     {
         private readonly TabSession tab;
         private readonly TabStrip owner;
-        private readonly TextBlock titleBlock;
+        private readonly TabTitlePresenter titleBlock;
         private readonly Button closeButton;
         private readonly Rectangle divider;
         private readonly Rectangle groupPill;
@@ -2019,13 +2019,13 @@ public sealed class TabStrip : UserControl
             Grid.SetColumnSpan(this.groupPill, 4);
             this.layoutGrid.Children.Add(this.groupPill);
 
-            this.titleBlock = new TextBlock
+            this.titleBlock = new TabTitlePresenter
             {
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(10, 0, 6, 0),
                 TextTrimming = TextTrimming.CharacterEllipsis,
-                Foreground = owner.tabForegroundBrush,
-                FontSize = 12,
+                ForegroundBrush = owner.tabForegroundBrush,
+                TitleFontSize = 12,
                 Text = tab.Title,
             };
             Grid.SetRow(this.titleBlock, 1);

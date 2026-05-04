@@ -22,7 +22,7 @@ internal sealed class DragPreviewWindow : Window
     private const double PreviewHeight = 36;
 
     private readonly TextBlock iconBlock;
-    private readonly TextBlock titleBlock;
+    private readonly TabTitlePresenter titleBlock;
     private bool isMergeMode;
 
     /// <summary>
@@ -58,11 +58,11 @@ internal sealed class DragPreviewWindow : Window
             Margin = new Thickness(10, 0, 6, 0),
         };
 
-        this.titleBlock = new TextBlock
+        this.titleBlock = new TabTitlePresenter
         {
             Text = tabTitle,
-            Foreground = previewForeground,
-            FontSize = 12,
+            ForegroundBrush = previewForeground,
+            TitleFontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
             MaxWidth = PreviewWidth - 50,

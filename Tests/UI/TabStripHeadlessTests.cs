@@ -8,6 +8,7 @@ namespace AeroTerm.Tests.UI;
 using System.Linq;
 using AeroTerm.Controls;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.NUnit;
@@ -97,6 +98,40 @@ public class TabStripHeadlessTests
             var closeButton = FindCloseButtons(strip).SingleOrDefault();
             Assert.That(closeButton, Is.Not.Null);
             Assert.That(closeButton!.IsVisible, Is.True);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Emoji titles are hosted by the tab title presenter and continue to
+    /// update when the underlying session title changes.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_EmojiTitle_UpdatesPresenterAndAutomationName()
+    {
+        var (window, strip, view) = BuildHostedStrip();
+        try
+        {
+            var fake = new FakeTabContent("initial 😀");
+            var session = new TabSession(fake);
+            view.AddTab(session);
+            Dispatcher.UIThread.RunJobs();
+
+            var presenter = strip.GetLogicalDescendants()
+                .OfType<TabTitlePresenter>()
+                .SingleOrDefault();
+            Assert.That(presenter, Is.Not.Null);
+            Assert.That(presenter!.Text, Is.EqualTo("initial 😀"));
+
+            fake.RaiseTitle("updated 🚀");
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.That(presenter.Text, Is.EqualTo("updated 🚀"));
+            var header = FindHeaders(strip).Single();
+            Assert.That(AutomationProperties.GetName(header), Is.EqualTo("updated 🚀"));
         }
         finally
         {
