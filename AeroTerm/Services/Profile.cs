@@ -6,14 +6,14 @@
 namespace AeroTerm.Services;
 
 using System;
-using System.Collections.Generic;
 
 /// <summary>
-/// User-editable bundle of launch + appearance settings that can be fired
-/// as a one-click "new tab" preset. Any property left unset (null) is
-/// inherited from the application defaults at tab creation time, so a
-/// freshly-synthesized profile behaves identically to the pre-profile
-/// shell experience.
+/// User-editable launch preset that can be fired as a one-click "new tab"
+/// action. The MVP profile model carries only the fields needed to launch
+/// a shell — name, executable, arguments, and working directory. Any
+/// property left unset (null) is inherited from the application defaults
+/// at tab creation time, so a freshly-synthesized profile behaves
+/// identically to the pre-profile shell experience.
 /// </summary>
 public sealed class Profile
 {
@@ -56,37 +56,4 @@ public sealed class Profile
     /// in. <c>null</c> → use the fallback's cwd (typically the user home).
     /// </summary>
     public string? WorkingDirectory { get; set; }
-
-    /// <summary>
-    /// Gets or sets additional environment variables layered on top of the
-    /// inherited environment. Keys present here override the fallback;
-    /// keys absent here keep the fallback value. <c>null</c> → no
-    /// overrides.
-    /// </summary>
-    public IReadOnlyDictionary<string, string>? EnvironmentOverrides { get; set; }
-
-    /// <summary>
-    /// Gets or sets the name of the color scheme to apply to tabs created
-    /// from this profile. <c>null</c> → use the application default.
-    /// </summary>
-    public string? ColorSchemeName { get; set; }
-
-    /// <summary>
-    /// Gets or sets the ordered font family priority list. <c>null</c> →
-    /// use the application default.
-    /// </summary>
-    public string[]? FontFamilies { get; set; }
-
-    /// <summary>
-    /// Gets or sets the font size in points. <c>null</c> → use the
-    /// application default.
-    /// </summary>
-    public double? FontSize { get; set; }
-
-    /// <summary>
-    /// Gets or sets the window effect identifier (parsed as the
-    /// <see cref="WindowEffects.BlurType"/> name). <c>null</c> → use the
-    /// application default.
-    /// </summary>
-    public string? WindowEffect { get; set; }
 }

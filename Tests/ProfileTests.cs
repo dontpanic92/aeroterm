@@ -82,35 +82,6 @@ public class ProfileTests
         Assert.That(spec.Cwd, Is.EqualTo("/tmp/override"));
     }
 
-    /// <summary>Environment overrides are layered on top of the fallback env.</summary>
-    [Test]
-    public void BuildLaunchSpec_EnvMergesWithProfileWinningCollisions()
-    {
-        var fallback = new LaunchSpec(
-            "/home",
-            "/bin/sh",
-            Array.Empty<string>(),
-            new Dictionary<string, string>
-            {
-                ["PATH"] = "/usr/bin",
-                ["TERM"] = "xterm-256color",
-            });
-
-        var p = new Profile
-        {
-            EnvironmentOverrides = new Dictionary<string, string>
-            {
-                ["PATH"] = "/custom/bin",
-                ["LANG"] = "en_US.UTF-8",
-            },
-        };
-
-        var spec = InvokeBuild(p, fallback);
-        Assert.That(spec.Env["PATH"], Is.EqualTo("/custom/bin"));
-        Assert.That(spec.Env["TERM"], Is.EqualTo("xterm-256color"));
-        Assert.That(spec.Env["LANG"], Is.EqualTo("en_US.UTF-8"));
-    }
-
     private static LaunchSpec MakeFallback() => new(
         "/home/test",
         "/bin/sh",

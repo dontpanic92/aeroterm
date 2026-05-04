@@ -8,6 +8,7 @@ namespace AeroTerm.Tests;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using AeroTerm.Services;
 using NUnit.Framework;
 
@@ -39,17 +40,41 @@ public class ProfileStoreTests
         }
     }
 
-    /// <summary>Load synthesizes a default profile when profiles.json is absent.</summary>
+    /// <summary>Load synthesizes a default profile when profiles.json is absent and no shells were discovered.</summary>
     [Test]
-    public void Load_MissingFile_ReturnsSynthesizedDefault()
+    public void Load_MissingFile_NoDiscovery_ReturnsSynthesizedDefault()
     {
-        var store = new ProfileStore(this.tempDir);
+        var store = new ProfileStore(this.tempDir, () => System.Array.Empty<DiscoveredShell>());
         var data = store.Load();
 
         Assert.That(data.Profiles, Has.Count.EqualTo(1));
         Assert.That(data.Profiles[0].Name, Is.EqualTo("Default"));
         Assert.That(data.DefaultProfileId, Is.EqualTo(data.Profiles[0].Id));
         Assert.That(data.DefaultProfile, Is.SameAs(data.Profiles[0]));
+    }
+
+    /// <summary>Load seeds profiles.json from discovery on first run and persists immediately.</summary>
+    [Test]
+    public void Load_MissingFile_WithDiscovery_SeedsAndPersists()
+    {
+        var discovered = new List<DiscoveredShell>
+        {
+            new("Bash", "/bin/bash", System.Array.Empty<string>(), null),
+            new("Zsh", "/bin/zsh", System.Array.Empty<string>(), null),
+        };
+        var store = new ProfileStore(this.tempDir, () => discovered);
+
+        var data = store.Load();
+
+        Assert.That(data.Profiles, Has.Count.EqualTo(2));
+        Assert.That(data.Profiles.Select(p => p.Command), Is.EquivalentTo(new[] { "/bin/bash", "/bin/zsh" }));
+        Assert.That(File.Exists(store.FilePath), Is.True, "Seeded profiles should be persisted to disk.");
+
+        // Subsequent loads (with discovery returning nothing) should still
+        // yield the two persisted profiles.
+        var store2 = new ProfileStore(this.tempDir, () => System.Array.Empty<DiscoveredShell>());
+        var data2 = store2.Load();
+        Assert.That(data2.Profiles, Has.Count.EqualTo(2));
     }
 
     /// <summary>Malformed JSON does not throw and yields a synthesized default.</summary>
@@ -64,7 +89,7 @@ public class ProfileStoreTests
         Assert.That(data.Profiles[0].Name, Is.EqualTo("Default"));
     }
 
-    /// <summary>Round-trip preserves every field, including env dictionary and null distinction.</summary>
+    /// <summary>Round-trip preserves every field on the slim profile model.</summary>
     [Test]
     public void SaveThenLoad_PreservesAllFields()
     {
@@ -76,15 +101,6 @@ public class ProfileStoreTests
             Command = "/usr/bin/python3",
             Args = new[] { "-i" },
             WorkingDirectory = "/srv/py",
-            EnvironmentOverrides = new Dictionary<string, string>
-            {
-                ["PYTHONUNBUFFERED"] = "1",
-                ["LANG"] = "en_US.UTF-8",
-            },
-            ColorSchemeName = "Solarized Dark",
-            FontFamilies = new[] { "Fira Code", "Menlo" },
-            FontSize = 13.5,
-            WindowEffect = "Acrylic",
         };
 
         // A profile with all null overrides verifies the null-vs-empty distinction.
@@ -102,23 +118,11 @@ public class ProfileStoreTests
         Assert.That(round.Command, Is.EqualTo("/usr/bin/python3"));
         Assert.That(round.Args, Is.EquivalentTo(new[] { "-i" }));
         Assert.That(round.WorkingDirectory, Is.EqualTo("/srv/py"));
-        Assert.That(round.EnvironmentOverrides, Is.Not.Null);
-        Assert.That(round.EnvironmentOverrides!["PYTHONUNBUFFERED"], Is.EqualTo("1"));
-        Assert.That(round.EnvironmentOverrides["LANG"], Is.EqualTo("en_US.UTF-8"));
-        Assert.That(round.ColorSchemeName, Is.EqualTo("Solarized Dark"));
-        Assert.That(round.FontFamilies, Is.EquivalentTo(new[] { "Fira Code", "Menlo" }));
-        Assert.That(round.FontSize, Is.EqualTo(13.5));
-        Assert.That(round.WindowEffect, Is.EqualTo("Acrylic"));
 
         var roundMinimal = data.Profiles[1];
         Assert.That(roundMinimal.Command, Is.Null);
         Assert.That(roundMinimal.Args, Is.Null);
         Assert.That(roundMinimal.WorkingDirectory, Is.Null);
-        Assert.That(roundMinimal.EnvironmentOverrides, Is.Null);
-        Assert.That(roundMinimal.ColorSchemeName, Is.Null);
-        Assert.That(roundMinimal.FontFamilies, Is.Null);
-        Assert.That(roundMinimal.FontSize, Is.Null);
-        Assert.That(roundMinimal.WindowEffect, Is.Null);
     }
 
     /// <summary>The persisted default id survives a round-trip and is honoured by Load.</summary>
@@ -180,11 +184,11 @@ public class ProfileStoreTests
         Assert.That(result, Is.False);
     }
 
-    /// <summary>Empty profile list on disk still yields a synthesized default.</summary>
+    /// <summary>Empty profile list on disk triggers shell discovery (or synthesized default if discovery is empty).</summary>
     [Test]
-    public void Load_EmptyProfileList_SynthesizesDefault()
+    public void Load_EmptyProfileList_SeedsFromDiscovery()
     {
-        var store = new ProfileStore(this.tempDir);
+        var store = new ProfileStore(this.tempDir, () => System.Array.Empty<DiscoveredShell>());
         const string Json = """
             { "version": 1, "defaultProfileId": null, "profiles": [] }
             """;
@@ -193,5 +197,23 @@ public class ProfileStoreTests
         var data = store.Load();
         Assert.That(data.Profiles, Has.Count.EqualTo(1));
         Assert.That(data.Profiles[0].Name, Is.EqualTo("Default"));
+    }
+
+    /// <summary>An empty list on disk is healed by discovery results when available.</summary>
+    [Test]
+    public void Load_EmptyProfileList_HealedByDiscovery()
+    {
+        var discovered = new List<DiscoveredShell>
+        {
+            new("Bash", "/bin/bash", System.Array.Empty<string>(), null),
+        };
+        var store = new ProfileStore(this.tempDir, () => discovered);
+        const string Json = """
+            { "version": 1, "defaultProfileId": null, "profiles": [] }
+            """;
+        File.WriteAllText(store.FilePath, Json);
+
+        var data = store.Load();
+        Assert.That(data.Profiles.Select(p => p.Command), Is.EquivalentTo(new[] { "/bin/bash" }));
     }
 }

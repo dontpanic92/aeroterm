@@ -365,20 +365,19 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
 
         bool hasLaunchOverrides = profile.Command is not null
             || profile.Args is not null
-            || profile.WorkingDirectory is not null
-            || (profile.EnvironmentOverrides is not null && profile.EnvironmentOverrides.Count > 0);
+            || profile.WorkingDirectory is not null;
 
         if (fallback is null && !hasLaunchOverrides)
         {
             var plainCoord = new TerminalSessionCoordinator(settings);
-            return CoordinatorTabContent.FromCoordinatorWithProfile(plainCoord, settings, profile);
+            return CoordinatorTabContent.FromCoordinator(plainCoord, settings);
         }
 
         var baseline = fallback ?? ProfileStore.BuildEnvironmentFallback();
         var merged = ProfileStore.BuildLaunchSpec(profile, baseline);
 
         var coordinator = new TerminalSessionCoordinator(settings, merged);
-        return CoordinatorTabContent.FromCoordinatorWithProfile(coordinator, settings, profile);
+        return CoordinatorTabContent.FromCoordinator(coordinator, settings);
     }
 
     private void WirePaneContent(ITabSessionContent content)

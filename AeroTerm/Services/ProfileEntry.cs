@@ -5,12 +5,10 @@
 
 namespace AeroTerm.Services;
 
-using System.Collections.Generic;
-
 /// <summary>
-/// JSON-friendly DTO mirroring <see cref="Profile"/>. Uses a concrete
-/// <see cref="Dictionary{TKey, TValue}"/> for env overrides so the
-/// source-generated serializer can handle it.
+/// JSON-friendly DTO mirroring <see cref="Profile"/>. Removed legacy
+/// fields (env overrides, color scheme, fonts, window effect) are
+/// silently ignored when reading older profiles.json files.
 /// </summary>
 internal sealed class ProfileEntry
 {
@@ -28,19 +26,4 @@ internal sealed class ProfileEntry
 
     /// <summary>Gets or sets the initial working directory.</summary>
     public string? WorkingDirectory { get; set; }
-
-    /// <summary>Gets or sets environment variable overrides.</summary>
-    public Dictionary<string, string>? EnvironmentOverrides { get; set; }
-
-    /// <summary>Gets or sets the color scheme name.</summary>
-    public string? ColorSchemeName { get; set; }
-
-    /// <summary>Gets or sets the ordered font priority list.</summary>
-    public string[]? FontFamilies { get; set; }
-
-    /// <summary>Gets or sets the font size in points.</summary>
-    public double? FontSize { get; set; }
-
-    /// <summary>Gets or sets the window effect identifier.</summary>
-    public string? WindowEffect { get; set; }
 }

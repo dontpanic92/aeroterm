@@ -23,11 +23,20 @@ internal partial class ProfilesPage : UserControl
     public ProfilesPage()
     {
         this.InitializeComponent();
+        this.AttachedToVisualTree += this.OnAttachedToVisualTree;
     }
 
     private void InitializeComponent()
     {
         AvaloniaXamlLoader.Load(this);
+    }
+
+    private void OnAttachedToVisualTree(object? sender, Avalonia.VisualTreeAttachmentEventArgs e)
+    {
+        if (this.DataContext is ProfilesPageViewModel vm)
+        {
+            vm.AttachStorageProvider(() => TopLevel.GetTopLevel(this)?.StorageProvider);
+        }
     }
 
     private void AddButton_Click(object? sender, RoutedEventArgs e)
@@ -59,6 +68,22 @@ internal partial class ProfilesPage : UserControl
         if (this.DataContext is ProfilesPageViewModel vm)
         {
             vm.SetSelectedAsDefault();
+        }
+    }
+
+    private async void BrowseExecutable_Click(object? sender, RoutedEventArgs e)
+    {
+        if (this.DataContext is ProfilesPageViewModel vm)
+        {
+            await vm.BrowseExecutableAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async void BrowseWorkingDirectory_Click(object? sender, RoutedEventArgs e)
+    {
+        if (this.DataContext is ProfilesPageViewModel vm)
+        {
+            await vm.BrowseWorkingDirectoryAsync().ConfigureAwait(true);
         }
     }
 }

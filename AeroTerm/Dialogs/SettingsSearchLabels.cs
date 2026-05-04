@@ -103,15 +103,6 @@ public static class SettingsSearchLabels
     /// <summary>Search label for profile working-directory editing.</summary>
     public const string WorkingDirectory = "Working directory";
 
-    /// <summary>Search label for profile environment override editing.</summary>
-    public const string EnvironmentOverrides = "Environment overrides";
-
-    /// <summary>Search label for profile font families editing.</summary>
-    public const string FontFamilies = "Font families";
-
-    /// <summary>Search label for profile window effect editing.</summary>
-    public const string WindowEffect = "Window effect";
-
     /// <summary>Search label for marking a profile as the default.</summary>
     public const string DefaultProfile = "Default profile";
 }

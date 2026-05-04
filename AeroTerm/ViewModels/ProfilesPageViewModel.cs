@@ -11,24 +11,26 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using AeroTerm.Dialogs;
-using AeroTerm.Models;
 using AeroTerm.Services;
-using AeroTerm.WindowEffects;
+using Avalonia.Platform.Storage;
 
 /// <summary>
 /// View model for the Profiles settings page. Backs a list of user
 /// <see cref="Profile"/> entries plus an inline editor for the
-/// currently-selected profile. Changes persist through
-/// <see cref="ProfileStore.Save"/>; <see cref="App.ReloadProfiles"/> is
-/// invoked to broadcast the change so any open new-tab dropdown is
-/// rebuilt.
+/// currently-selected profile. The MVP profile model only edits launch
+/// fields (name / executable / arguments / working directory). Changes
+/// persist through <see cref="ProfileStore.Save"/>;
+/// <see cref="App.ReloadProfiles"/> is invoked to broadcast the change so
+/// any open new-tab dropdown is rebuilt.
 /// </summary>
 internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyPropertyChanged
 {
     private readonly ProfileStore store;
     private Profile? selectedProfile;
     private string? defaultProfileId;
+    private Func<IStorageProvider?>? storageProviderFactory;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProfilesPageViewModel"/> class.
@@ -39,8 +41,6 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
         ArgumentNullException.ThrowIfNull(store);
         this.store = store;
         this.Profiles = new ObservableCollection<Profile>();
-        this.ColorSchemes = new List<string>(new[] { string.Empty }.Concat(ColorSchemePresets.All.Select(s => s.Name)));
-        this.WindowEffects = new List<string>(new[] { string.Empty }.Concat(Enum.GetNames<BlurType>()));
         this.Rebuild();
     }
 
@@ -55,18 +55,6 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
     /// </summary>
     public ObservableCollection<Profile> Profiles { get; }
 
-    /// <summary>
-    /// Gets the list of color scheme names offered in the editor. An
-    /// empty string means "use application default".
-    /// </summary>
-    public IReadOnlyList<string> ColorSchemes { get; }
-
-    /// <summary>
-    /// Gets the list of window effect names offered in the editor. An
-    /// empty string means "use application default".
-    /// </summary>
-    public IReadOnlyList<string> WindowEffects { get; }
-
     /// <inheritdoc/>
     public override IReadOnlyList<string> SearchableLabels => new[]
     {
@@ -74,11 +62,6 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
         SettingsSearchLabels.Command,
         SettingsSearchLabels.Arguments,
         SettingsSearchLabels.WorkingDirectory,
-        SettingsSearchLabels.EnvironmentOverrides,
-        SettingsSearchLabels.ColorScheme,
-        SettingsSearchLabels.FontFamilies,
-        SettingsSearchLabels.FontSize,
-        SettingsSearchLabels.WindowEffect,
         SettingsSearchLabels.DefaultProfile,
     };
 
@@ -99,11 +82,6 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
                 this.OnPropertyChanged(nameof(this.SelectedCommand));
                 this.OnPropertyChanged(nameof(this.SelectedArgsText));
                 this.OnPropertyChanged(nameof(this.SelectedWorkingDirectory));
-                this.OnPropertyChanged(nameof(this.SelectedEnvironmentText));
-                this.OnPropertyChanged(nameof(this.SelectedColorSchemeName));
-                this.OnPropertyChanged(nameof(this.SelectedFontFamiliesText));
-                this.OnPropertyChanged(nameof(this.SelectedFontSizeText));
-                this.OnPropertyChanged(nameof(this.SelectedWindowEffect));
                 this.OnPropertyChanged(nameof(this.IsSelectedDefault));
             }
         }
@@ -129,6 +107,7 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
 
             this.selectedProfile.Name = value ?? string.Empty;
             this.OnPropertyChanged();
+            this.RefreshProfileListEntry(this.selectedProfile);
             this.Persist();
         }
     }
@@ -148,6 +127,7 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
 
             this.selectedProfile.Command = string.IsNullOrWhiteSpace(value) ? null : value;
             this.OnPropertyChanged();
+            this.RefreshProfileListEntry(this.selectedProfile);
             this.Persist();
         }
     }
@@ -193,141 +173,22 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
     }
 
     /// <summary>
-    /// Gets or sets the selected profile's environment overrides as KEY=VALUE
-    /// lines.
-    /// </summary>
-    public string SelectedEnvironmentText
-    {
-        get
-        {
-            if (this.selectedProfile?.EnvironmentOverrides is not { } env || env.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            return string.Join(
-                Environment.NewLine,
-                env.Select(kv => kv.Key + "=" + kv.Value));
-        }
-
-        set
-        {
-            if (this.selectedProfile is null)
-            {
-                return;
-            }
-
-            this.selectedProfile.EnvironmentOverrides = ParseEnvironment(value);
-            this.OnPropertyChanged();
-            this.Persist();
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the selected profile's color scheme name. Empty =
-    /// inherit default.
-    /// </summary>
-    public string SelectedColorSchemeName
-    {
-        get => this.selectedProfile?.ColorSchemeName ?? string.Empty;
-        set
-        {
-            if (this.selectedProfile is null)
-            {
-                return;
-            }
-
-            this.selectedProfile.ColorSchemeName = string.IsNullOrEmpty(value) ? null : value;
-            this.OnPropertyChanged();
-            this.Persist();
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the selected profile's font families as a comma-separated list.
-    /// </summary>
-    public string SelectedFontFamiliesText
-    {
-        get => this.selectedProfile?.FontFamilies is { } f ? string.Join(", ", f) : string.Empty;
-        set
-        {
-            if (this.selectedProfile is null)
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                this.selectedProfile.FontFamilies = null;
-            }
-            else
-            {
-                this.selectedProfile.FontFamilies = value
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            }
-
-            this.OnPropertyChanged();
-            this.Persist();
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the selected profile's font size as a string. Empty =
-    /// inherit default. Non-numeric input is ignored.
-    /// </summary>
-    public string SelectedFontSizeText
-    {
-        get => this.selectedProfile?.FontSize?.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
-        set
-        {
-            if (this.selectedProfile is null)
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                this.selectedProfile.FontSize = null;
-            }
-            else if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed > 0)
-            {
-                this.selectedProfile.FontSize = parsed;
-            }
-            else
-            {
-                return;
-            }
-
-            this.OnPropertyChanged();
-            this.Persist();
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the selected profile's window effect name. Empty =
-    /// inherit default.
-    /// </summary>
-    public string SelectedWindowEffect
-    {
-        get => this.selectedProfile?.WindowEffect ?? string.Empty;
-        set
-        {
-            if (this.selectedProfile is null)
-            {
-                return;
-            }
-
-            this.selectedProfile.WindowEffect = string.IsNullOrEmpty(value) ? null : value;
-            this.OnPropertyChanged();
-            this.Persist();
-        }
-    }
-
-    /// <summary>
     /// Gets a value indicating whether the selected profile is the default profile.
     /// </summary>
     public bool IsSelectedDefault
         => this.selectedProfile is not null && this.selectedProfile.Id == this.defaultProfileId;
+
+    /// <summary>
+    /// Wires the page-supplied storage provider (for Browse… file/folder
+    /// pickers). Called by the page's code-behind once the visual is
+    /// attached to a top-level.
+    /// </summary>
+    /// <param name="factory">Delegate returning the active top-level's
+    /// <see cref="IStorageProvider"/>, or <c>null</c> when unavailable.</param>
+    public void AttachStorageProvider(Func<IStorageProvider?> factory)
+    {
+        this.storageProviderFactory = factory;
+    }
 
     /// <summary>
     /// Adds a new profile and selects it.
@@ -357,13 +218,6 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
             Command = source.Command,
             Args = source.Args is null ? null : (string[])source.Args.Clone(),
             WorkingDirectory = source.WorkingDirectory,
-            EnvironmentOverrides = source.EnvironmentOverrides is null
-                ? null
-                : new Dictionary<string, string>(source.EnvironmentOverrides),
-            ColorSchemeName = source.ColorSchemeName,
-            FontFamilies = source.FontFamilies is null ? null : (string[])source.FontFamilies.Clone(),
-            FontSize = source.FontSize,
-            WindowEffect = source.WindowEffect,
         };
         this.Profiles.Add(clone);
         this.SelectedProfile = clone;
@@ -408,6 +262,80 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
         this.defaultProfileId = this.selectedProfile.Id;
         this.OnPropertyChanged(nameof(this.IsSelectedDefault));
         this.Persist();
+    }
+
+    /// <summary>
+    /// Opens a file picker to choose the selected profile's executable
+    /// path. No-op when no profile is selected or the storage provider
+    /// has not been attached yet.
+    /// </summary>
+    /// <returns>A task that completes when the picker closes.</returns>
+    public async Task BrowseExecutableAsync()
+    {
+        if (this.selectedProfile is null)
+        {
+            return;
+        }
+
+        var provider = this.storageProviderFactory?.Invoke();
+        if (provider is null || !provider.CanOpen)
+        {
+            return;
+        }
+
+        var files = await provider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select shell executable",
+            AllowMultiple = false,
+        }).ConfigureAwait(true);
+
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var path = files[0].TryGetLocalPath();
+        if (!string.IsNullOrEmpty(path))
+        {
+            this.SelectedCommand = path;
+        }
+    }
+
+    /// <summary>
+    /// Opens a folder picker to choose the selected profile's working
+    /// directory. No-op when no profile is selected or the storage
+    /// provider has not been attached yet.
+    /// </summary>
+    /// <returns>A task that completes when the picker closes.</returns>
+    public async Task BrowseWorkingDirectoryAsync()
+    {
+        if (this.selectedProfile is null)
+        {
+            return;
+        }
+
+        var provider = this.storageProviderFactory?.Invoke();
+        if (provider is null || !provider.CanPickFolder)
+        {
+            return;
+        }
+
+        var folders = await provider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "Select working directory",
+            AllowMultiple = false,
+        }).ConfigureAwait(true);
+
+        if (folders.Count == 0)
+        {
+            return;
+        }
+
+        var path = folders[0].TryGetLocalPath();
+        if (!string.IsNullOrEmpty(path))
+        {
+            this.SelectedWorkingDirectory = path;
+        }
     }
 
     private static string[] ParseArgs(string input)
@@ -457,39 +385,6 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
         return result.ToArray();
     }
 
-    private static IReadOnlyDictionary<string, string>? ParseEnvironment(string? input)
-    {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            return null;
-        }
-
-        var dict = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var rawLine in input.Split('\n'))
-        {
-            var line = rawLine.Trim().TrimEnd('\r');
-            if (line.Length == 0 || line.StartsWith('#'))
-            {
-                continue;
-            }
-
-            int eq = line.IndexOf('=');
-            if (eq <= 0)
-            {
-                continue;
-            }
-
-            var key = line[..eq].Trim();
-            var value = line[(eq + 1)..];
-            if (key.Length > 0)
-            {
-                dict[key] = value;
-            }
-        }
-
-        return dict.Count == 0 ? null : dict;
-    }
-
     private void Rebuild()
     {
         this.Profiles.Clear();
@@ -507,6 +402,23 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
     {
         this.store.Save(this.Profiles, this.defaultProfileId);
         App.ReloadProfiles();
+    }
+
+    /// <summary>
+    /// Forces the bound list view to redraw the row for
+    /// <paramref name="profile"/> after an inline edit. ObservableCollection
+    /// only raises change notifications on add/remove/replace, so a
+    /// title-tweak in the editor would otherwise leave the sidebar stale.
+    /// </summary>
+    private void RefreshProfileListEntry(Profile profile)
+    {
+        int idx = this.Profiles.IndexOf(profile);
+        if (idx < 0)
+        {
+            return;
+        }
+
+        this.Profiles[idx] = profile;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? name = null)

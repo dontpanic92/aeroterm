@@ -16,9 +16,10 @@ using Microsoft.Extensions.Logging;
 /// <summary>
 /// Persists the user's profile list and default-profile pointer to
 /// <c>${AppSettingsDir}/profiles.json</c>. Mirrors the fault-tolerance
-/// pattern of <see cref="KeybindingStore"/>: missing file yields an
-/// empty list plus a synthesized "Default" profile; malformed JSON
-/// yields an empty list and a warning (never throws to the caller).
+/// pattern of <see cref="KeybindingStore"/>: missing file is seeded with
+/// auto-discovered shells (or a single synthesized "Default" if discovery
+/// finds nothing); malformed JSON falls back to a synthesized default and
+/// logs a warning (never throws to the caller).
 /// </summary>
 public sealed class ProfileStore
 {
@@ -27,13 +28,15 @@ public sealed class ProfileStore
         "AeroTerm");
 
     private readonly string directory;
+    private readonly Func<IReadOnlyList<DiscoveredShell>> discoverShells;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProfileStore"/> class
-    /// bound to the default user configuration directory.
+    /// bound to the default user configuration directory and the live
+    /// shell discovery service.
     /// </summary>
     public ProfileStore()
-        : this(DefaultDirectory)
+        : this(DefaultDirectory, () => new ShellDiscovery().Discover())
     {
     }
 
@@ -43,9 +46,24 @@ public sealed class ProfileStore
     /// </summary>
     /// <param name="directory">The directory that holds <c>profiles.json</c>.</param>
     public ProfileStore(string directory)
+        : this(directory, () => new ShellDiscovery().Discover())
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProfileStore"/> class
+    /// with a caller-supplied directory and shell discovery delegate
+    /// (used by tests to inject deterministic discovery results).
+    /// </summary>
+    /// <param name="directory">The directory that holds <c>profiles.json</c>.</param>
+    /// <param name="discoverShells">Delegate invoked to seed the profile list
+    /// when <c>profiles.json</c> does not yet exist.</param>
+    public ProfileStore(string directory, Func<IReadOnlyList<DiscoveredShell>> discoverShells)
     {
         ArgumentNullException.ThrowIfNull(directory);
+        ArgumentNullException.ThrowIfNull(discoverShells);
         this.directory = directory;
+        this.discoverShells = discoverShells;
     }
 
     /// <summary>
@@ -74,9 +92,9 @@ public sealed class ProfileStore
 
     /// <summary>
     /// Loads the user's profile list.
-    /// Fault-tolerant: a missing file returns a single synthesized
-    /// default profile; malformed JSON returns an empty list plus a
-    /// synthesized default and logs a warning.
+    /// Fault-tolerant: a missing file triggers shell discovery and
+    /// persists the resulting profiles immediately; malformed JSON
+    /// returns a synthesized default and logs a warning.
     /// </summary>
     /// <returns>The loaded profile data.</returns>
     public ProfileStoreData Load()
@@ -84,8 +102,7 @@ public sealed class ProfileStore
         var log = AppLogger.For<ProfileStore>();
         if (!File.Exists(this.FilePath))
         {
-            var synth = CreateSynthesizedDefault();
-            return new ProfileStoreData(new List<Profile> { synth }, synth.Id);
+            return this.SeedFromDiscovery(log);
         }
 
         string json;
@@ -133,13 +150,13 @@ public sealed class ProfileStore
             }
         }
 
-        // If the file had zero valid profiles, synthesize a default so the
-        // app always has *something* to launch.
+        // If the file had zero valid profiles, run shell discovery so a
+        // healthy machine ends up with a populated list. This also heals
+        // legacy users whose profiles.json was written by an older build
+        // with an empty "profiles" array.
         if (profiles.Count == 0)
         {
-            var synth = CreateSynthesizedDefault();
-            profiles.Add(synth);
-            return new ProfileStoreData(profiles, synth.Id);
+            return this.SeedFromDiscovery(log);
         }
 
         // Resolve the default: honour the persisted id when it points at a
@@ -225,8 +242,7 @@ public sealed class ProfileStore
     /// <summary>
     /// Merges a <see cref="Profile"/> onto a fallback <see cref="LaunchSpec"/>:
     /// any field set on the profile wins; unset fields inherit from the
-    /// fallback. Environment overrides are layered (profile wins on key
-    /// collisions).
+    /// fallback.
     /// </summary>
     /// <param name="profile">The profile providing overrides.</param>
     /// <param name="fallback">The baseline spec.</param>
@@ -241,29 +257,11 @@ public sealed class ProfileStore
         string[] args = profile.Args is not null ? (string[])profile.Args.Clone() : fallback.Args.ToArray();
 
         var env = new Dictionary<string, string>(fallback.Env);
-        if (profile.EnvironmentOverrides is not null)
-        {
-            foreach (var kv in profile.EnvironmentOverrides)
-            {
-                env[kv.Key] = kv.Value;
-            }
-        }
-
         return new LaunchSpec(cwd, command, args, env);
     }
 
     private static ProfileEntry ToEntry(Profile p)
     {
-        Dictionary<string, string>? env = null;
-        if (p.EnvironmentOverrides is not null && p.EnvironmentOverrides.Count > 0)
-        {
-            env = new Dictionary<string, string>(p.EnvironmentOverrides.Count);
-            foreach (var kv in p.EnvironmentOverrides)
-            {
-                env[kv.Key] = kv.Value;
-            }
-        }
-
         return new ProfileEntry
         {
             Id = p.Id,
@@ -271,11 +269,6 @@ public sealed class ProfileStore
             Command = p.Command,
             Args = p.Args is null ? null : (string[])p.Args.Clone(),
             WorkingDirectory = p.WorkingDirectory,
-            EnvironmentOverrides = env,
-            ColorSchemeName = p.ColorSchemeName,
-            FontFamilies = p.FontFamilies is null ? null : (string[])p.FontFamilies.Clone(),
-            FontSize = p.FontSize,
-            WindowEffect = p.WindowEffect,
         };
     }
 
@@ -293,13 +286,120 @@ public sealed class ProfileStore
             Command = entry.Command,
             Args = entry.Args is null ? null : (string[])entry.Args.Clone(),
             WorkingDirectory = entry.WorkingDirectory,
-            EnvironmentOverrides = entry.EnvironmentOverrides is null
-                ? null
-                : new Dictionary<string, string>(entry.EnvironmentOverrides),
-            ColorSchemeName = entry.ColorSchemeName,
-            FontFamilies = entry.FontFamilies is null ? null : (string[])entry.FontFamilies.Clone(),
-            FontSize = entry.FontSize,
-            WindowEffect = entry.WindowEffect,
         };
+    }
+
+    /// <summary>
+    /// Picks a sensible default profile from a freshly-seeded list.
+    /// Preference: pwsh.exe > Windows PowerShell > cmd.exe on Windows;
+    /// $SHELL match > zsh > bash > sh on Unix. Falls back to the first
+    /// entry when no preferred candidate is present.
+    /// </summary>
+    private static Profile PickDefault(IReadOnlyList<Profile> profiles)
+    {
+        bool isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+            System.Runtime.InteropServices.OSPlatform.Windows);
+
+        if (isWindows)
+        {
+            return FindByCommandSuffix(profiles, "pwsh.exe")
+                ?? FindByCommandSuffix(profiles, "powershell.exe")
+                ?? FindByCommandSuffix(profiles, "cmd.exe")
+                ?? profiles[0];
+        }
+
+        var userShell = Environment.GetEnvironmentVariable("SHELL");
+        if (!string.IsNullOrEmpty(userShell))
+        {
+            foreach (var p in profiles)
+            {
+                if (string.Equals(p.Command, userShell, StringComparison.Ordinal))
+                {
+                    return p;
+                }
+            }
+        }
+
+        return FindByCommandSuffix(profiles, "/zsh")
+            ?? FindByCommandSuffix(profiles, "/bash")
+            ?? FindByCommandSuffix(profiles, "/sh")
+            ?? profiles[0];
+    }
+
+    private static Profile? FindByCommandSuffix(IReadOnlyList<Profile> profiles, string suffix)
+    {
+        foreach (var p in profiles)
+        {
+            if (p.Command is { } cmd && cmd.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return p;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Runs shell discovery, materializes profiles from the result,
+    /// picks a sensible default, and persists immediately so subsequent
+    /// launches are stable. Failures fall through to a single
+    /// synthesized "Default" profile (never throws).
+    /// </summary>
+    private ProfileStoreData SeedFromDiscovery(ILogger log)
+    {
+        IReadOnlyList<DiscoveredShell> discovered;
+        try
+        {
+            discovered = this.discoverShells();
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "Shell discovery threw during profile seeding; falling back to synthesized default.");
+            var synthOnError = CreateSynthesizedDefault();
+            return new ProfileStoreData(new List<Profile> { synthOnError }, synthOnError.Id);
+        }
+
+        if (discovered.Count == 0)
+        {
+            var synth = CreateSynthesizedDefault();
+            return new ProfileStoreData(new List<Profile> { synth }, synth.Id);
+        }
+
+        var profiles = new List<Profile>(discovered.Count);
+        foreach (var shell in discovered)
+        {
+            profiles.Add(new Profile
+            {
+                Name = shell.Name,
+                Command = shell.Command,
+                Args = shell.Args.Length == 0 ? null : (string[])shell.Args.Clone(),
+                WorkingDirectory = shell.WorkingDirectory,
+            });
+        }
+
+        var defaultProfile = PickDefault(profiles);
+        var data = new ProfileStoreData(profiles, defaultProfile.Id);
+
+        // Persist seeded profiles so they're stable on next launch — but
+        // don't raise ProfilesChanged here (the caller is mid-Load and
+        // will publish the data itself).
+        try
+        {
+            Directory.CreateDirectory(this.directory);
+            var file = new ProfilesFile
+            {
+                Version = 1,
+                DefaultProfileId = defaultProfile.Id,
+                Profiles = profiles.Select(ToEntry).ToList(),
+            };
+            var json = JsonSerializer.Serialize(file, ProfilesJsonContext.Default.ProfilesFile);
+            File.WriteAllText(this.FilePath, json);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        {
+            log.LogWarning(ex, "Failed to persist seeded profiles to {Path}; will retry on next save.", this.FilePath);
+        }
+
+        return data;
     }
 }

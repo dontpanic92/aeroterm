@@ -5,12 +5,9 @@
 
 namespace AeroTerm.Controls;
 
-using AeroTerm.Models;
 using AeroTerm.Services;
-using AeroTerm.Utilities;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Threading;
 
 /// <summary>
 /// Production <see cref="ITabSessionContent"/> that wraps a
@@ -23,7 +20,6 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
 {
     private readonly TerminalSessionCoordinator coordinator;
     private readonly AppSettings? settings;
-    private readonly Profile? profileOverrides;
     private readonly Grid host = new();
     private TerminalControl? terminal;
     private string title = "AeroTerm";
@@ -36,15 +32,14 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     /// <param name="coordinator">The coordinator this content wraps. Ownership
     /// transfers — <see cref="Dispose"/> will shut it down.</param>
     public CoordinatorTabContent(TerminalSessionCoordinator coordinator)
-        : this(coordinator, settings: null, profileOverrides: null)
+        : this(coordinator, settings: null)
     {
     }
 
-    private CoordinatorTabContent(TerminalSessionCoordinator coordinator, AppSettings? settings, Profile? profileOverrides)
+    private CoordinatorTabContent(TerminalSessionCoordinator coordinator, AppSettings? settings)
     {
         this.coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         this.settings = settings;
-        this.profileOverrides = profileOverrides;
         this.coordinator.TerminalReady += this.OnTerminalReady;
         this.coordinator.TitleChanged += this.OnCoordinatorTitleChanged;
         this.coordinator.ProcessExitedNormally += this.OnCoordinatorProcessExited;
@@ -138,27 +133,7 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     /// <returns>A newly-constructed content adapter.</returns>
     internal static CoordinatorTabContent FromCoordinator(TerminalSessionCoordinator coordinator, AppSettings settings)
     {
-        return new CoordinatorTabContent(coordinator, settings, profileOverrides: null);
-    }
-
-    /// <summary>
-    /// Factory that constructs a <see cref="CoordinatorTabContent"/> wired
-    /// with profile appearance overrides. The overrides are applied once
-    /// the underlying <see cref="TerminalControl"/> has been created (see
-    /// <see cref="OnTerminalReady"/>).
-    /// </summary>
-    /// <param name="coordinator">Coordinator to wrap (ownership transfers).</param>
-    /// <param name="settings">Application settings used by duplicates.</param>
-    /// <param name="profile">Profile whose appearance fields should override
-    /// the application defaults on the newly-created control.</param>
-    /// <returns>A newly-constructed content adapter.</returns>
-    internal static CoordinatorTabContent FromCoordinatorWithProfile(
-        TerminalSessionCoordinator coordinator,
-        AppSettings settings,
-        Profile profile)
-    {
-        ArgumentNullException.ThrowIfNull(profile);
-        return new CoordinatorTabContent(coordinator, settings, profile);
+        return new CoordinatorTabContent(coordinator, settings);
     }
 
     private void OnTerminalReady(TerminalControl control)
@@ -168,7 +143,6 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.host.Children.Add(control.SearchOverlayVisual);
         this.SyncSearchOverlayMargin(control.TopInset);
         control.TopInsetChanged += this.OnTerminalTopInsetChanged;
-        this.ApplyProfileAppearanceOverrides(control);
     }
 
     private void OnTerminalTopInsetChanged(object? sender, float topInset)
@@ -189,44 +163,6 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         // in the same band). The 8 / 12 px insets match the original
         // SearchOverlay.axaml margins for the visible top/right gap.
         this.terminal.SearchOverlayVisual.Margin = new Thickness(0, topInset + 8, 12, 0);
-    }
-
-    private void ApplyProfileAppearanceOverrides(TerminalControl control)
-    {
-        if (this.profileOverrides is null || this.settings is null)
-        {
-            return;
-        }
-
-        // Color scheme override.
-        if (!string.IsNullOrWhiteSpace(this.profileOverrides.ColorSchemeName))
-        {
-            var scheme = ColorSchemePresets.FindByName(this.profileOverrides.ColorSchemeName);
-            if (scheme is not null)
-            {
-                Dispatcher.UIThread.Post(() => control.ApplyColorScheme(scheme));
-            }
-        }
-
-        // Font priority / size override: build the priority list as the
-        // coordinator's ApplyFontSettings does but sourcing from the profile.
-        bool hasFontOverride = this.profileOverrides.FontFamilies is { Length: > 0 };
-        bool hasSizeOverride = this.profileOverrides.FontSize is { } size && size > 0;
-        if (hasFontOverride || hasSizeOverride)
-        {
-            var fontList = hasFontOverride
-                ? new List<string>(this.profileOverrides.FontFamilies!)
-                : new List<string>(this.settings.FallbackFonts);
-            if (!hasFontOverride && !string.IsNullOrWhiteSpace(this.settings.FontFamily))
-            {
-                fontList.Insert(0, this.settings.FontFamily);
-            }
-
-            var normalized = FontPriorityList.Normalize(fontList);
-            var expanded = FontPriorityList.Expand(normalized);
-            double sizeToUse = hasSizeOverride ? this.profileOverrides.FontSize!.Value : this.settings.FontSize;
-            Dispatcher.UIThread.Post(() => control.ApplyFontChange(expanded, sizeToUse));
-        }
     }
 
     private void OnCoordinatorTitleChanged(string newTitle)
