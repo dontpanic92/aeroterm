@@ -61,7 +61,7 @@ public class SettingsWindowHeadlessTests
     }
 
     /// <summary>
-    /// Typing a query that matches only the Appearance page's searchable
+    /// Typing a query that matches only the Terminal page's searchable
     /// labels filters the sidebar down to that single page.
     /// </summary>
     [AvaloniaTest]
@@ -74,7 +74,7 @@ public class SettingsWindowHeadlessTests
         vm.SearchQuery = "scrollback";
 
         Assert.That(vm.FilteredPages, Has.Count.EqualTo(1));
-        Assert.That(vm.FilteredPages[0].DisplayName, Is.EqualTo("Appearance"));
+        Assert.That(vm.FilteredPages[0].DisplayName, Is.EqualTo("Terminal"));
     }
 
     /// <summary>
@@ -148,11 +148,7 @@ public class SettingsWindowHeadlessTests
 
     private static IReadOnlyList<SettingsPageViewModel> BuildPages(AppSettings settings)
     {
-        return new SettingsPageViewModel[]
-        {
-            new AppearancePageViewModel(settings),
-            new UpdatesPageViewModel(settings, new UpdateService(settings)),
-        };
+        return SettingsPageFactory.CreateCorePages(settings, new UpdateService(settings));
     }
 
     private static SettingsViewModel BuildViewModel(out AppSettings settings)

@@ -95,11 +95,7 @@ public class WindowSmokeTests
     private static Window CreateSettingsWindow()
     {
         var settings = new AppSettings();
-        var pages = new SettingsPageViewModel[]
-        {
-            new AppearancePageViewModel(settings),
-            new UpdatesPageViewModel(settings, new UpdateService(settings)),
-        };
+        var pages = SettingsPageFactory.CreateCorePages(settings, new UpdateService(settings));
         return new SettingsWindow(settings, new SettingsViewModel(pages));
     }
 

@@ -8,7 +8,9 @@ namespace Tests;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
 using AeroTerm.Dialogs;
+using AeroTerm.Services;
 using AeroTerm.ViewModels;
 using NUnit.Framework;
 
@@ -152,6 +154,36 @@ public class SettingsSearchTests
         vm.SearchQuery = "abc";
 
         Assert.That(propertyChanges, Is.EqualTo(1));
+    }
+
+    /// <summary>Representative settings searches route to the page that owns the setting.</summary>
+    /// <param name="query">The search query.</param>
+    /// <param name="expectedPage">The expected matching page.</param>
+    [TestCase("font", "Appearance")]
+    [TestCase("ligature", "Appearance")]
+    [TestCase("color", "Appearance")]
+    [TestCase("acrylic", "Appearance")]
+    [TestCase("mica", "Appearance")]
+    [TestCase("scrollback", "Terminal")]
+    [TestCase("bell", "Terminal")]
+    [TestCase("middle-click", "Terminal")]
+    [TestCase("tab", "Window & Tabs")]
+    [TestCase("close", "Window & Tabs")]
+    [TestCase("quake", "Window & Tabs")]
+    [TestCase("hotkey", "Window & Tabs")]
+    [TestCase("channel", "Updates")]
+    [TestCase("update", "Updates")]
+    public void SettingsPageFactory_SearchTerms_RouteToOwningPage(string query, string expectedPage)
+    {
+        var settings = new AppSettings();
+        var pages = SettingsPageFactory.CreateCorePages(settings, new UpdateService(settings));
+
+        var matches = pages
+            .Where(p => SettingsViewModel.PageMatches(p, query))
+            .Select(p => p.DisplayName)
+            .ToArray();
+
+        Assert.That(matches, Is.EqualTo(new[] { expectedPage }));
     }
 
     private sealed class FakePage : SettingsPageViewModel

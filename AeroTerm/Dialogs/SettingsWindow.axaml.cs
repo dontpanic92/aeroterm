@@ -116,14 +116,14 @@ public partial class SettingsWindow : Window
         switch (this.CloseReason)
         {
             case Result.Ok:
-                // Save update-related settings from the Updates page, if present.
+                // Commit any pages that stage values until the dialog is accepted.
                 if (this.DataContext is SettingsViewModel vm)
                 {
                     foreach (var page in vm.Pages)
                     {
-                        if (page is ViewModels.UpdatesPageViewModel updatesPage)
+                        if (page is ISettingsPageLifecycle lifecycle)
                         {
-                            updatesPage.SaveToSettings();
+                            lifecycle.Commit();
                         }
                     }
                 }

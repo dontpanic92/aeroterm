@@ -11,6 +11,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using AeroTerm.Dialogs;
 using AeroTerm.Models;
 using AeroTerm.Services;
 using AeroTerm.WindowEffects;
@@ -69,16 +70,16 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
     /// <inheritdoc/>
     public override IReadOnlyList<string> SearchableLabels => new[]
     {
-        "Profile name",
-        "Command",
-        "Arguments",
-        "Working directory",
-        "Environment overrides",
-        "Color scheme",
-        "Font families",
-        "Font size",
-        "Window effect",
-        "Default profile",
+        SettingsSearchLabels.ProfileName,
+        SettingsSearchLabels.Command,
+        SettingsSearchLabels.Arguments,
+        SettingsSearchLabels.WorkingDirectory,
+        SettingsSearchLabels.EnvironmentOverrides,
+        SettingsSearchLabels.ColorScheme,
+        SettingsSearchLabels.FontFamilies,
+        SettingsSearchLabels.FontSize,
+        SettingsSearchLabels.WindowEffect,
+        SettingsSearchLabels.DefaultProfile,
     };
 
     /// <summary>

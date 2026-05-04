@@ -72,6 +72,14 @@
                             <dialogs:AppearancePage />
                         </DataTemplate>
 
+                        <DataTemplate DataType="vm:TerminalPageViewModel">
+                            <dialogs:TerminalPage />
+                        </DataTemplate>
+
+                        <DataTemplate DataType="vm:WindowTabsPageViewModel">
+                            <dialogs:WindowTabsPage />
+                        </DataTemplate>
+
                         <DataTemplate DataType="vm:UpdatesPageViewModel">
                             <dialogs:UpdatesPage />
                         </DataTemplate>

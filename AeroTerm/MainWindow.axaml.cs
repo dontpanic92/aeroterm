@@ -534,13 +534,11 @@ public partial class MainWindow : Window
 
         try
         {
-            var pages = new ViewModels.SettingsPageViewModel[]
-            {
-                new ViewModels.AppearancePageViewModel(this.settings),
-                new ViewModels.KeybindingsPageViewModel(App.KeybindingStore),
-                new ViewModels.ProfilesPageViewModel(App.ProfileStore),
-                new ViewModels.UpdatesPageViewModel(this.settings, this.updateService),
-            };
+            var pages = ViewModels.SettingsPageFactory.CreateApplicationPages(
+                this.settings,
+                App.KeybindingStore,
+                App.ProfileStore,
+                this.updateService);
             var viewModel = new ViewModels.SettingsViewModel(pages);
             var dialog = new Dialogs.SettingsWindow(this.settings, viewModel);
             await dialog.ShowDialog(this);

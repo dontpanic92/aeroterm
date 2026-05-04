@@ -8,38 +8,37 @@
              x:CompileBindings="True"
              x:DataType="vm:AppearancePageViewModel">
     <StackPanel Spacing="10">
-        <!-- Window Effects -->
         <GroupBox Header="{x:Static strings:Strings.AppearanceWindowHeader}" Padding="8,8">
             <StackPanel>
-                <CheckBox dialogs:SettingsSearch.Label="Window Transparency"
+                <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.WindowTransparency}"
                           IsChecked="{Binding EnableBlurBehind, Mode=TwoWay}" Content="{x:Static strings:Strings.AppearanceEnableTransparency}" Margin="0,0,0,5" />
 
-                <RadioButton dialogs:SettingsSearch.Label="Transparent Blur"
+                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.TransparentBlur}"
                              Content="Transparent" GroupName="BlurKind" Margin="20,0,0,3"
                              IsEnabled="{Binding IsTransparentEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Transparent}, Mode=TwoWay}" />
 
-                <RadioButton dialogs:SettingsSearch.Label="Gaussian Blur"
+                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.GaussianBlur}"
                              Content="Blur (Gaussian)" GroupName="BlurKind" Margin="20,0,0,3"
                              IsEnabled="{Binding IsGaussianEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Gaussian}, Mode=TwoWay}" />
 
-                <RadioButton dialogs:SettingsSearch.Label="Acrylic Blur"
+                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.AcrylicBlur}"
                              Content="Acrylic Blur" GroupName="BlurKind" Margin="20,0,0,3"
                              IsEnabled="{Binding IsAcrylicEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Acrylic}, Mode=TwoWay}" />
 
-                <RadioButton dialogs:SettingsSearch.Label="Mica"
+                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.Mica}"
                              Content="Mica (Windows only)" GroupName="BlurKind" Margin="20,0,0,5"
                              IsEnabled="{Binding IsMicaEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Mica}, Mode=TwoWay}" />
 
-                <RadioButton dialogs:SettingsSearch.Label="Liquid Glass"
+                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LiquidGlass}"
                              Content="Liquid Glass (macOS 26+)" GroupName="BlurKind" Margin="20,0,0,5"
                              IsEnabled="{Binding IsLiquidGlassEnabled}"
                              IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.LiquidGlass}, Mode=TwoWay}" />
 
-                <StackPanel dialogs:SettingsSearch.Label="Tint Opacity"
+                <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.TintOpacity}"
                             Orientation="Horizontal" Margin="20,0,0,0">
                     <TextBlock Name="TintOpacityLabel" Text="Tint Opacity" VerticalAlignment="Center" Width="110" />
                     <Slider Value="{Binding BackgroundTintOpacity, Mode=TwoWay}" Width="200" Minimum="0" Maximum="1"
@@ -49,7 +48,7 @@
                     <TextBlock Text="{Binding TintOpacityLabel}" Width="40" VerticalAlignment="Center" />
                 </StackPanel>
 
-                <StackPanel dialogs:SettingsSearch.Label="Material Opacity"
+                <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.MaterialOpacity}"
                             Orientation="Horizontal" Margin="20,0,0,0">
                     <TextBlock Name="MaterialOpacityLabel" Text="Material Opacity" VerticalAlignment="Center" Width="110" />
                     <Slider Value="{Binding BackgroundMaterialOpacity, Mode=TwoWay}" Width="200" Minimum="0" Maximum="1"
@@ -59,7 +58,7 @@
                     <TextBlock Text="{Binding MaterialOpacityLabel}" Width="40" VerticalAlignment="Center" />
                 </StackPanel>
 
-                <StackPanel dialogs:SettingsSearch.Label="Material Tone"
+                <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.MaterialTone}"
                             Orientation="Horizontal" Margin="20,5,0,0">
                     <TextBlock Text="Material Tone" VerticalAlignment="Center" Width="110" />
                     <RadioButton Content="Light" GroupName="MaterialToneKind" Margin="0,0,10,0"
@@ -72,13 +71,12 @@
             </StackPanel>
         </GroupBox>
 
-        <!-- Font -->
         <GroupBox Header="{x:Static strings:Strings.AppearanceFontHeader}" Padding="8,8">
             <StackPanel Spacing="5">
-                <CheckBox dialogs:SettingsSearch.Label="Font Ligature"
+                <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontLigature}"
                           IsChecked="{Binding EnableLigature, Mode=TwoWay}" Content="{x:Static strings:Strings.AppearanceEnableLigature}" />
 
-                <StackPanel dialogs:SettingsSearch.Label="Font Size"
+                <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontSize}"
                             Orientation="Horizontal" Spacing="8">
                     <TextBlock Name="FontSizeLabel" Text="Font Size" VerticalAlignment="Center" />
                     <NumericUpDown Value="{Binding FontSize, Mode=TwoWay}"
@@ -90,7 +88,7 @@
                 <TextBlock Text="Fonts are searched top to bottom. Drag items to reorder priority."
                            FontSize="11" Foreground="Gray" Margin="0,3,0,3" TextWrapping="Wrap" />
 
-                <Grid dialogs:SettingsSearch.Label="Font Priority">
+                <Grid dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontPriority}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -120,24 +118,23 @@
             </StackPanel>
         </GroupBox>
 
-        <!-- Ligature preview -->
         <GroupBox Header="Ligature preview" Padding="8,8"
                   AutomationProperties.Name="Ligature preview"
-                  dialogs:SettingsSearch.Label="Ligature preview">
+                  dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}">
             <StackPanel Spacing="2">
-                <TextBlock dialogs:SettingsSearch.Label="Ligature preview"
+                <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
                            Text="{Binding LigaturePreviewLine1}"
                            FontFamily="{Binding PreviewFontFamily}"
                            FontSize="{Binding FontSize}"
                            FontFeatures="{Binding PreviewFontFeatures}"
                            TextWrapping="NoWrap" />
-                <TextBlock dialogs:SettingsSearch.Label="Ligature preview"
+                <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
                            Text="{Binding LigaturePreviewLine2}"
                            FontFamily="{Binding PreviewFontFamily}"
                            FontSize="{Binding FontSize}"
                            FontFeatures="{Binding PreviewFontFeatures}"
                            TextWrapping="NoWrap" />
-                <TextBlock dialogs:SettingsSearch.Label="Ligature preview"
+                <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
                            Text="{Binding LigaturePreviewLine3}"
                            FontFamily="{Binding PreviewFontFamily}"
                            FontSize="{Binding FontSize}"
@@ -149,9 +146,8 @@
             </StackPanel>
         </GroupBox>
 
-        <!-- Color Scheme -->
         <GroupBox Header="{x:Static strings:Strings.AppearanceColorSchemeHeader}" Padding="8,8">
-            <StackPanel dialogs:SettingsSearch.Label="Color Scheme"
+            <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.ColorScheme}"
                         Spacing="8">
                 <themeControls:NativeDropdown ItemsSource="{Binding ColorSchemes}"
                                               DisplayMemberPath="Name"
@@ -159,7 +155,6 @@
                                               SelectedValue="{Binding SelectedColorScheme, Mode=TwoWay}"
                                               Width="250" HorizontalAlignment="Left" />
 
-                <!-- Preview swatches: first 6 palette colors -->
                 <ItemsControl ItemsSource="{Binding PreviewSwatches}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -176,87 +171,6 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-            </StackPanel>
-        </GroupBox>
-
-        <!-- Bell -->
-        <GroupBox Header="{x:Static strings:Strings.AppearanceBellHeader}" Padding="8,8">
-            <StackPanel dialogs:SettingsSearch.Label="Bell"
-                        Spacing="5">
-                <TextBlock Text="Action when the terminal sends BEL (Ctrl+G)"
-                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
-                <themeControls:NativeDropdown ItemsSource="{Binding BellActions}"
-                                              AutomationProperties.Name="Bell action"
-                                              SelectedValue="{Binding BellAction, Mode=TwoWay}"
-                                              Width="200" HorizontalAlignment="Left" />
-            </StackPanel>
-        </GroupBox>
-
-        <!-- Scrollback -->
-        <GroupBox Header="{x:Static strings:Strings.AppearanceScrollbackHeader}" Padding="8,8">
-            <StackPanel Spacing="5">
-                <StackPanel dialogs:SettingsSearch.Label="Scrollback lines"
-                            Orientation="Horizontal" Spacing="8">
-                    <TextBlock Name="ScrollbackLabel" Text="Scrollback lines" VerticalAlignment="Center" />
-                    <NumericUpDown Value="{Binding ScrollbackLines, Mode=TwoWay}"
-                                   Minimum="0" Maximum="1000000" Increment="1000"
-                                   AutomationProperties.LabeledBy="{Binding #ScrollbackLabel}"
-                                   FormatString="F0" Width="160" />
-                </StackPanel>
-                <TextBlock Text="Number of lines retained off-screen (0–1,000,000). Set to 0 to disable scrollback."
-                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
-                <TextBlock Text="⚠ Scrollback is disabled. Lines scrolled off the top are discarded immediately."
-                           FontSize="11" Foreground="#E0A030" TextWrapping="Wrap"
-                           IsVisible="{Binding ScrollbackDisabledWarningVisible}" />
-            </StackPanel>
-        </GroupBox>
-        <!-- Tab Bar -->
-        <GroupBox Header="{x:Static strings:Strings.AppearanceTabBarHeader}" Padding="8,8">
-            <StackPanel Spacing="5">
-                <StackPanel dialogs:SettingsSearch.Label="Tab bar orientation"
-                            Orientation="Horizontal" Spacing="8">
-                    <TextBlock Name="TabBarOrientationLabel"
-                               Text="Tab bar orientation" VerticalAlignment="Center" />
-                    <themeControls:NativeDropdown ItemsSource="{Binding TabBarOrientations}"
-                                                  AutomationProperties.LabeledBy="{Binding #TabBarOrientationLabel}"
-                                                  SelectedValue="{Binding TabBarOrientation, Mode=TwoWay}"
-                                                  Width="160" HorizontalAlignment="Left" />
-                </StackPanel>
-                <TextBlock Text="Horizontal renders tabs as a strip above the terminal. Vertical renders them as a narrow rail on the left side."
-                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
-            </StackPanel>
-        </GroupBox>
-
-        <!-- General: settings that don't have a dedicated page yet. -->
-        <GroupBox Header="{x:Static strings:Strings.AppearanceGeneralHeader}" Padding="8,8">
-            <StackPanel Spacing="5">
-                <CheckBox dialogs:SettingsSearch.Label="Confirm on close"
-                          IsChecked="{Binding ConfirmOnClose, Mode=TwoWay}"
-                          Content="{x:Static strings:Strings.AppearanceConfirmOnClose}" />
-
-                <CheckBox dialogs:SettingsSearch.Label="Middle-click paste"
-                          IsChecked="{Binding MiddleClickPastes, Mode=TwoWay}"
-                          Content="Middle-click pastes (PRIMARY selection on Linux/X11, clipboard elsewhere)" />
-
-                <CheckBox dialogs:SettingsSearch.Label="Quake mode"
-                          IsChecked="{Binding QuakeModeEnabled, Mode=TwoWay}"
-                          Content="Enable Quake-style dropdown terminal (global hotkey)" />
-
-                <StackPanel dialogs:SettingsSearch.Label="Quake hotkey"
-                            Orientation="Horizontal" Spacing="8" Margin="20,0,0,0"
-                            IsEnabled="{Binding QuakeModeEnabled}">
-                    <TextBlock Text="Quake hotkey" VerticalAlignment="Center" />
-                    <TextBox Text="{Binding QuakeHotkey, Mode=TwoWay}" Width="180" />
-                    <TextBlock Text="{Binding QuakeHotkeyStatus}" VerticalAlignment="Center"
-                               Foreground="{Binding QuakeHotkeyStatusBrush}" FontSize="11" />
-                </StackPanel>
-
-                <TextBlock Text="Press the hotkey from any app to toggle a dropdown terminal."
-                           FontSize="11" Foreground="Gray" Margin="20,0,0,0" TextWrapping="Wrap" />
-
-                <TextBlock Text="{Binding QuakePlatformWarning}"
-                           IsVisible="{Binding HasQuakePlatformWarning}"
-                           FontSize="11" Foreground="#CC7700" Margin="20,2,0,0" TextWrapping="Wrap" />
             </StackPanel>
         </GroupBox>
     </StackPanel>

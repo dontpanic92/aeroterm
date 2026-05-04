@@ -30,34 +30,34 @@
 
         <ScrollViewer Grid.Column="1" IsEnabled="{Binding HasSelection}">
             <StackPanel Spacing="8">
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Profile name">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.ProfileName}">
                     <TextBlock Grid.Column="0" Name="ProfileNameLabel" Text="Name" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1" Text="{Binding SelectedName, Mode=TwoWay}"
                              AutomationProperties.LabeledBy="{Binding #ProfileNameLabel}" />
                 </Grid>
 
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Command">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.Command}">
                     <TextBlock Grid.Column="0" Name="ProfileCommandLabel" Text="Command" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1" Text="{Binding SelectedCommand, Mode=TwoWay}"
                              AutomationProperties.LabeledBy="{Binding #ProfileCommandLabel}"
                              PlaceholderText="e.g. /bin/zsh (empty = default shell)" />
                 </Grid>
 
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Arguments">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.Arguments}">
                     <TextBlock Grid.Column="0" Name="ProfileArgsLabel" Text="Arguments" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1" Text="{Binding SelectedArgsText, Mode=TwoWay}"
                              AutomationProperties.LabeledBy="{Binding #ProfileArgsLabel}"
                              PlaceholderText="whitespace-separated; quote args with spaces" />
                 </Grid>
 
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Working directory">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.WorkingDirectory}">
                     <TextBlock Grid.Column="0" Name="ProfileCwdLabel" Text="Working directory" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1" Text="{Binding SelectedWorkingDirectory, Mode=TwoWay}"
                              AutomationProperties.LabeledBy="{Binding #ProfileCwdLabel}"
                              PlaceholderText="empty = user home" />
                 </Grid>
 
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Environment overrides">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.EnvironmentOverrides}">
                     <TextBlock Grid.Column="0" Name="ProfileEnvLabel" Text="Environment" VerticalAlignment="Top" Margin="0,4,0,0" />
                     <TextBox Grid.Column="1" Text="{Binding SelectedEnvironmentText, Mode=TwoWay}"
                              AutomationProperties.LabeledBy="{Binding #ProfileEnvLabel}"
@@ -65,7 +65,7 @@
                              PlaceholderText="KEY=VALUE per line" />
                 </Grid>
 
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Color scheme">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.ColorScheme}">
                     <TextBlock Grid.Column="0" Name="ProfileSchemeLabel" Text="Color scheme" VerticalAlignment="Center" />
                     <themeControls:NativeDropdown Grid.Column="1"
                                                   ItemsSource="{Binding ColorSchemes}"
@@ -74,21 +74,21 @@
                                                   HorizontalAlignment="Stretch" />
                 </Grid>
 
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Font families">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontFamilies}">
                     <TextBlock Grid.Column="0" Name="ProfileFontFamiliesLabel" Text="Font families" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1" Text="{Binding SelectedFontFamiliesText, Mode=TwoWay}"
                              AutomationProperties.LabeledBy="{Binding #ProfileFontFamiliesLabel}"
                              PlaceholderText="comma-separated (empty = default)" />
                 </Grid>
 
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Font size">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontSize}">
                     <TextBlock Grid.Column="0" Name="ProfileFontSizeLabel" Text="Font size" VerticalAlignment="Center" />
                     <TextBox Grid.Column="1" Text="{Binding SelectedFontSizeText, Mode=TwoWay}"
                              AutomationProperties.LabeledBy="{Binding #ProfileFontSizeLabel}"
                              PlaceholderText="points (empty = default)" />
                 </Grid>
 
-                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="Window effect">
+                <Grid ColumnDefinitions="140,*" dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.WindowEffect}">
                     <TextBlock Grid.Column="0" Name="ProfileWindowEffectLabel" Text="Window effect" VerticalAlignment="Center" />
                     <themeControls:NativeDropdown Grid.Column="1"
                                                   ItemsSource="{Binding WindowEffects}"
@@ -98,7 +98,7 @@
                 </Grid>
 
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
-                            dialogs:SettingsSearch.Label="Default profile">
+                            dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.DefaultProfile}">
                     <Button Content="Set as default" Click="SetDefaultButton_Click"
                             AutomationProperties.Name="Set as default profile"
                             IsEnabled="{Binding !IsSelectedDefault}" />

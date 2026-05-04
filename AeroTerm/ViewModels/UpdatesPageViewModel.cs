@@ -9,13 +9,14 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using AeroTerm.Dialogs;
 using AeroTerm.Services;
 
 /// <summary>
 /// View model for the Updates settings page. Displays the current version,
 /// channel selection, update check status, and available update actions.
 /// </summary>
-internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPropertyChanged
+internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPropertyChanged, ISettingsPageLifecycle
 {
     private readonly AppSettings settings;
     private readonly IUpdateService updateService;
@@ -62,17 +63,16 @@ internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPrope
     /// <inheritdoc/>
     public override System.Collections.Generic.IReadOnlyList<string> SearchableLabels { get; } = new[]
     {
-        "Current version",
-        "Channel",
-        "Stable",
-        "CI",
-        "Check for updates automatically",
-        "Last checked",
-        "Update status",
+        SettingsSearchLabels.CurrentVersion,
+        SettingsSearchLabels.UpdateChannel,
+        SettingsSearchLabels.CheckForUpdatesAutomatically,
+        SettingsSearchLabels.LastChecked,
+        SettingsSearchLabels.UpdateStatus,
         "Download",
         "Restart to Update",
         "Skip This Version",
         "Release Notes",
+        SettingsSearchLabels.CheckForUpdates,
     };
 
     /// <summary>
@@ -206,7 +206,7 @@ internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPrope
     /// <summary>
     /// Saves update-related settings when the dialog is accepted.
     /// </summary>
-    public void SaveToSettings()
+    public void Commit()
     {
         this.settings.AutoCheckForUpdates = this.AutoCheckForUpdates;
     }

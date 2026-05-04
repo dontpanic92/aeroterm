@@ -8,7 +8,7 @@
              x:DataType="vm:UpdatesPageViewModel">
     <StackPanel Spacing="12">
         <!-- Current version -->
-        <StackPanel dialogs:SettingsSearch.Label="Current version"
+        <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.CurrentVersion}"
                     Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Current version:" FontWeight="SemiBold" VerticalAlignment="Center" />
             <TextBlock Text="{Binding VersionText}" VerticalAlignment="Center" />
@@ -23,7 +23,7 @@
         </Border>
 
         <!-- Channel selector -->
-        <StackPanel dialogs:SettingsSearch.Label="Channel Stable CI"
+        <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.UpdateChannel}"
                     Orientation="Horizontal" Spacing="6"
                     IsEnabled="{Binding SupportsAutoUpdate}">
             <TextBlock Text="Channel:" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -35,17 +35,17 @@
         </StackPanel>
 
         <!-- Auto-check toggle -->
-        <CheckBox dialogs:SettingsSearch.Label="Check for updates automatically"
+        <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.CheckForUpdatesAutomatically}"
                   IsChecked="{Binding AutoCheckForUpdates}"
                   Content="Check for updates automatically at startup" />
 
         <!-- Last checked -->
-        <TextBlock dialogs:SettingsSearch.Label="Last checked"
+        <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LastChecked}"
                    Text="{Binding LastCheckedText, StringFormat='Last checked: {0}'}"
                    Foreground="Gray" FontSize="12" />
 
         <!-- Update status panel -->
-        <Border dialogs:SettingsSearch.Label="Update status download restart skip release notes"
+        <Border dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.UpdateStatus}"
                 BorderBrush="LightGray" BorderThickness="1" CornerRadius="4"
                 Padding="12" Margin="0,4,0,0">
             <StackPanel Spacing="8">
@@ -99,7 +99,7 @@
         </Border>
 
         <!-- Check button -->
-        <Button dialogs:SettingsSearch.Label="Check for Updates"
+        <Button dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.CheckForUpdates}"
                 Content="Check for Updates"
                 AutomationProperties.Name="Check for updates"
                 Click="CheckForUpdates_Click"

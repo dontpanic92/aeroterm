@@ -10,17 +10,17 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using AeroTerm.Dialogs;
 using AeroTerm.Models;
 using AeroTerm.Services;
 using AeroTerm.Utilities;
 using AeroTerm.WindowEffects;
-using Avalonia;
 using Avalonia.Media;
 
 /// <summary>
-/// View model for the Appearance settings page.
+/// View model for visual appearance settings.
 /// </summary>
 internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPropertyChanged
 {
@@ -35,13 +35,6 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     private double fontSize;
     private int selectedFontIndex = -1;
     private ColorScheme selectedColorScheme;
-    private BellAction bellAction;
-    private int scrollbackLines;
-    private bool confirmOnClose;
-    private bool middleClickPastes;
-    private TabBarOrientation tabBarOrientation;
-    private bool quakeModeEnabled;
-    private string quakeHotkey = string.Empty;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AppearancePageViewModel"/> class.
@@ -68,14 +61,6 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         this.selectedColorScheme = ColorSchemePresets.FindByName(settings.ColorSchemeName)
             ?? ColorSchemePresets.Default;
 
-        this.bellAction = settings.BellAction;
-        this.scrollbackLines = settings.ScrollbackLines;
-        this.confirmOnClose = settings.ConfirmOnClose;
-        this.middleClickPastes = settings.MiddleClickPastes;
-        this.tabBarOrientation = settings.TabBarOrientation;
-        this.quakeModeEnabled = settings.QuakeModeEnabled;
-        this.quakeHotkey = settings.QuakeHotkey;
-
         this.FontItems.CollectionChanged += this.OnFontItemsChanged;
     }
 
@@ -88,25 +73,20 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     /// <inheritdoc/>
     public override IReadOnlyList<string> SearchableLabels { get; } = new[]
     {
-        "Window Transparency",
-        "Blur",
-        "Acrylic",
-        "Mica",
-        "Material Tone",
-        "Background Opacity",
-        "Tint Opacity",
-        "Material Opacity",
-        "Font Ligature",
-        "Font Size",
-        "Font Priority",
-        "Color Scheme",
-        "Bell",
-        "Scrollback lines",
-        "Ligature preview",
-        "Confirm on close",
-        "Middle-click paste",
-        "Quake mode",
-        "Quake hotkey",
+        SettingsSearchLabels.WindowTransparency,
+        SettingsSearchLabels.TransparentBlur,
+        SettingsSearchLabels.GaussianBlur,
+        SettingsSearchLabels.AcrylicBlur,
+        SettingsSearchLabels.Mica,
+        SettingsSearchLabels.LiquidGlass,
+        SettingsSearchLabels.MaterialTone,
+        SettingsSearchLabels.TintOpacity,
+        SettingsSearchLabels.MaterialOpacity,
+        SettingsSearchLabels.FontLigature,
+        SettingsSearchLabels.FontSize,
+        SettingsSearchLabels.FontPriority,
+        SettingsSearchLabels.LigaturePreview,
+        SettingsSearchLabels.ColorScheme,
     };
 
     /// <summary>
@@ -156,10 +136,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     public string LigaturePreviewLine3 => "─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼   ═ ║ ╔ ╗ ╚ ╝";
 
     /// <summary>
-    /// Gets the effective <see cref="Avalonia.Media.FontFamily"/> used by the
-    /// ligature preview. Expands the user font list (including the
-    /// <c>$SYSTEM_MONO</c> sentinel) into a comma-separated Avalonia font
-    /// family chain so that the preview matches what the terminal resolves.
+    /// Gets the effective <see cref="FontFamily"/> used by the ligature preview.
     /// </summary>
     public FontFamily PreviewFontFamily
     {
@@ -176,18 +153,14 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     }
 
     /// <summary>
-    /// Gets the font feature overrides applied to the ligature preview. Returns
-    /// <see langword="null"/> when ligatures are enabled (so the font's default
-    /// OpenType features apply) and a collection that disables <c>liga</c>,
-    /// <c>clig</c>, and <c>calt</c> when ligatures are disabled.
+    /// Gets the font feature overrides applied to the ligature preview.
     /// </summary>
     public FontFeatureCollection? PreviewFontFeatures
         => this.EnableLigature ? null : FontFeatureCollection.Parse("liga=0,clig=0,calt=0");
 
     /// <summary>
     /// Gets the font priority list items. Each item is either a plain
-    /// <see cref="string"/> (user font) or a <see cref="FontPriorityItem"/>
-    /// (sentinel such as <c>$SYSTEM_MONO</c>).
+    /// <see cref="string"/> or a <see cref="FontPriorityItem"/>.
     /// </summary>
     public ObservableCollection<object> FontItems { get; } = new();
 
@@ -266,9 +239,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     }
 
     /// <summary>
-    /// Gets or sets the tonal variant (light or dark) of the platform
-    /// material backdrop. See
-    /// <see cref="AppSettings.MaterialTone"/>.
+    /// Gets or sets the tonal variant of the platform material backdrop.
     /// </summary>
     public MaterialTone MaterialTone
     {
@@ -283,9 +254,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     }
 
     /// <summary>
-    /// Gets or sets the opacity of the tint color layered over the
-    /// platform blur backdrop. See
-    /// <see cref="AppSettings.BackgroundTintOpacity"/>.
+    /// Gets or sets the opacity of the tint color layered over the backdrop.
     /// </summary>
     public double BackgroundTintOpacity
     {
@@ -301,9 +270,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     }
 
     /// <summary>
-    /// Gets or sets the opacity of the overall material layer over the
-    /// platform blur backdrop. See
-    /// <see cref="AppSettings.BackgroundMaterialOpacity"/>.
+    /// Gets or sets the opacity of the overall material layer over the backdrop.
     /// </summary>
     public double BackgroundMaterialOpacity
     {
@@ -386,212 +353,12 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     public bool IsOpacityEnabled => this.EnableBlurBehind;
 
     /// <summary>
-    /// Gets a value indicating whether the Material Tone radio buttons
-    /// should be enabled. Disabled when blur is off (no material) or
-    /// when <see cref="BlurType.Transparent"/> is selected (a fully
-    /// transparent backdrop has no tonal variant).
+    /// Gets a value indicating whether the Material Tone radio buttons should be enabled.
     /// </summary>
     public bool IsMaterialToneEnabled => this.EnableBlurBehind && this.BlurType != BlurType.Transparent;
 
     /// <summary>
-    /// Gets the available bell-action choices for data binding.
-    /// </summary>
-    public IReadOnlyList<BellAction> BellActions { get; } = new[]
-    {
-        BellAction.None,
-        BellAction.Visual,
-        BellAction.Audio,
-        BellAction.Notification,
-        BellAction.VisualAndAudio,
-        BellAction.All,
-    };
-
-    /// <summary>
-    /// Gets or sets how the app reacts to the terminal BEL character.
-    /// </summary>
-    public BellAction BellAction
-    {
-        get => this.bellAction;
-        set
-        {
-            if (this.SetField(ref this.bellAction, value))
-            {
-                this.settings.BellAction = value;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the number of lines retained in the terminal's scrollback
-    /// ring. Range is <c>0..1_000_000</c>; <c>0</c> disables scrollback.
-    /// </summary>
-    public int ScrollbackLines
-    {
-        get => this.scrollbackLines;
-        set
-        {
-            int clamped = Math.Clamp(value, 0, 1_000_000);
-            if (this.SetField(ref this.scrollbackLines, clamped))
-            {
-                this.settings.ScrollbackLines = clamped;
-                this.OnPropertyChanged(nameof(this.ScrollbackDisabledWarningVisible));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether the "scrollback disabled" warning
-    /// should be shown next to the scrollback input. Bound to <c>Visible</c>
-    /// via a boolean-to-visibility converter in the page.
-    /// </summary>
-    public bool ScrollbackDisabledWarningVisible => this.scrollbackLines == 0;
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the application should prompt
-    /// the user before closing a window that still contains more than one
-    /// open tab.
-    /// </summary>
-    public bool ConfirmOnClose
-    {
-        get => this.confirmOnClose;
-        set
-        {
-            if (this.SetField(ref this.confirmOnClose, value))
-            {
-                this.settings.ConfirmOnClose = value;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether middle-click inside the
-    /// terminal pastes text. On Linux/X11 the source is the PRIMARY
-    /// selection, with a fallback to the regular clipboard; on macOS and
-    /// Windows the regular clipboard is always used.
-    /// </summary>
-    public bool MiddleClickPastes
-    {
-        get => this.middleClickPastes;
-        set
-        {
-            if (this.SetField(ref this.middleClickPastes, value))
-            {
-                this.settings.MiddleClickPastes = value;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets the fixed list of tab-bar orientation choices surfaced in the
-    /// settings UI. Order determines the display order in the UI combo.
-    /// </summary>
-    public IReadOnlyList<TabBarOrientation> TabBarOrientations { get; } = new[]
-    {
-        TabBarOrientation.Horizontal,
-        TabBarOrientation.Vertical,
-    };
-
-    /// <summary>
-    /// Gets or sets the tab-bar orientation. Setting this writes straight
-    /// through to <see cref="AppSettings.TabBarOrientation"/>, which
-    /// raises a property change that <c>MainWindow</c> listens for to
-    /// re-dock the tab strip live.
-    /// </summary>
-    public TabBarOrientation TabBarOrientation
-    {
-        get => this.tabBarOrientation;
-        set
-        {
-            if (this.SetField(ref this.tabBarOrientation, value))
-            {
-                this.settings.TabBarOrientation = value;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the Quake-mode global
-    /// hotkey is active.
-    /// </summary>
-    public bool QuakeModeEnabled
-    {
-        get => this.quakeModeEnabled;
-        set
-        {
-            if (this.SetField(ref this.quakeModeEnabled, value))
-            {
-                this.settings.QuakeModeEnabled = value;
-                this.OnPropertyChanged(nameof(this.QuakeHotkeyStatus));
-                this.OnPropertyChanged(nameof(this.QuakeHotkeyStatusBrush));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets or sets the chord string bound to the Quake hotkey.
-    /// </summary>
-    public string QuakeHotkey
-    {
-        get => this.quakeHotkey;
-        set
-        {
-            string normalized = value ?? string.Empty;
-            if (this.SetField(ref this.quakeHotkey, normalized))
-            {
-                if (KeyChordParser.TryParse(normalized, out _))
-                {
-                    this.settings.QuakeHotkey = normalized;
-                }
-
-                this.OnPropertyChanged(nameof(this.QuakeHotkeyStatus));
-                this.OnPropertyChanged(nameof(this.QuakeHotkeyStatusBrush));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets a short status string describing whether the current
-    /// <see cref="QuakeHotkey"/> string is a valid chord.
-    /// </summary>
-    public string QuakeHotkeyStatus =>
-        KeyChordParser.TryParse(this.quakeHotkey, out _) ? "✓ valid" : "✗ invalid chord";
-
-    /// <summary>
-    /// Gets the brush used to render <see cref="QuakeHotkeyStatus"/>
-    /// (green for valid, red for invalid).
-    /// </summary>
-    public IBrush QuakeHotkeyStatusBrush =>
-        KeyChordParser.TryParse(this.quakeHotkey, out _)
-            ? ResolveApplicationThemeBrush("SuccessFillBrush", Color.FromRgb(0x2E, 0xA0, 0x43))
-            : ResolveApplicationThemeBrush("DangerFillBrush", Color.FromRgb(0xC0, 0x39, 0x2B));
-
-    /// <summary>
-    /// Gets a platform-specific warning displayed when Quake-mode cannot
-    /// be used on the current OS / session. Empty string when the feature
-    /// is available.
-    /// </summary>
-    public string QuakePlatformWarning
-    {
-        get
-        {
-            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
-            {
-                return "Quake mode is not yet supported on Linux — the global hotkey backend for X11/Wayland has not shipped.";
-            }
-
-            return string.Empty;
-        }
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether <see cref="QuakePlatformWarning"/>
-    /// is non-empty.
-    /// </summary>
-    public bool HasQuakePlatformWarning => !string.IsNullOrEmpty(this.QuakePlatformWarning);
-
-    /// <summary>
     /// Adds a font name to the priority list at the current selection index.
-    /// Called by the view after the user picks a font from the font picker dialog.
     /// </summary>
     /// <param name="fontName">The font family name to add.</param>
     public void AddFont(string fontName)
@@ -654,24 +421,6 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             this.SelectedFontIndex = index + 1;
             this.UpdateFontPriorityLive();
         }
-    }
-
-    private static IBrush ResolveApplicationThemeBrush(string key, Color fallback)
-    {
-        if (Application.Current is { } app && app.TryGetResource(key, null, out var value))
-        {
-            if (value is IBrush brush)
-            {
-                return brush;
-            }
-
-            if (value is Color color)
-            {
-                return new SolidColorBrush(color);
-            }
-        }
-
-        return new SolidColorBrush(fallback);
     }
 
     private static string? GetRawFontEntry(object? item)
