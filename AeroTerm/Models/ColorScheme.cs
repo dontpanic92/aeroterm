@@ -25,4 +25,10 @@ public sealed record ColorScheme(string Name, int Foreground, int Background, in
     /// foreground color.
     /// </summary>
     public int? Selection { get; init; }
+
+    /// <inheritdoc/>
+    public override string ToString()
+    {
+        return this.Name;
+    }
 }
