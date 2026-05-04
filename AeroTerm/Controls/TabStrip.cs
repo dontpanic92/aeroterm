@@ -14,6 +14,7 @@ using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
@@ -21,6 +22,7 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Transformation;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using ThemeNativeContextMenu = AeroTerm.Theme.Controls.NativeContextMenu;
@@ -173,6 +175,7 @@ public sealed class TabStrip : UserControl
         this.dividerBrush = this.ResolveThemeBrush("TabStripDividerBrush", Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
         this.closeHoverBrush = this.ResolveThemeBrush("TabStripCloseHoverBrush", Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF));
         this.activeAccentBrush = this.ResolveThemeBrush("TabStripActiveAccentBrush", Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF));
+        this.InstallTabCloseButtonStyles();
         this.tabsPanel = new TabHeaderPanel
         {
             Orientation = Orientation.Horizontal,
@@ -766,6 +769,41 @@ public sealed class TabStrip : UserControl
         // Foreground in every interactive state.
         resources["AeroTermSplitButtonPartForegroundBrush"] = this.tabForegroundBrush;
         resources["AeroTermSplitButtonSeparatorBrush"] = Brushes.Transparent;
+    }
+
+    /// <summary>
+    /// Installs hover/pressed styles for per-tab close buttons (class
+    /// "tab-close"). The default <see cref="Button"/> ControlTheme sets
+    /// the templated ContentPresenter's Background to
+    /// <c>ControlFillHoverBrush</c> on hover, which would otherwise win
+    /// over a plain <c>Button.Background</c> assignment and hide the
+    /// scheme-derived close-hover tint. Targeting the templated
+    /// ContentPresenter at matching specificity ensures the close button
+    /// uses <see cref="closeHoverBrush"/> on every theme.
+    /// </summary>
+    private void InstallTabCloseButtonStyles()
+    {
+        Style restStyle = new Style(s => s
+            .OfType<Button>().Class("tab-close")
+            .Template().OfType<ContentPresenter>().Name("PART_ContentPresenter"));
+        restStyle.Setters.Add(new Setter(ContentPresenter.BackgroundProperty, Brushes.Transparent));
+        restStyle.Setters.Add(new Setter(ContentPresenter.BorderBrushProperty, Brushes.Transparent));
+
+        Style hoverStyle = new Style(s => s
+            .OfType<Button>().Class("tab-close").Class(":pointerover")
+            .Template().OfType<ContentPresenter>().Name("PART_ContentPresenter"));
+        hoverStyle.Setters.Add(new Setter(ContentPresenter.BackgroundProperty, this.closeHoverBrush));
+        hoverStyle.Setters.Add(new Setter(ContentPresenter.BorderBrushProperty, Brushes.Transparent));
+
+        Style pressedStyle = new Style(s => s
+            .OfType<Button>().Class("tab-close").Class(":pressed")
+            .Template().OfType<ContentPresenter>().Name("PART_ContentPresenter"));
+        pressedStyle.Setters.Add(new Setter(ContentPresenter.BackgroundProperty, this.closeHoverBrush));
+        pressedStyle.Setters.Add(new Setter(ContentPresenter.BorderBrushProperty, Brushes.Transparent));
+
+        this.Styles.Add(restStyle);
+        this.Styles.Add(hoverStyle);
+        this.Styles.Add(pressedStyle);
     }
 
     /// <summary>
@@ -2012,8 +2050,13 @@ public sealed class TabStrip : UserControl
                 Focusable = false,
                 IsVisible = false,
             };
-            this.closeButton.PointerEntered += (_, _) => this.closeButton.Background = owner.closeHoverBrush;
-            this.closeButton.PointerExited += (_, _) => this.closeButton.Background = Brushes.Transparent;
+
+            // Hover/pressed background is supplied by TabStrip.InstallTabCloseButtonStyles
+            // via the "tab-close" class, which targets the templated ContentPresenter at
+            // the same selector specificity as the default Button ControlTheme. Setting
+            // Background on the Button itself would lose to the theme's per-state
+            // ContentPresenter setter and the scheme-derived hover tint would never show.
+            this.closeButton.Classes.Add("tab-close");
             AutomationProperties.SetName(this.closeButton, $"Close tab: {tab.Title}");
             this.closeButton.Click += (_, e) =>
             {

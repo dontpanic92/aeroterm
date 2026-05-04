@@ -17,19 +17,30 @@
             <Setter Property="Foreground" Value="{DynamicResource TitleBarForegroundBrush}" />
             <Setter Property="BorderThickness" Value="0" />
         </Style>
-        <Style Selector="Button.titlebar-btn:pointerover">
+        <!--
+            Hover / pressed Background is set on the templated ContentPresenter
+            so it overrides the default Button ControlTheme, which uses the
+            same selector specificity (^:pointerover /template/ ContentPresenter)
+            with ControlFillHoverBrush. Setting Background on the Button itself
+            would lose to the theme setter.
+        -->
+        <Style Selector="Button.titlebar-btn:pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource TitleBarButtonHoverBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
-        <Style Selector="Button.titlebar-btn:pressed">
+        <Style Selector="Button.titlebar-btn:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource TitleBarButtonPressedBrush}" />
+            <Setter Property="BorderBrush" Value="Transparent" />
         </Style>
-        <Style Selector="Button.titlebar-close:pointerover">
+        <Style Selector="Button.titlebar-close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource TitleBarCloseHoverBrush}" />
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="TextElement.Foreground" Value="White" />
         </Style>
-        <Style Selector="Button.titlebar-close:pressed">
+        <Style Selector="Button.titlebar-close:pressed /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource TitleBarClosePressedBrush}" />
-            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="TextElement.Foreground" Value="White" />
         </Style>
     </Window.Styles>
 

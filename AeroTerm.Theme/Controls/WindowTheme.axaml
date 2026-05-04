@@ -11,15 +11,27 @@
     <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
     <Setter Property="Template">
       <ControlTemplate>
-        <VisualLayerManager Name="PART_VisualLayerManager"
-                            EnableOverlayLayer="False">
-          <ContentPresenter Name="PART_ContentPresenter"
-                            Margin="{TemplateBinding Padding}"
-                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
-                            Content="{TemplateBinding Content}"
-                            ContentTemplate="{TemplateBinding ContentTemplate}" />
-        </VisualLayerManager>
+        <!--
+          Wrap ContentPresenter in a Panel with a dedicated Background border so
+          the Window's Background property (SurfaceBackgroundBrush by default)
+          actually paints. Avalonia's default Window template does this via the
+          internal Window chrome, but a bare ControlTemplate must render it
+          explicitly — otherwise dialogs that don't override Window.Template
+          (e.g. SettingsWindow) appear transparent on platforms where the OS
+          window itself is transparent (Windows with TransparencyLevelHint).
+        -->
+        <Panel>
+          <Border Background="{TemplateBinding Background}" />
+          <VisualLayerManager Name="PART_VisualLayerManager"
+                              EnableOverlayLayer="False">
+            <ContentPresenter Name="PART_ContentPresenter"
+                              Margin="{TemplateBinding Padding}"
+                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                              Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}" />
+          </VisualLayerManager>
+        </Panel>
       </ControlTemplate>
     </Setter>
     </ControlTheme>
