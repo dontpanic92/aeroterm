@@ -7,6 +7,7 @@ namespace AeroTerm.Tests;
 
 using System.IO;
 using System.Text.Json;
+using AeroTerm.Diagnostics;
 using AeroTerm.Services;
 using AeroTerm.WindowEffects;
 using NUnit.Framework;
@@ -329,5 +330,94 @@ public class AppSettingsTests
         var loadedLight = JsonSerializer.Deserialize(JsonSerializer.Serialize(light, ctx), ctx);
         Assert.That(loadedLight, Is.Not.Null);
         Assert.That(loadedLight!.MaterialTone, Is.EqualTo(MaterialTone.Light));
+    }
+
+    /// <summary>
+    /// Malformed persisted settings are logged and fall back to a default
+    /// instance instead of preventing startup.
+    /// </summary>
+    [Test]
+    public void Load_MalformedJson_LogsAndFallsBackToDefaults()
+    {
+        string settingsDirectory = CreateTemporaryDirectory();
+        string logDirectory = CreateTemporaryDirectory();
+        string logPath = string.Empty;
+
+        try
+        {
+            Directory.CreateDirectory(settingsDirectory);
+            File.WriteAllText(Path.Combine(settingsDirectory, "settings.json"), "{");
+
+            AppLogger.Initialize(new FileLogger(logDirectory));
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+
+            var settings = AppSettings.Default;
+            logPath = AppLogger.LogFilePath ?? string.Empty;
+
+            Assert.That(settings.FontSize, Is.EqualTo(11));
+            Assert.That(settings.ConfirmOnClose, Is.True);
+            Assert.That(settings.LastPersistenceError, Is.Not.Empty);
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+            AppSettings.ResetForTesting();
+        }
+
+        string log = File.ReadAllText(logPath);
+        Assert.That(log, Does.Contain("Failed to load settings from"));
+        Assert.That(log, Does.Contain("using default settings"));
+        Assert.That(log, Does.Contain("settings.json"));
+
+        Directory.Delete(settingsDirectory, recursive: true);
+        Directory.Delete(logDirectory, recursive: true);
+    }
+
+    /// <summary>
+    /// A JSON <c>null</c> settings file is treated as an invalid load result,
+    /// logged, and replaced by default settings.
+    /// </summary>
+    [Test]
+    public void Load_JsonNull_LogsAndFallsBackToDefaults()
+    {
+        string settingsDirectory = CreateTemporaryDirectory();
+        string logDirectory = CreateTemporaryDirectory();
+        string logPath = string.Empty;
+
+        try
+        {
+            Directory.CreateDirectory(settingsDirectory);
+            File.WriteAllText(Path.Combine(settingsDirectory, "settings.json"), "null");
+
+            AppLogger.Initialize(new FileLogger(logDirectory));
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+
+            var settings = AppSettings.Default;
+            logPath = AppLogger.LogFilePath ?? string.Empty;
+
+            Assert.That(settings.FontSize, Is.EqualTo(11));
+            Assert.That(settings.ConfirmOnClose, Is.True);
+            Assert.That(settings.LastPersistenceError, Is.EqualTo("Settings file did not contain an object."));
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+            AppSettings.ResetForTesting();
+        }
+
+        string log = File.ReadAllText(logPath);
+        Assert.That(log, Does.Contain("Failed to load settings from"));
+        Assert.That(log, Does.Contain("using default settings"));
+        Assert.That(log, Does.Contain("Settings file did not contain an object."));
+
+        Directory.Delete(settingsDirectory, recursive: true);
+        Directory.Delete(logDirectory, recursive: true);
+    }
+
+    private static string CreateTemporaryDirectory()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "AeroTermTests", Path.GetRandomFileName());
+        Directory.CreateDirectory(path);
+        return path;
     }
 }

@@ -520,19 +520,33 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
 
     private static AppSettings Load()
     {
+        string settingsPath = GetSettingsPath();
         try
         {
-            string settingsPath = GetSettingsPath();
             if (File.Exists(settingsPath))
             {
                 var json = File.ReadAllText(settingsPath);
                 json = MigrateLegacyJson(json);
-                return JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings) as AppSettings ?? new AppSettings();
+                var settings = JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings) as AppSettings;
+                if (settings is null)
+                {
+                    const string Error = "Settings file did not contain an object.";
+                    AppLogger.For<AppSettings>().LogWarning(
+                        "Failed to load settings from {Path}: {Message}; using default settings.",
+                        settingsPath,
+                        Error);
+                    return new AppSettings
+                    {
+                        LastPersistenceError = Error,
+                    };
+                }
+
+                return settings;
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or JsonException)
         {
-            AppLogger.For<AppSettings>().LogError(ex, "Failed to load settings.");
+            AppLogger.For<AppSettings>().LogWarning(ex, "Failed to load settings from {Path}; using default settings.", settingsPath);
             return new AppSettings
             {
                 LastPersistenceError = ex.Message,
