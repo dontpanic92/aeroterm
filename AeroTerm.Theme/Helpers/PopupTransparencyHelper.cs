@@ -34,8 +34,10 @@ using Avalonia.Threading;
 /// supports on non-Liquid-Glass paths, giving us:
 /// </para>
 /// <list type="bullet">
-///   <item>Windows 11 — Mica.</item>
-///   <item>Windows 10 — Acrylic Blur.</item>
+///   <item>Windows/Linux rounded opaque menus — Transparent host, avoiding
+///   square backdrop corners around the rounded menu chrome.</item>
+///   <item>Windows 11 non-menu popups — Mica.</item>
+///   <item>Windows 10 non-menu popups — Acrylic Blur.</item>
 ///   <item>macOS &lt; 26 — Avalonia's Acrylic Blur / vibrancy.</item>
 ///   <item>Linux — Blur if the compositor supports it, otherwise Transparent.</item>
 /// </list>
@@ -48,6 +50,11 @@ using Avalonia.Threading;
 public static class PopupTransparencyHelper
 {
     private static readonly IReadOnlyList<WindowTransparencyLevel> LiquidGlassLevels = new[]
+    {
+        WindowTransparencyLevel.Transparent,
+    };
+
+    private static readonly IReadOnlyList<WindowTransparencyLevel> TransparentLevels = new[]
     {
         WindowTransparencyLevel.Transparent,
     };
@@ -74,6 +81,21 @@ public static class PopupTransparencyHelper
 
         initialized = true;
         Popup.IsOpenProperty.Changed.AddClassHandler<Popup>(OnPopupIsOpenChanged);
+    }
+
+    /// <summary>
+    /// Determines whether a popup child has its own opaque rounded menu chrome.
+    /// </summary>
+    /// <param name="child">The popup child visual.</param>
+    /// <returns>
+    /// <see langword="true"/> when the popup host should remain transparent
+    /// instead of receiving a square blur/backdrop surface.
+    /// </returns>
+    internal static bool UsesOpaqueRoundedMenuChrome(Visual child)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        return child is ContextMenu or MenuFlyoutPresenter
+            || child is Border { Name: "PART_MenuPopupChrome" };
     }
 
     private static void OnPopupIsOpenChanged(Popup popup, AvaloniaPropertyChangedEventArgs e)
@@ -121,6 +143,12 @@ public static class PopupTransparencyHelper
                 ApplyLiquidGlassChrome(child);
                 return;
             }
+        }
+
+        if (UsesOpaqueRoundedMenuChrome(child))
+        {
+            topLevel.TransparencyLevelHint = TransparentLevels;
+            return;
         }
 
         // Non-macOS, pre-macOS 26, or interop unavailable: ask Avalonia for

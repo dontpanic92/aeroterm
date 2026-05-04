@@ -45,6 +45,7 @@
   <!-- Tier C — popups / menus -->
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/FlyoutPresenterTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/MenuFlyoutPresenterTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/MenuTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/MenuItemTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/ContextMenuTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/MenuFlyoutTheme.axaml" />

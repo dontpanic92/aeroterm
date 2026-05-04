@@ -71,6 +71,21 @@
   <SolidColorBrush x:Key="ListItemSelectedBrush" Color="{DynamicResource ListItemSelectedColor}" />
   <SolidColorBrush x:Key="ListItemSelectedHoverBrush" Color="{DynamicResource ListItemSelectedHoverColor}" />
 
+  <!-- Menus -->
+  <SolidColorBrush x:Key="MenuBarBackgroundBrush" Color="{DynamicResource MenuBarBackgroundColor}" />
+  <SolidColorBrush x:Key="MenuBarItemHoverBrush" Color="{DynamicResource MenuBarItemHoverColor}" />
+  <SolidColorBrush x:Key="MenuBarItemPressedBrush" Color="{DynamicResource MenuBarItemPressedColor}" />
+  <SolidColorBrush x:Key="MenuPopupBackgroundBrush" Color="{DynamicResource MenuPopupBackgroundColor}" />
+  <SolidColorBrush x:Key="MenuPopupBorderBrush" Color="{DynamicResource MenuPopupBorderColor}" />
+  <SolidColorBrush x:Key="MenuItemHoverBrush" Color="{DynamicResource MenuItemHoverColor}" />
+  <SolidColorBrush x:Key="MenuItemPressedBrush" Color="{DynamicResource MenuItemPressedColor}" />
+  <SolidColorBrush x:Key="MenuItemForegroundBrush" Color="{DynamicResource MenuItemForegroundColor}" />
+  <SolidColorBrush x:Key="MenuItemSecondaryForegroundBrush" Color="{DynamicResource MenuItemSecondaryForegroundColor}" />
+  <SolidColorBrush x:Key="MenuItemDisabledForegroundBrush" Color="{DynamicResource MenuItemDisabledForegroundColor}" />
+  <SolidColorBrush x:Key="MenuSeparatorBrush" Color="{DynamicResource MenuSeparatorColor}" />
+  <SolidColorBrush x:Key="MenuGlyphBrush" Color="{DynamicResource MenuGlyphColor}" />
+  <SolidColorBrush x:Key="MenuAccentGlyphBrush" Color="{DynamicResource MenuAccentGlyphColor}" />
+
   <!-- Title bar -->
   <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="{DynamicResource TitleBarForegroundColor}" />
   <SolidColorBrush x:Key="TitleBarButtonHoverBrush" Color="{DynamicResource TitleBarButtonHoverColor}" />

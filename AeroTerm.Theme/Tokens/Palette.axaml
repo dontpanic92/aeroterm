@@ -75,6 +75,21 @@
       <Color x:Key="ListItemSelectedColor">#FFD4E2FF</Color>
       <Color x:Key="ListItemSelectedHoverColor">#FFC2D6FF</Color>
 
+      <!-- Menus (Visual Studio-style light chrome) -->
+      <Color x:Key="MenuBarBackgroundColor">#FFEDE1BA</Color>
+      <Color x:Key="MenuBarItemHoverColor">#FFE6DAB4</Color>
+      <Color x:Key="MenuBarItemPressedColor">#FFDCD0AA</Color>
+      <Color x:Key="MenuPopupBackgroundColor">#FFFFFEFC</Color>
+      <Color x:Key="MenuPopupBorderColor">#FFE1DCCF</Color>
+      <Color x:Key="MenuItemHoverColor">#FFF0EFED</Color>
+      <Color x:Key="MenuItemPressedColor">#FFE9E8E6</Color>
+      <Color x:Key="MenuItemForegroundColor">#FF222222</Color>
+      <Color x:Key="MenuItemSecondaryForegroundColor">#FF4E4E4D</Color>
+      <Color x:Key="MenuItemDisabledForegroundColor">#FF9A9998</Color>
+      <Color x:Key="MenuSeparatorColor">#FFEBEAE8</Color>
+      <Color x:Key="MenuGlyphColor">#FF222222</Color>
+      <Color x:Key="MenuAccentGlyphColor">#FF0C74C3</Color>
+
       <!-- Title bar -->
       <Color x:Key="TitleBarForegroundColor">#FF1E1F22</Color>
       <Color x:Key="TitleBarButtonHoverColor">#19000000</Color>
@@ -173,6 +188,21 @@
       <Color x:Key="ListItemPressedColor">#FF43464C</Color>
       <Color x:Key="ListItemSelectedColor">#FF2E436E</Color>
       <Color x:Key="ListItemSelectedHoverColor">#FF3A537F</Color>
+
+      <!-- Menus -->
+      <Color x:Key="MenuBarBackgroundColor">#FF2B2D30</Color>
+      <Color x:Key="MenuBarItemHoverColor">#FF393B40</Color>
+      <Color x:Key="MenuBarItemPressedColor">#FF43464C</Color>
+      <Color x:Key="MenuPopupBackgroundColor">#FF2B2D30</Color>
+      <Color x:Key="MenuPopupBorderColor">#FF43464C</Color>
+      <Color x:Key="MenuItemHoverColor">#FF393B40</Color>
+      <Color x:Key="MenuItemPressedColor">#FF43464C</Color>
+      <Color x:Key="MenuItemForegroundColor">#FFDFE1E5</Color>
+      <Color x:Key="MenuItemSecondaryForegroundColor">#FF9DA0A8</Color>
+      <Color x:Key="MenuItemDisabledForegroundColor">#FF555861</Color>
+      <Color x:Key="MenuSeparatorColor">#FF43464C</Color>
+      <Color x:Key="MenuGlyphColor">#FFDFE1E5</Color>
+      <Color x:Key="MenuAccentGlyphColor">#FF548AF7</Color>
 
       <!-- Title bar -->
       <Color x:Key="TitleBarForegroundColor">#FFDFE1E5</Color>

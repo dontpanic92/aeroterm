@@ -4,14 +4,14 @@
     <ResourceDictionary>
   <ControlTheme x:Key="{x:Type MenuFlyoutPresenter}"
                 TargetType="MenuFlyoutPresenter">
-    <Setter Property="Background" Value="{DynamicResource SurfaceOverlayBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource StrokeDefaultBrush}" />
+    <Setter Property="Background" Value="{DynamicResource MenuPopupBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource MenuPopupBorderBrush}" />
     <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusMd}" />
-    <Setter Property="Padding" Value="3" />
+    <Setter Property="CornerRadius" Value="{DynamicResource MenuPopupCornerRadius}" />
+    <Setter Property="Padding" Value="{DynamicResource MenuPopupPadding}" />
     <Setter Property="MinWidth" Value="{DynamicResource MenuMinWidth}" />
     <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
-    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource MenuItemForegroundBrush}" />
     <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
     <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
     <Setter Property="Template">
@@ -21,8 +21,9 @@
                 Background="{TemplateBinding Background}"
                 BorderBrush="{TemplateBinding BorderBrush}"
                 BorderThickness="{TemplateBinding BorderThickness}"
-                BoxShadow="{DynamicResource PopupBoxShadow}"
-                CornerRadius="{TemplateBinding CornerRadius}">
+                BoxShadow="{DynamicResource MenuPopupBoxShadow}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                ClipToBounds="True">
           <ScrollViewer HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
                         VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
             <ItemsPresenter Name="PART_ItemsPresenter"

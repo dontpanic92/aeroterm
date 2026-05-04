@@ -20,8 +20,9 @@
     </ResourceDictionary>
   </Styles.Resources>
 
-  <!-- macOS-style menu divider: inset from both edges and tighter vertical rhythm. -->
+  <!-- Visual Studio-style menu divider: inset from both edges and tighter vertical rhythm. -->
   <Style Selector="MenuItem Separator, ContextMenu Separator, MenuFlyoutPresenter Separator">
-    <Setter Property="Margin" Value="10,3" />
+    <Setter Property="Background" Value="{DynamicResource MenuSeparatorBrush}" />
+    <Setter Property="Margin" Value="{DynamicResource MenuSeparatorMargin}" />
   </Style>
 </Styles>

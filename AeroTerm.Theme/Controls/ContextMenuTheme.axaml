@@ -4,16 +4,16 @@
     <ResourceDictionary>
   <ControlTheme x:Key="{x:Type ContextMenu}"
                 TargetType="ContextMenu">
-    <Setter Property="Background" Value="{DynamicResource SurfaceOverlayBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource StrokeDefaultBrush}" />
+    <Setter Property="Background" Value="{DynamicResource MenuPopupBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource MenuPopupBorderBrush}" />
     <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessThin}" />
-    <Setter Property="CornerRadius" Value="{DynamicResource CornerRadiusMd}" />
-    <Setter Property="Padding" Value="3" />
+    <Setter Property="CornerRadius" Value="{DynamicResource MenuPopupCornerRadius}" />
+    <Setter Property="Padding" Value="{DynamicResource MenuPopupPadding}" />
     <Setter Property="MinWidth" Value="{DynamicResource MenuMinWidth}" />
     <Setter Property="Focusable" Value="True" />
     <Setter Property="FontFamily" Value="{DynamicResource FontFamilyUI}" />
-    <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
-    <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeMenu}" />
+    <Setter Property="Foreground" Value="{DynamicResource MenuItemForegroundBrush}" />
     <Setter Property="Template">
       <ControlTemplate>
         <Border MinWidth="{TemplateBinding MinWidth}"
@@ -21,8 +21,9 @@
                 Background="{TemplateBinding Background}"
                 BorderBrush="{TemplateBinding BorderBrush}"
                 BorderThickness="{TemplateBinding BorderThickness}"
-                BoxShadow="{DynamicResource PopupBoxShadow}"
-                CornerRadius="{TemplateBinding CornerRadius}">
+                BoxShadow="{DynamicResource MenuPopupBoxShadow}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                ClipToBounds="True">
           <ScrollViewer HorizontalScrollBarVisibility="Auto"
                         VerticalScrollBarVisibility="Auto">
             <ItemsPresenter Name="PART_ItemsPresenter"

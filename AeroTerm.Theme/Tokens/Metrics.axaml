@@ -7,7 +7,9 @@
   <CornerRadius x:Key="CornerRadiusMd">8</CornerRadius>
   <CornerRadius x:Key="CornerRadiusLg">12</CornerRadius>
   <CornerRadius x:Key="CornerRadiusPill">999</CornerRadius>
-  <CornerRadius x:Key="MenuItemCornerRadius">8</CornerRadius>
+  <CornerRadius x:Key="MenuItemCornerRadius">4</CornerRadius>
+  <CornerRadius x:Key="MenuPopupCornerRadius">6</CornerRadius>
+  <CornerRadius x:Key="MenuBarItemCornerRadius">0</CornerRadius>
 
   <Thickness x:Key="BorderThicknessThin">1</Thickness>
   <Thickness x:Key="BorderThicknessMedium">1.5</Thickness>
@@ -18,6 +20,14 @@
   <Thickness x:Key="ControlPaddingDefault">10,5,10,3</Thickness>
   <Thickness x:Key="ControlPaddingRoomy">14,7,14,5</Thickness>
   <Thickness x:Key="ControlTextBaselinePadding">0,1,0,0</Thickness>
+  <Thickness x:Key="MenuPopupPadding">4</Thickness>
+  <Thickness x:Key="MenuItemPadding">0</Thickness>
+  <Thickness x:Key="MenuItemHeaderPadding">0,1,0,0</Thickness>
+  <Thickness x:Key="MenuBarItemPadding">10,0</Thickness>
+  <Thickness x:Key="MenuBarItemHeaderPadding">0,1,0,0</Thickness>
+  <Thickness x:Key="MenuInputGestureMargin">20,0,8,0</Thickness>
+  <Thickness x:Key="MenuChevronMargin">0,0,8,0</Thickness>
+  <Thickness x:Key="MenuSeparatorMargin">4,4</Thickness>
 
   <sys:Double x:Key="SpacingXs">4</sys:Double>
   <sys:Double x:Key="SpacingSm">8</sys:Double>
@@ -29,6 +39,10 @@
   <sys:Double x:Key="ControlMinHeight">24</sys:Double>
   <sys:Double x:Key="ControlMinWidth">88</sys:Double>
   <sys:Double x:Key="MenuMinWidth">220</sys:Double>
+  <sys:Double x:Key="MenuBarHeight">30</sys:Double>
+  <sys:Double x:Key="MenuItemMinHeight">24</sys:Double>
+  <sys:Double x:Key="MenuIconColumnWidth">30</sys:Double>
+  <sys:Double x:Key="MenuChevronColumnWidth">20</sys:Double>
   <sys:Double x:Key="ScrollBarSize">12</sys:Double>
   <sys:Double x:Key="ScrollBarSizeCollapsed">6</sys:Double>
 
@@ -47,4 +61,5 @@
   <Thickness x:Key="GroupBoxContentPadding">12</Thickness>
 
   <BoxShadows x:Key="PopupBoxShadow">0 4 16 0 #33000000</BoxShadows>
+  <BoxShadows x:Key="MenuPopupBoxShadow">0 3 12 0 #40000000</BoxShadows>
 </ResourceDictionary>
