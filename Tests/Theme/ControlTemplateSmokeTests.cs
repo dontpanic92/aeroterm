@@ -106,6 +106,43 @@ public class ControlTemplateSmokeTests
     }
 
     /// <summary>
+    /// Gets text-entry and picker controls paired with the focus action that activates their focused state.
+    /// </summary>
+    public static IEnumerable<TestCaseData> InputControlCases
+    {
+        get
+        {
+            foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+            {
+                yield return new TestCaseData(
+                    variant,
+                    "TextBox",
+                    new Func<Control>(() => new TextBox { Text = "Text" }),
+                    new Action<Control>(FocusControl))
+                    .SetName($"InputFocusLayout_{variant}_TextBox");
+                yield return new TestCaseData(
+                    variant,
+                    "ComboBox",
+                    new Func<Control>(() => new ComboBox { ItemsSource = new[] { "One", "Two" }, SelectedIndex = 0 }),
+                    new Action<Control>(FocusControl))
+                    .SetName($"InputFocusLayout_{variant}_ComboBox");
+                yield return new TestCaseData(
+                    variant,
+                    "NativeDropdown",
+                    new Func<Control>(CreateNativeDropdown),
+                    new Action<Control>(FocusControl))
+                    .SetName($"InputFocusLayout_{variant}_NativeDropdown");
+                yield return new TestCaseData(
+                    variant,
+                    "NumericUpDown",
+                    new Func<Control>(() => new NumericUpDown { Minimum = 0, Maximum = 10, Value = 3 }),
+                    new Action<Control>(FocusNumericTextBox))
+                    .SetName($"InputFocusLayout_{variant}_NumericUpDown");
+            }
+        }
+    }
+
+    /// <summary>
     /// Verifies a themed control can attach to a headless visual tree and apply its template.
     /// </summary>
     /// <param name="variant">The requested theme variant.</param>
@@ -228,12 +265,12 @@ public class ControlTemplateSmokeTests
     }
 
     /// <summary>
-    /// Verifies NumericUpDown focus is rendered by the outer spinner chrome only.
+    /// Verifies NumericUpDown focus is rendered by the outer overlay only.
     /// </summary>
     /// <param name="variant">The requested theme variant.</param>
     [AvaloniaTest]
     [TestCaseSource(nameof(ThemeVariants))]
-    public void NumericUpDownFocusUsesSingleOuterBorder(ThemeVariant variant)
+    public void NumericUpDownFocusUsesOuterOverlay(ThemeVariant variant)
     {
         var control = new NumericUpDown
         {
@@ -258,6 +295,12 @@ public class ControlTemplateSmokeTests
 
             var spinner = FindTemplatePart<ButtonSpinner>(control, "PART_Spinner");
             var textBox = FindTemplatePart<TextBox>(control, "PART_TextBox");
+            var innerTextBoxBorders = textBox.GetVisualDescendants()
+                .OfType<Border>()
+                .ToHashSet();
+            var focusRing = control.GetVisualDescendants()
+                .OfType<Border>()
+                .Single(border => border.Name == "FocusRing" && !innerTextBoxBorders.Contains(border));
 
             textBox.Focus(NavigationMethod.Tab, KeyModifiers.None);
             PumpJobs();
@@ -266,8 +309,65 @@ public class ControlTemplateSmokeTests
                 .OfType<Border>()
                 .Single(border => border.Name == "LayoutRoot");
 
-            Assert.That(spinner.BorderThickness, Is.EqualTo(new Thickness(2)));
+            Assert.That(spinner.BorderThickness, Is.EqualTo(new Thickness(1)));
+            Assert.That(focusRing.IsVisible, Is.True);
             Assert.That(innerTextBoxBorder.BorderThickness, Is.EqualTo(new Thickness(0)));
+        }
+        finally
+        {
+            window.Close();
+            PumpJobs();
+        }
+    }
+
+    /// <summary>
+    /// Verifies input focus visuals do not change control height or move following content.
+    /// </summary>
+    /// <param name="variant">The requested theme variant.</param>
+    /// <param name="controlName">The display name of the control under test.</param>
+    /// <param name="factory">Factory that creates the control under test.</param>
+    /// <param name="focusAction">Action that activates the focused visual state.</param>
+    [AvaloniaTest]
+    [TestCaseSource(nameof(InputControlCases))]
+    public void InputFocusDoesNotChangeLayout(
+        ThemeVariant variant,
+        string controlName,
+        Func<Control> factory,
+        Action<Control> focusAction)
+    {
+        var control = factory();
+        control.Width = 220;
+        var marker = new Border
+        {
+            Height = 8,
+        };
+        var panel = new StackPanel();
+        panel.Children.Add(control);
+        panel.Children.Add(marker);
+
+        var window = new Window
+        {
+            Width = 360,
+            Height = 120,
+            RequestedThemeVariant = variant,
+            Content = panel,
+        };
+
+        try
+        {
+            window.Show();
+            PumpJobs();
+            control.ApplyTemplate();
+            PumpJobs();
+
+            var initialHeight = control.Bounds.Height;
+            var initialMarkerTop = marker.Bounds.Top;
+
+            focusAction(control);
+            PumpJobs();
+
+            Assert.That(control.Bounds.Height, Is.EqualTo(initialHeight).Within(0.001), controlName);
+            Assert.That(marker.Bounds.Top, Is.EqualTo(initialMarkerTop).Within(0.001), controlName);
         }
         finally
         {
@@ -319,6 +419,16 @@ public class ControlTemplateSmokeTests
                 },
             },
         };
+    }
+
+    private static void FocusControl(Control control)
+    {
+        control.Focus(NavigationMethod.Tab, KeyModifiers.None);
+    }
+
+    private static void FocusNumericTextBox(Control control)
+    {
+        FindTemplatePart<TextBox>(control, "PART_TextBox").Focus(NavigationMethod.Tab, KeyModifiers.None);
     }
 
     private static void PumpJobs()

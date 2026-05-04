@@ -22,70 +22,78 @@
     <Setter Property="ScrollViewer.IsScrollChainingEnabled" Value="True" />
     <Setter Property="Template">
       <ControlTemplate>
-        <Border Name="LayoutRoot"
-                Background="{TemplateBinding Background}"
-                BorderBrush="{TemplateBinding BorderBrush}"
-                BorderThickness="{TemplateBinding BorderThickness}"
-                CornerRadius="{TemplateBinding CornerRadius}">
-          <DataValidationErrors>
-            <Grid ColumnDefinitions="Auto,*,Auto"
-                  Margin="{TemplateBinding Padding}">
-              <ContentPresenter Grid.Column="0"
-                                Content="{TemplateBinding InnerLeftContent}"
-                                VerticalAlignment="Center" />
+        <Grid>
+          <Border Name="LayoutRoot"
+                  Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}">
+            <DataValidationErrors>
+              <Grid ColumnDefinitions="Auto,*,Auto"
+                    Margin="{TemplateBinding Padding}">
+                <ContentPresenter Grid.Column="0"
+                                  Content="{TemplateBinding InnerLeftContent}"
+                                  VerticalAlignment="Center" />
 
-              <ScrollViewer Name="PART_ScrollViewer"
-                            Grid.Column="1"
-                            AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
-                            BringIntoViewOnFocusChange="{TemplateBinding (ScrollViewer.BringIntoViewOnFocusChange)}"
-                            HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
-                            IsScrollChainingEnabled="{TemplateBinding (ScrollViewer.IsScrollChainingEnabled)}"
-                            VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
-                <Grid>
-                  <TextBlock Name="PART_Watermark"
-                             Foreground="{TemplateBinding PlaceholderForeground}"
-                             HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                             VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                             Text="{TemplateBinding PlaceholderText}"
-                             TextAlignment="{TemplateBinding TextAlignment}"
-                             TextWrapping="{TemplateBinding TextWrapping}">
-                    <TextBlock.IsVisible>
-                      <MultiBinding Converter="{x:Static BoolConverters.And}">
-                        <Binding ElementName="PART_TextPresenter" Path="PreeditText" Converter="{x:Static StringConverters.IsNullOrEmpty}" />
-                        <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="Text" Converter="{x:Static StringConverters.IsNullOrEmpty}" />
-                      </MultiBinding>
-                    </TextBlock.IsVisible>
-                  </TextBlock>
-                  <TextPresenter Name="PART_TextPresenter"
-                                 CaretBlinkInterval="{TemplateBinding CaretBlinkInterval}"
-                                 CaretBrush="{TemplateBinding CaretBrush}"
-                                 CaretIndex="{TemplateBinding CaretIndex}"
-                                 LineHeight="{TemplateBinding LineHeight}"
-                                 LetterSpacing="{TemplateBinding LetterSpacing}"
-                                 PasswordChar="{TemplateBinding PasswordChar}"
-                                 RevealPassword="{TemplateBinding RevealPassword}"
-                                 SelectionBrush="{TemplateBinding SelectionBrush}"
-                                 SelectionEnd="{TemplateBinding SelectionEnd}"
-                                 SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
-                                 SelectionStart="{TemplateBinding SelectionStart}"
-                                 Text="{TemplateBinding Text, Mode=TwoWay}"
-                                 TextAlignment="{TemplateBinding TextAlignment}"
-                                 TextWrapping="{TemplateBinding TextWrapping}"
-                                 VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
-                </Grid>
-                <ScrollViewer.Styles>
-                  <Style Selector="ScrollContentPresenter#PART_ContentPresenter">
-                    <Setter Property="Cursor" Value="IBeam" />
-                  </Style>
-                </ScrollViewer.Styles>
-              </ScrollViewer>
+                <ScrollViewer Name="PART_ScrollViewer"
+                              Grid.Column="1"
+                              AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
+                              BringIntoViewOnFocusChange="{TemplateBinding (ScrollViewer.BringIntoViewOnFocusChange)}"
+                              HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                              IsScrollChainingEnabled="{TemplateBinding (ScrollViewer.IsScrollChainingEnabled)}"
+                              VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                  <Grid>
+                    <TextBlock Name="PART_Watermark"
+                               Foreground="{TemplateBinding PlaceholderForeground}"
+                               HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                               Text="{TemplateBinding PlaceholderText}"
+                               TextAlignment="{TemplateBinding TextAlignment}"
+                               TextWrapping="{TemplateBinding TextWrapping}">
+                      <TextBlock.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                          <Binding ElementName="PART_TextPresenter" Path="PreeditText" Converter="{x:Static StringConverters.IsNullOrEmpty}" />
+                          <Binding RelativeSource="{RelativeSource TemplatedParent}" Path="Text" Converter="{x:Static StringConverters.IsNullOrEmpty}" />
+                        </MultiBinding>
+                      </TextBlock.IsVisible>
+                    </TextBlock>
+                    <TextPresenter Name="PART_TextPresenter"
+                                   CaretBlinkInterval="{TemplateBinding CaretBlinkInterval}"
+                                   CaretBrush="{TemplateBinding CaretBrush}"
+                                   CaretIndex="{TemplateBinding CaretIndex}"
+                                   LineHeight="{TemplateBinding LineHeight}"
+                                   LetterSpacing="{TemplateBinding LetterSpacing}"
+                                   PasswordChar="{TemplateBinding PasswordChar}"
+                                   RevealPassword="{TemplateBinding RevealPassword}"
+                                   SelectionBrush="{TemplateBinding SelectionBrush}"
+                                   SelectionEnd="{TemplateBinding SelectionEnd}"
+                                   SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                   SelectionStart="{TemplateBinding SelectionStart}"
+                                   Text="{TemplateBinding Text, Mode=TwoWay}"
+                                   TextAlignment="{TemplateBinding TextAlignment}"
+                                   TextWrapping="{TemplateBinding TextWrapping}"
+                                   VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                  </Grid>
+                  <ScrollViewer.Styles>
+                    <Style Selector="ScrollContentPresenter#PART_ContentPresenter">
+                      <Setter Property="Cursor" Value="IBeam" />
+                    </Style>
+                  </ScrollViewer.Styles>
+                </ScrollViewer>
 
-              <ContentPresenter Grid.Column="2"
-                                Content="{TemplateBinding InnerRightContent}"
-                                VerticalAlignment="Center" />
-            </Grid>
-          </DataValidationErrors>
-        </Border>
+                <ContentPresenter Grid.Column="2"
+                                  Content="{TemplateBinding InnerRightContent}"
+                                  VerticalAlignment="Center" />
+              </Grid>
+            </DataValidationErrors>
+          </Border>
+          <Border Name="FocusRing"
+                  BorderBrush="{DynamicResource ControlBorderFocusBrush}"
+                  BorderThickness="{DynamicResource BorderThicknessFocus}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  IsHitTestVisible="False"
+                  IsVisible="False" />
+        </Grid>
       </ControlTemplate>
     </Setter>
 
@@ -94,11 +102,15 @@
     </Style>
     <Style Selector="^:focus-within /template/ Border#LayoutRoot">
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
-      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
     </Style>
     <Style Selector="^:focus /template/ Border#LayoutRoot">
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
-      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:focus-within /template/ Border#FocusRing">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:focus /template/ Border#FocusRing">
+      <Setter Property="IsVisible" Value="True" />
     </Style>
     <Style Selector="^:error /template/ Border#LayoutRoot">
       <Setter Property="BorderBrush" Value="{DynamicResource DangerFillBrush}" />

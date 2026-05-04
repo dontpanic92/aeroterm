@@ -63,19 +63,20 @@
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="Template">
       <ControlTemplate>
-        <DataValidationErrors>
-          <ButtonSpinner Name="PART_Spinner"
-                         AllowSpin="{TemplateBinding AllowSpin}"
-                         Background="{TemplateBinding Background}"
-                         BorderBrush="{TemplateBinding BorderBrush}"
-                         BorderThickness="{TemplateBinding BorderThickness}"
-                         ButtonSpinnerLocation="{TemplateBinding ButtonSpinnerLocation}"
-                         CornerRadius="{TemplateBinding CornerRadius}"
-                         HorizontalContentAlignment="Stretch"
-                         IsTabStop="False"
-                         Padding="0"
-                         ShowButtonSpinner="{TemplateBinding ShowButtonSpinner}"
-                         VerticalContentAlignment="Stretch">
+        <Grid>
+          <DataValidationErrors>
+            <ButtonSpinner Name="PART_Spinner"
+                           AllowSpin="{TemplateBinding AllowSpin}"
+                           Background="{TemplateBinding Background}"
+                           BorderBrush="{TemplateBinding BorderBrush}"
+                           BorderThickness="{TemplateBinding BorderThickness}"
+                           ButtonSpinnerLocation="{TemplateBinding ButtonSpinnerLocation}"
+                           CornerRadius="{TemplateBinding CornerRadius}"
+                           HorizontalContentAlignment="Stretch"
+                           IsTabStop="False"
+                           Padding="0"
+                           ShowButtonSpinner="{TemplateBinding ShowButtonSpinner}"
+                           VerticalContentAlignment="Stretch">
             <ButtonSpinner.Template>
               <ControlTemplate>
                 <Border Name="LayoutRoot"
@@ -132,8 +133,15 @@
                      Theme="{StaticResource AeroTermNumericTextBoxTheme}"
                      TextWrapping="NoWrap"
                      VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
-          </ButtonSpinner>
-        </DataValidationErrors>
+            </ButtonSpinner>
+          </DataValidationErrors>
+          <Border Name="FocusRing"
+                  BorderBrush="{DynamicResource ControlBorderFocusBrush}"
+                  BorderThickness="{DynamicResource BorderThicknessFocus}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  IsHitTestVisible="False"
+                  IsVisible="False" />
+        </Grid>
       </ControlTemplate>
     </Setter>
 
@@ -142,11 +150,15 @@
     </Style>
     <Style Selector="^:focus-within /template/ ButtonSpinner#PART_Spinner">
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
-      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
     </Style>
     <Style Selector="^:focus /template/ ButtonSpinner#PART_Spinner">
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
-      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:focus-within /template/ Border#FocusRing">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:focus /template/ Border#FocusRing">
+      <Setter Property="IsVisible" Value="True" />
     </Style>
     <Style Selector="^:error /template/ ButtonSpinner#PART_Spinner">
       <Setter Property="BorderBrush" Value="{DynamicResource DangerFillBrush}" />

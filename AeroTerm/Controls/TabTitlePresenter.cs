@@ -147,7 +147,7 @@ internal sealed class TabTitlePresenter : UserControl
 
     private void OnForegroundBrushPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
-        this.emojiText.InvalidateVisual();
+        this.emojiText.RefreshForegroundBrush();
     }
 
     private void RefreshRenderingMode()
@@ -190,7 +190,7 @@ internal sealed class TabTitlePresenter : UserControl
             string text,
             double fontSize,
             Size bounds,
-            IBrush? foreground,
+            SKColor foreground,
             TextTrimming trimming)
         {
             if (string.IsNullOrEmpty(text) || bounds.Width <= 0 || bounds.Height <= 0)
@@ -198,7 +198,7 @@ internal sealed class TabTitlePresenter : UserControl
                 return;
             }
 
-            using var paint = CreatePaint(GetForegroundColor(foreground));
+            using var paint = CreatePaint(foreground);
             using var primaryFont = CreateFont(PrimaryTypeface.Value, fontSize);
             float baseline = GetCenteredBaseline(primaryFont, (float)bounds.Height);
             float maxWidth = (float)bounds.Width;
@@ -215,6 +215,17 @@ internal sealed class TabTitlePresenter : UserControl
                 canvas.DrawText(run.Text, x, baseline, font, paint);
                 x += font.MeasureText(run.Text, paint);
             }
+        }
+
+        public static SKColor GetForegroundColor(IBrush? brush)
+        {
+            if (brush is ISolidColorBrush solid)
+            {
+                var color = solid.Color;
+                return new SKColor(color.R, color.G, color.B, color.A);
+            }
+
+            return SKColors.White;
         }
 
         private static List<(string Text, bool IsEmoji)> BuildRuns(string text)
@@ -349,17 +360,6 @@ internal sealed class TabTitlePresenter : UserControl
             return ((height - textHeight) / 2f) - metrics.Ascent;
         }
 
-        private static SKColor GetForegroundColor(IBrush? brush)
-        {
-            if (brush is ISolidColorBrush solid)
-            {
-                var color = solid.Color;
-                return new SKColor(color.R, color.G, color.B, color.A);
-            }
-
-            return SKColors.White;
-        }
-
         private static SKTypeface CreatePrimaryTypeface()
         {
             return SKTypeface.FromFamilyName("Segoe UI Variable Text")
@@ -377,15 +377,14 @@ internal sealed class TabTitlePresenter : UserControl
 
     private sealed class SkiaEmojiTextControl : Control
     {
-        private readonly EmojiTitleDrawOperation drawOperation;
         private IBrush? foregroundBrush;
+        private SKColor foregroundColor = SKColors.White;
         private string text = string.Empty;
         private double titleFontSize = 12;
         private TextTrimming textTrimming = TextTrimming.CharacterEllipsis;
 
         public SkiaEmojiTextControl()
         {
-            this.drawOperation = new EmojiTitleDrawOperation(this);
             this.ClipToBounds = true;
         }
 
@@ -417,6 +416,7 @@ internal sealed class TabTitlePresenter : UserControl
                 }
 
                 this.foregroundBrush = value;
+                this.foregroundColor = SkiaEmojiTitlePainter.GetForegroundColor(value);
                 this.InvalidateVisual();
             }
         }
@@ -453,18 +453,20 @@ internal sealed class TabTitlePresenter : UserControl
             }
         }
 
-        public string RenderText => this.text;
-
-        public double RenderFontSize => this.titleFontSize;
-
-        public IBrush? RenderForegroundBrush => this.foregroundBrush;
-
-        public TextTrimming RenderTextTrimming => this.textTrimming;
+        public void RefreshForegroundBrush()
+        {
+            this.foregroundColor = SkiaEmojiTitlePainter.GetForegroundColor(this.foregroundBrush);
+            this.InvalidateVisual();
+        }
 
         public override void Render(DrawingContext context)
         {
-            this.drawOperation.Bounds = new Rect(0, 0, this.Bounds.Width, this.Bounds.Height);
-            context.Custom(this.drawOperation);
+            context.Custom(new EmojiTitleDrawOperation(
+                new Rect(0, 0, this.Bounds.Width, this.Bounds.Height),
+                this.text,
+                this.titleFontSize,
+                this.foregroundColor,
+                this.textTrimming));
         }
 
         protected override Size MeasureOverride(Size availableSize)
@@ -479,11 +481,23 @@ internal sealed class TabTitlePresenter : UserControl
 
     private sealed class EmojiTitleDrawOperation : ICustomDrawOperation
     {
-        private readonly SkiaEmojiTextControl owner;
+        private readonly string text;
+        private readonly double fontSize;
+        private readonly SKColor foregroundColor;
+        private readonly TextTrimming textTrimming;
 
-        public EmojiTitleDrawOperation(SkiaEmojiTextControl owner)
+        public EmojiTitleDrawOperation(
+            Rect bounds,
+            string text,
+            double fontSize,
+            SKColor foregroundColor,
+            TextTrimming textTrimming)
         {
-            this.owner = owner;
+            this.Bounds = bounds;
+            this.text = text;
+            this.fontSize = fontSize;
+            this.foregroundColor = foregroundColor;
+            this.textTrimming = textTrimming;
         }
 
         public Rect Bounds { get; set; }
@@ -512,11 +526,11 @@ internal sealed class TabTitlePresenter : UserControl
                 canvas.ClipRect(SKRect.Create((float)this.Bounds.Width, (float)this.Bounds.Height));
                 SkiaEmojiTitlePainter.Draw(
                     canvas,
-                    this.owner.RenderText,
-                    this.owner.RenderFontSize,
+                    this.text,
+                    this.fontSize,
                     this.Bounds.Size,
-                    this.owner.RenderForegroundBrush,
-                    this.owner.RenderTextTrimming);
+                    this.foregroundColor,
+                    this.textTrimming);
             }
             finally
             {

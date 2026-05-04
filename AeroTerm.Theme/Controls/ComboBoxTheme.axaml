@@ -116,6 +116,12 @@
                     VerticalAlignment="Center" />
             </Grid>
           </Border>
+          <Border Name="FocusRing"
+                  BorderBrush="{DynamicResource ControlBorderFocusBrush}"
+                  BorderThickness="{DynamicResource BorderThicknessFocus}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  IsHitTestVisible="False"
+                  IsVisible="False" />
 
           <Popup Name="PART_Popup"
                  MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}"
@@ -152,11 +158,15 @@
     </Style>
     <Style Selector="^:focus /template/ Border#LayoutRoot">
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
-      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
     </Style>
     <Style Selector="^:focus-within /template/ Border#LayoutRoot">
       <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderFocusBrush}" />
-      <Setter Property="BorderThickness" Value="{DynamicResource BorderThicknessFocus}" />
+    </Style>
+    <Style Selector="^:focus /template/ Border#FocusRing">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:focus-within /template/ Border#FocusRing">
+      <Setter Property="IsVisible" Value="True" />
     </Style>
     <Style Selector="^:dropdownopen /template/ Path#ChevronGlyph">
       <Setter Property="RenderTransform" Value="rotate(180deg)" />
