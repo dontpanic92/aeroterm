@@ -107,14 +107,14 @@ public partial class MainWindow : Window
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
         this.macChromeReservation = this.FindControl<Border>("MacChromeReservation")!;
 
-        // Wire the logo TextBlock into the same drag / double-click-to-zoom
-        // gesture as the rest of the title bar so users can grab the logo
-        // to move the window.
-        var logoText = this.FindControl<TextBlock>("LogoText");
-        if (logoText != null)
+        // Wire the full logo cell into the same drag / double-click-to-zoom
+        // gesture as the rest of the title bar so users can grab its blank
+        // padding as well as the text to move the window.
+        var logoDragHandle = this.FindControl<Border>("LogoDragHandle");
+        if (logoDragHandle != null)
         {
-            logoText.PointerPressed += this.TitleBar_PointerPressed;
-            logoText.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
+            logoDragHandle.PointerPressed += this.TitleBar_PointerPressed;
+            logoDragHandle.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
         }
 
         // Title bar background is transparent;the floating blur effect is
@@ -1108,11 +1108,11 @@ public partial class MainWindow : Window
             closeBtn.IsVisible = false;
         }
 
-        // Hide logo text on macOS (native title bar shows app name)
-        var logoText = this.FindControl<TextBlock>("LogoText");
-        if (logoText != null)
+        // Hide logo on macOS (native title bar shows app name)
+        var logoDragHandle = this.FindControl<Border>("LogoDragHandle");
+        if (logoDragHandle != null)
         {
-            logoText.IsVisible = false;
+            logoDragHandle.IsVisible = false;
         }
 
         // Reserve leading space so the tab strip / title text never sits

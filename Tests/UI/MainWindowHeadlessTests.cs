@@ -68,6 +68,23 @@ public class MainWindowHeadlessTests
     }
 
     /// <summary>
+    /// The logo drag surface covers the full title-bar height and includes
+    /// the blank padding around the visible text.
+    /// </summary>
+    [AvaloniaTest]
+    [Platform(Exclude = "MacOsX", Reason = "The logo is hidden on macOS because the native title bar shows the app name.")]
+    public void LogoDragHandle_FillsTitleBarCell()
+    {
+        var window = OpenWindow();
+        var titleBar = window.FindControl<Grid>("TitleBar")!;
+        var logoDragHandle = window.FindControl<Border>("LogoDragHandle")!;
+        var logoText = window.FindControl<TextBlock>("LogoText")!;
+
+        Assert.That(logoDragHandle.Bounds.Height, Is.EqualTo(titleBar.Bounds.Height).Within(0.5));
+        Assert.That(logoDragHandle.Bounds.Width, Is.GreaterThan(logoText.Bounds.Width));
+    }
+
+    /// <summary>
     /// Ctrl+Shift+T (non-macOS) / Cmd+T (macOS) creates a second tab and
     /// leaves it as the active tab.
     /// </summary>
