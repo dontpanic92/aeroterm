@@ -376,11 +376,27 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
     public bool Save()
     {
+        var settingsPath = GetSettingsPath();
+        var tempPath = settingsPath + ".tmp";
         try
         {
             Directory.CreateDirectory(GetSettingsDirectory());
             var json = JsonSerializer.Serialize(this, AppSettingsJsonContext.Default.AppSettings);
-            File.WriteAllText(GetSettingsPath(), json);
+
+            // Atomic write: serialise to a sibling temp file, fsync, then
+            // rename over the target. This prevents a half-written
+            // settings.json after a process kill / power loss / Velopack
+            // auto-restart, which would otherwise be silently replaced by
+            // defaults on the next launch.
+            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var writer = new StreamWriter(stream))
+            {
+                writer.Write(json);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(tempPath, settingsPath, overwrite: true);
             this.LastPersistenceError = string.Empty;
             return true;
         }
@@ -388,6 +404,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         {
             this.LastPersistenceError = ex.Message;
             AppLogger.For<AppSettings>().LogError(ex, "Failed to save settings.");
+            TryDeleteFile(tempPath);
             return false;
         }
     }
@@ -521,32 +538,62 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private static AppSettings Load()
     {
         string settingsPath = GetSettingsPath();
+        var log = AppLogger.For<AppSettings>();
         try
         {
             if (File.Exists(settingsPath))
             {
                 var json = File.ReadAllText(settingsPath);
                 json = MigrateLegacyJson(json);
+
+                // Schema-mismatch guard: if the file contains a non-empty
+                // JSON object whose keys do not intersect *at all* with the
+                // current AppSettings property set (e.g., after a refactor
+                // that renamed every property, or a corrupt overwrite by
+                // an unrelated tool), source-gen's Deserialize would
+                // happily return an all-defaults instance with no
+                // exception. The next clean shutdown would then save those
+                // defaults back, silently destroying the user's data.
+                // Detect that case explicitly and quarantine the file.
+                if (TryGetUnrecognisedSchema(json, out var unrecognised))
+                {
+                    string error = $"Settings file has no recognised properties (saw {unrecognised}).";
+                    log.LogWarning(
+                        "Settings file at {Path} has no recognised properties; quarantining and using defaults. Unknown keys: {Keys}",
+                        settingsPath,
+                        unrecognised);
+                    QuarantineCorruptFile(settingsPath, error);
+                    return new AppSettings
+                    {
+                        LastPersistenceError = error,
+                    };
+                }
+
                 var settings = JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings) as AppSettings;
                 if (settings is null)
                 {
                     const string Error = "Settings file did not contain an object.";
-                    AppLogger.For<AppSettings>().LogWarning(
+                    log.LogWarning(
                         "Failed to load settings from {Path}: {Message}; using default settings.",
                         settingsPath,
                         Error);
+                    QuarantineCorruptFile(settingsPath, Error);
                     return new AppSettings
                     {
                         LastPersistenceError = Error,
                     };
                 }
 
+                log.LogInformation("Loaded settings from {Path} ({Bytes} bytes).", settingsPath, json.Length);
                 return settings;
             }
+
+            log.LogInformation("No settings file at {Path}; using built-in defaults.", settingsPath);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or JsonException)
         {
-            AppLogger.For<AppSettings>().LogWarning(ex, "Failed to load settings from {Path}; using default settings.", settingsPath);
+            log.LogWarning(ex, "Failed to load settings from {Path}; using default settings.", settingsPath);
+            QuarantineCorruptFile(settingsPath, ex.Message);
             return new AppSettings
             {
                 LastPersistenceError = ex.Message,
@@ -554,6 +601,100 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         }
 
         return new AppSettings();
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="json"/> parses to
+    /// a non-empty JSON object whose top-level keys do not match any
+    /// property known to <see cref="AppSettingsJsonContext"/>. The
+    /// out-parameter then contains a comma-separated list of the
+    /// unrecognised keys for diagnostic logging.
+    /// </summary>
+    private static bool TryGetUnrecognisedSchema(string json, out string unrecognisedKeys)
+    {
+        unrecognisedKeys = string.Empty;
+        try
+        {
+            if (JsonNode.Parse(json) is not JsonObject node || node.Count == 0)
+            {
+                return false;
+            }
+
+            var known = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var p in AppSettingsJsonContext.Default.AppSettings.Properties)
+            {
+                known.Add(p.Name);
+            }
+
+            var unknown = new List<string>();
+            bool anyKnown = false;
+            foreach (var kvp in node)
+            {
+                if (known.Contains(kvp.Key))
+                {
+                    anyKnown = true;
+                }
+                else
+                {
+                    unknown.Add(kvp.Key);
+                }
+            }
+
+            if (!anyKnown)
+            {
+                unrecognisedKeys = string.Join(", ", unknown);
+                return true;
+            }
+        }
+        catch (JsonException)
+        {
+            // Caller's Deserialize will surface the parse failure.
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Renames a settings file that failed to load so it cannot be
+    /// silently overwritten with defaults on the next save. Best effort:
+    /// any failure here is logged and swallowed so startup still proceeds.
+    /// </summary>
+    private static void QuarantineCorruptFile(string settingsPath, string reason)
+    {
+        try
+        {
+            if (!File.Exists(settingsPath))
+            {
+                return;
+            }
+
+            var stamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ", System.Globalization.CultureInfo.InvariantCulture);
+            var quarantinePath = settingsPath + ".bad-" + stamp;
+            File.Move(settingsPath, quarantinePath, overwrite: true);
+            AppLogger.For<AppSettings>().LogWarning(
+                "Quarantined unreadable settings file to {Quarantine} ({Reason}).",
+                quarantinePath,
+                reason);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            AppLogger.For<AppSettings>().LogWarning(ex, "Failed to quarantine corrupt settings file {Path}.", settingsPath);
+        }
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            AppLogger.For<AppSettings>().LogDebug(ex, "Failed to remove temp file {Path}.", path);
+        }
     }
 
     private static Lazy<AppSettings> CreateDefaultInstance()
