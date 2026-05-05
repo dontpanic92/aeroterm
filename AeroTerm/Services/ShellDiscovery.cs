@@ -130,6 +130,36 @@ public sealed class ShellDiscovery
         }
     }
 
+    // Joins Windows-style path segments using '\\' regardless of host OS.
+    // Path.Combine uses Path.DirectorySeparatorChar, which is '/' on Unix
+    // and would produce mixed separators in cross-platform tests / discovery.
+    private static string JoinWindowsPath(params string[] parts)
+    {
+        var sb = new StringBuilder();
+        foreach (var raw in parts)
+        {
+            if (string.IsNullOrEmpty(raw))
+            {
+                continue;
+            }
+
+            var part = raw;
+            if (sb.Length > 0)
+            {
+                if (sb[sb.Length - 1] != '\\')
+                {
+                    sb.Append('\\');
+                }
+
+                part = part.TrimStart('\\');
+            }
+
+            sb.Append(part);
+        }
+
+        return sb.ToString();
+    }
+
     private void DiscoverWindows(List<DiscoveredShell> results, HashSet<string> seen, ILogger log)
     {
         // cmd.exe via COMSPEC.
@@ -144,7 +174,7 @@ public sealed class ShellDiscovery
             ?? this.env.GetFolderPath(Environment.SpecialFolder.Windows);
         if (!string.IsNullOrEmpty(systemRoot))
         {
-            var ps = Path.Combine(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+            var ps = JoinWindowsPath(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
             if (this.env.FileExists(ps))
             {
                 this.AddIfNew(results, seen, new DiscoveredShell("Windows PowerShell", ps, Array.Empty<string>(), null));
@@ -163,10 +193,10 @@ public sealed class ShellDiscovery
                 continue;
             }
 
-            var pwshRoot = Path.Combine(folder, "PowerShell");
+            var pwshRoot = JoinWindowsPath(folder, "PowerShell");
             foreach (var versionDir in this.env.EnumerateDirectories(pwshRoot, "*"))
             {
-                var pwsh = Path.Combine(versionDir, "pwsh.exe");
+                var pwsh = JoinWindowsPath(versionDir, "pwsh.exe");
                 if (this.env.FileExists(pwsh))
                 {
                     this.AddIfNew(results, seen, new DiscoveredShell("PowerShell", pwsh, Array.Empty<string>(), null));
@@ -188,7 +218,7 @@ public sealed class ShellDiscovery
         // WSL distros.
         try
         {
-            var wsl = Path.Combine(systemRoot ?? string.Empty, "System32", "wsl.exe");
+            var wsl = JoinWindowsPath(systemRoot ?? string.Empty, "System32", "wsl.exe");
             if (this.env.FileExists(wsl))
             {
                 // wsl.exe -l -q emits UTF-16 LE (with BOM) on Windows.
@@ -231,9 +261,9 @@ public sealed class ShellDiscovery
                 continue;
             }
 
-            yield return Path.Combine(folder, "Git", "bin", "bash.exe");
-            yield return Path.Combine(folder, "Git", "usr", "bin", "bash.exe");
-            yield return Path.Combine(folder, "Programs", "Git", "bin", "bash.exe");
+            yield return JoinWindowsPath(folder, "Git", "bin", "bash.exe");
+            yield return JoinWindowsPath(folder, "Git", "usr", "bin", "bash.exe");
+            yield return JoinWindowsPath(folder, "Programs", "Git", "bin", "bash.exe");
         }
     }
 
