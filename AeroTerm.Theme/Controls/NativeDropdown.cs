@@ -277,7 +277,20 @@ public class NativeDropdown : Button
 
         if (this.SelectedIndex >= items.Count)
         {
-            this.SelectedIndex = -1;
+            // Items shrank or were cleared (e.g. ItemsSource binding torn down
+            // while the control is being detached). Reset SelectedIndex without
+            // pushing a null SelectedValue back through a TwoWay binding —
+            // doing so would clobber the source-of-truth on the view model.
+            this.preserveSelectedValue = true;
+            try
+            {
+                this.SelectedIndex = -1;
+            }
+            finally
+            {
+                this.preserveSelectedValue = false;
+            }
+
             return;
         }
 

@@ -10,33 +10,17 @@
     <StackPanel Spacing="10">
         <GroupBox Header="{x:Static strings:Strings.AppearanceWindowHeader}" Padding="8,8">
             <StackPanel>
-                <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.WindowTransparency}"
-                          IsChecked="{Binding EnableBlurBehind, Mode=TwoWay}" Content="{x:Static strings:Strings.AppearanceEnableTransparency}" Margin="0,0,0,5" />
-
-                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.TransparentBlur}"
-                             Content="Transparent" GroupName="BlurKind" Margin="20,0,0,3"
-                             IsEnabled="{Binding IsTransparentEnabled}"
-                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Transparent}, Mode=TwoWay}" />
-
-                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.GaussianBlur}"
-                             Content="Blur (Gaussian)" GroupName="BlurKind" Margin="20,0,0,3"
-                             IsEnabled="{Binding IsGaussianEnabled}"
-                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Gaussian}, Mode=TwoWay}" />
-
-                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.AcrylicBlur}"
-                             Content="Acrylic Blur" GroupName="BlurKind" Margin="20,0,0,3"
-                             IsEnabled="{Binding IsAcrylicEnabled}"
-                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Acrylic}, Mode=TwoWay}" />
-
-                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.Mica}"
-                             Content="Mica (Windows only)" GroupName="BlurKind" Margin="20,0,0,5"
-                             IsEnabled="{Binding IsMicaEnabled}"
-                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.Mica}, Mode=TwoWay}" />
-
-                <RadioButton dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LiquidGlass}"
-                             Content="Liquid Glass (macOS 26+)" GroupName="BlurKind" Margin="20,0,0,5"
-                             IsEnabled="{Binding IsLiquidGlassEnabled}"
-                             IsChecked="{Binding BlurType, Converter={x:Static vm:BlurTypeConverter.LiquidGlass}, Mode=TwoWay}" />
+                <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.TransparencyEffect}"
+                            Orientation="Horizontal" Margin="0,0,0,5" Spacing="8">
+                    <TextBlock Name="TransparencyEffectLabel"
+                               Text="Window transparency"
+                               VerticalAlignment="Center" Width="130" />
+                    <themeControls:NativeDropdown ItemsSource="{Binding BlurTypes}"
+                                                  DisplayMemberPath="Label"
+                                                  AutomationProperties.LabeledBy="{Binding #TransparencyEffectLabel}"
+                                                  SelectedValue="{Binding SelectedBlurOption, Mode=TwoWay}"
+                                                  Width="220" HorizontalAlignment="Left" />
+                </StackPanel>
 
                 <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.TintOpacity}"
                             Orientation="Horizontal" Margin="20,0,0,0">

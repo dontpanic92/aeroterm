@@ -61,6 +61,17 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         this.selectedColorScheme = ColorSchemePresets.FindByName(settings.ColorSchemeName)
             ?? ColorSchemePresets.Default;
 
+        this.BlurTypes = BuildAvailableBlurTypes();
+        if (!this.BlurTypes.Any(o => o.Value.HasValue && o.Value.Value == this.blurType))
+        {
+            var fallback = this.BlurTypes.FirstOrDefault(o => o.Value.HasValue);
+            if (fallback is not null)
+            {
+                this.blurType = fallback.Value!.Value;
+                this.settings.BlurType = this.blurType;
+            }
+        }
+
         this.FontItems.CollectionChanged += this.OnFontItemsChanged;
     }
 
@@ -73,12 +84,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     /// <inheritdoc/>
     public override IReadOnlyList<string> SearchableLabels { get; } = new[]
     {
-        SettingsSearchLabels.WindowTransparency,
-        SettingsSearchLabels.TransparentBlur,
-        SettingsSearchLabels.GaussianBlur,
-        SettingsSearchLabels.AcrylicBlur,
-        SettingsSearchLabels.Mica,
-        SettingsSearchLabels.LiquidGlass,
+        SettingsSearchLabels.TransparencyEffect,
         SettingsSearchLabels.MaterialTone,
         SettingsSearchLabels.TintOpacity,
         SettingsSearchLabels.MaterialOpacity,
@@ -211,11 +217,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             if (this.SetField(ref this.enableBlurBehind, value))
             {
                 this.settings.EnableBlurBehind = value;
-                this.OnPropertyChanged(nameof(this.IsTransparentEnabled));
-                this.OnPropertyChanged(nameof(this.IsGaussianEnabled));
-                this.OnPropertyChanged(nameof(this.IsAcrylicEnabled));
-                this.OnPropertyChanged(nameof(this.IsMicaEnabled));
-                this.OnPropertyChanged(nameof(this.IsLiquidGlassEnabled));
+                this.OnPropertyChanged(nameof(this.SelectedBlurOption));
                 this.OnPropertyChanged(nameof(this.IsOpacityEnabled));
                 this.OnPropertyChanged(nameof(this.IsMaterialToneEnabled));
             }
@@ -233,7 +235,52 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             if (this.SetField(ref this.blurType, value))
             {
                 this.settings.BlurType = value;
+                this.OnPropertyChanged(nameof(this.SelectedBlurOption));
                 this.OnPropertyChanged(nameof(this.IsMaterialToneEnabled));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the platform-supported window-transparency effect options shown
+    /// in the dropdown. Always includes a leading "None" entry; effects
+    /// unavailable on the current OS are omitted.
+    /// </summary>
+    public IReadOnlyList<BlurTypeOption> BlurTypes { get; }
+
+    /// <summary>
+    /// Gets or sets the dropdown-selected effect option. The "None" entry
+    /// disables transparency; any other entry enables it and selects the
+    /// underlying <see cref="BlurType"/>.
+    /// </summary>
+    public BlurTypeOption? SelectedBlurOption
+    {
+        get
+        {
+            if (!this.enableBlurBehind)
+            {
+                return this.BlurTypes.FirstOrDefault(o => o.Value is null);
+            }
+
+            return this.BlurTypes.FirstOrDefault(o => o.Value == this.blurType)
+                ?? this.BlurTypes.FirstOrDefault(o => o.Value is null);
+        }
+
+        set
+        {
+            if (value is null)
+            {
+                return;
+            }
+
+            if (value.Value is null)
+            {
+                this.EnableBlurBehind = false;
+            }
+            else
+            {
+                this.BlurType = value.Value.Value;
+                this.EnableBlurBehind = true;
             }
         }
     }
@@ -308,7 +355,12 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
         get => this.selectedColorScheme;
         set
         {
-            if (this.SetField(ref this.selectedColorScheme, value) && value is not null)
+            if (value is null)
+            {
+                return;
+            }
+
+            if (this.SetField(ref this.selectedColorScheme, value))
             {
                 this.settings.ColorSchemeName = value.Name;
                 this.OnPropertyChanged(nameof(this.PreviewSwatches));
@@ -321,31 +373,6 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
     /// </summary>
     public IReadOnlyList<int> PreviewSwatches =>
         this.SelectedColorScheme.Palette.Take(6).ToArray();
-
-    /// <summary>
-    /// Gets a value indicating whether the Transparent radio option should be enabled.
-    /// </summary>
-    public bool IsTransparentEnabled => this.EnableBlurBehind && PlatformHelper.TransparentAvailable();
-
-    /// <summary>
-    /// Gets a value indicating whether the Gaussian radio option should be enabled.
-    /// </summary>
-    public bool IsGaussianEnabled => this.EnableBlurBehind && PlatformHelper.GaussianBlurAvailable();
-
-    /// <summary>
-    /// Gets a value indicating whether the Acrylic radio option should be enabled.
-    /// </summary>
-    public bool IsAcrylicEnabled => this.EnableBlurBehind && PlatformHelper.AcrylicBlurAvailable();
-
-    /// <summary>
-    /// Gets a value indicating whether the Mica radio option should be enabled.
-    /// </summary>
-    public bool IsMicaEnabled => this.EnableBlurBehind && PlatformHelper.MicaAvailable();
-
-    /// <summary>
-    /// Gets a value indicating whether the Liquid Glass radio option should be enabled.
-    /// </summary>
-    public bool IsLiquidGlassEnabled => this.EnableBlurBehind && PlatformHelper.LiquidGlassAvailable();
 
     /// <summary>
     /// Gets a value indicating whether the opacity slider should be enabled.
@@ -421,6 +448,41 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
             this.SelectedFontIndex = index + 1;
             this.UpdateFontPriorityLive();
         }
+    }
+
+    private static IReadOnlyList<BlurTypeOption> BuildAvailableBlurTypes()
+    {
+        var list = new List<BlurTypeOption>(6)
+        {
+            new(null, "None"),
+        };
+
+        if (PlatformHelper.TransparentAvailable())
+        {
+            list.Add(new BlurTypeOption(BlurType.Transparent, "Transparent"));
+        }
+
+        if (PlatformHelper.GaussianBlurAvailable())
+        {
+            list.Add(new BlurTypeOption(BlurType.Gaussian, "Blur (Gaussian)"));
+        }
+
+        if (PlatformHelper.AcrylicBlurAvailable())
+        {
+            list.Add(new BlurTypeOption(BlurType.Acrylic, "Acrylic Blur"));
+        }
+
+        if (PlatformHelper.MicaAvailable())
+        {
+            list.Add(new BlurTypeOption(BlurType.Mica, "Mica"));
+        }
+
+        if (PlatformHelper.LiquidGlassAvailable())
+        {
+            list.Add(new BlurTypeOption(BlurType.LiquidGlass, "Liquid Glass"));
+        }
+
+        return list;
     }
 
     private static string? GetRawFontEntry(object? item)

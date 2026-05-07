@@ -10,23 +10,8 @@ namespace AeroTerm.Dialogs;
 /// </summary>
 public static class SettingsSearchLabels
 {
-    /// <summary>Search label for the window transparency toggle.</summary>
-    public const string WindowTransparency = "Window Transparency";
-
-    /// <summary>Search label for the transparent backdrop option.</summary>
-    public const string TransparentBlur = "Transparent Blur";
-
-    /// <summary>Search label for the Gaussian blur backdrop option.</summary>
-    public const string GaussianBlur = "Gaussian Blur";
-
-    /// <summary>Search label for the acrylic backdrop option.</summary>
-    public const string AcrylicBlur = "Acrylic Blur";
-
-    /// <summary>Search label for the mica backdrop option.</summary>
-    public const string Mica = "Mica";
-
-    /// <summary>Search label for the Liquid Glass backdrop option.</summary>
-    public const string LiquidGlass = "Liquid Glass";
+    /// <summary>Search label for the window-transparency effect dropdown.</summary>
+    public const string TransparencyEffect = "Window Transparency Effect None Transparent Blur Gaussian Acrylic Mica Liquid Glass";
 
     /// <summary>Search label for the backdrop tint opacity slider.</summary>
     public const string TintOpacity = "Tint Opacity";
