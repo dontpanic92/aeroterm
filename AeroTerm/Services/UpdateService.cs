@@ -390,14 +390,21 @@ internal sealed class UpdateService : IUpdateService
             AllowVersionDowngrade = true,
         };
 
+        // Use a custom downloader that disables HTTP response decompression so
+        // the response Content-Length header is preserved — without it,
+        // Velopack's downloader cannot report intermediate progress and the
+        // update progress bar jumps straight from 0 to 100.
+        var downloader = new AeroTermVelopackFileDownloader();
+
         if (channel == UpdateChannel.Stable)
         {
-            var source = new GithubSource(GitHubRepoUrl, accessToken: null, prerelease: false);
+            var source = new GithubSource(GitHubRepoUrl, accessToken: null, prerelease: false, downloader);
             this.currentManager = new UpdateManager(source, options);
         }
         else
         {
-            this.currentManager = new UpdateManager(GitHubPagesFeedUrl, options);
+            var source = new SimpleWebSource(GitHubPagesFeedUrl, downloader);
+            this.currentManager = new UpdateManager(source, options);
         }
 
         this.currentManagerChannel = channel;
