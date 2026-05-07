@@ -157,6 +157,14 @@ trap '__aeroterm_preexec' DEBUG
 if ($env:AEROTERM_SHELL_INTEGRATION_LOADED) { return }
 $env:AEROTERM_SHELL_INTEGRATION_LOADED = '1'
 
+# Use [char]27 / [char]7 instead of the `e / `a escapes: those literal
+# escape forms were only introduced in PowerShell 6, and AeroTerm also
+# targets Windows PowerShell 5.1 (the default `powershell.exe` shipped
+# with Windows 10/11). On 5.1 `e becomes a plain "e" character, so the
+# OSC 133 marks would be printed verbatim into the user's prompt.
+$global:__AeroTermEsc = [char]27
+$global:__AeroTermBel = [char]7
+
 $global:__AeroTermLastExitCode = 0
 
 if (-not (Test-Path Function:\__AeroTerm_OriginalPrompt)) {
@@ -165,15 +173,17 @@ if (-not (Test-Path Function:\__AeroTerm_OriginalPrompt)) {
 
 function global:prompt {
     $exit = if ($?) { 0 } else { if ($LASTEXITCODE) { $LASTEXITCODE } else { 1 } }
+    $esc = $global:__AeroTermEsc
+    $bel = $global:__AeroTermBel
     $sb = [System.Text.StringBuilder]::new()
-    [void]$sb.Append("`e]133;D;$exit`a")
-    [void]$sb.Append("`e]133;A`a")
+    [void]$sb.Append("$esc]133;D;$exit$bel")
+    [void]$sb.Append("$esc]133;A$bel")
     if (Test-Path Function:\__AeroTerm_OriginalPrompt) {
         [void]$sb.Append((& __AeroTerm_OriginalPrompt))
     } else {
         [void]$sb.Append("PS $($executionContext.SessionState.Path.CurrentLocation)$('>' * ($nestedPromptLevel + 1)) ")
     }
-    [void]$sb.Append("`e]133;B`a")
+    [void]$sb.Append("$esc]133;B$bel")
     $sb.ToString()
 }
 
@@ -189,7 +199,7 @@ if (Get-Module -ListAvailable PSReadLine) {
         } else {
             [Microsoft.PowerShell.PSConsoleReadLine]::ReadLine($Host.Runspace, $ExecutionContext)
         }
-        [Console]::Write("`e]133;C`a")
+        [Console]::Write("$($global:__AeroTermEsc)]133;C$($global:__AeroTermBel)")
         $line
     }
 }
