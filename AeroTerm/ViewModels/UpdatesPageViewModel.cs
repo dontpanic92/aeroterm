@@ -16,7 +16,7 @@ using AeroTerm.Services;
 /// View model for the Updates settings page. Displays the current version,
 /// channel selection, update check status, and available update actions.
 /// </summary>
-internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPropertyChanged, ISettingsPageLifecycle
+internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPropertyChanged, ISettingsPageLifecycle, IDisposable
 {
     private readonly AppSettings settings;
     private readonly IUpdateService updateService;
@@ -51,7 +51,9 @@ internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPrope
         this.CanSwitchToCI = updateService.InstalledChannel != UpdateChannel.Stable;
 
         this.updateService.UpdateAvailableChanged += this.OnUpdateAvailableChanged;
+        this.updateService.DownloadStateChanged += this.OnDownloadStateChanged;
         this.RefreshStatus();
+        this.SyncDownloadStateFromService();
     }
 
     /// <inheritdoc/>
@@ -285,6 +287,13 @@ internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPrope
         this.updateService.DismissUpdate(skipVersion: true);
     }
 
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.updateService.UpdateAvailableChanged -= this.OnUpdateAvailableChanged;
+        this.updateService.DownloadStateChanged -= this.OnDownloadStateChanged;
+    }
+
     private static string GetVersionText()
     {
         var informationalVersion = Assembly.GetExecutingAssembly()
@@ -339,6 +348,44 @@ internal sealed class UpdatesPageViewModel : SettingsPageViewModel, INotifyPrope
     private void OnUpdateAvailableChanged(object? sender, UpdateInfo? info)
     {
         this.RefreshStatus();
+    }
+
+    private void OnDownloadStateChanged(object? sender, EventArgs e)
+    {
+        // Marshal to UI thread; the service may raise from a background thread
+        // during DownloadUpdatesAsync progress callbacks.
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            this.SyncDownloadStateFromService();
+        }
+        else
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(this.SyncDownloadStateFromService);
+        }
+    }
+
+    private void SyncDownloadStateFromService()
+    {
+        this.IsDownloading = this.updateService.IsDownloading;
+        this.DownloadProgress = this.updateService.DownloadProgress;
+        this.IsReadyToRestart = this.updateService.IsReadyToApply;
+
+        if (this.updateService.IsDownloading)
+        {
+            this.DownloadStatusText = $"Downloading… {this.updateService.DownloadProgress}%";
+        }
+        else if (this.updateService.IsReadyToApply)
+        {
+            this.DownloadStatusText = "Ready to restart";
+        }
+        else if (this.updateService.LastError is not null)
+        {
+            this.DownloadStatusText = $"Download failed: {this.updateService.LastError}";
+        }
+        else
+        {
+            this.DownloadStatusText = string.Empty;
+        }
     }
 
     private void RefreshStatus()

@@ -59,6 +59,9 @@ internal sealed class UpdateService : IUpdateService
     public event EventHandler<UpdateInfo?>? UpdateAvailableChanged;
 
     /// <inheritdoc/>
+    public event EventHandler? DownloadStateChanged;
+
+    /// <inheritdoc/>
     public UpdateInfo? AvailableUpdate => this.availableUpdate;
 
     /// <inheritdoc/>
@@ -204,6 +207,7 @@ internal sealed class UpdateService : IUpdateService
         this.isDownloading = true;
         this.downloadProgress = 0;
         this.lastError = null;
+        this.RaiseDownloadStateChanged();
 
         try
         {
@@ -222,6 +226,7 @@ internal sealed class UpdateService : IUpdateService
                 {
                     this.downloadProgress = p;
                     progress?.Report(p);
+                    this.RaiseDownloadStateChanged();
                 }).ConfigureAwait(false);
 
             this.isReadyToApply = true;
@@ -239,6 +244,7 @@ internal sealed class UpdateService : IUpdateService
         finally
         {
             this.isDownloading = false;
+            this.RaiseDownloadStateChanged();
         }
     }
 
@@ -279,8 +285,13 @@ internal sealed class UpdateService : IUpdateService
         }
 
         this.velopackUpdateInfo = null;
+        bool readyChanged = this.isReadyToApply;
         this.isReadyToApply = false;
         this.SetAvailableUpdate(null);
+        if (readyChanged)
+        {
+            this.RaiseDownloadStateChanged();
+        }
     }
 
     /// <summary>
@@ -415,5 +426,10 @@ internal sealed class UpdateService : IUpdateService
     {
         this.availableUpdate = update;
         this.UpdateAvailableChanged?.Invoke(this, update);
+    }
+
+    private void RaiseDownloadStateChanged()
+    {
+        this.DownloadStateChanged?.Invoke(this, EventArgs.Empty);
     }
 }

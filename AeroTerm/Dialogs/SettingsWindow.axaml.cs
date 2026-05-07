@@ -5,6 +5,7 @@
 
 namespace AeroTerm.Dialogs;
 
+using System;
 using AeroTerm.Services;
 using AeroTerm.ViewModels;
 using Avalonia.Controls;
@@ -140,6 +141,19 @@ public partial class SettingsWindow : Window
                 this.settings.SettingsWindowHeight = (int)this.Height;
                 this.settings.Save();
                 break;
+        }
+
+        // Dispose pages on every close to release service event subscriptions
+        // that would otherwise leak the dead VM (and double-fire on reopen).
+        if (this.DataContext is SettingsViewModel vmDispose)
+        {
+            foreach (var page in vmDispose.Pages)
+            {
+                if (page is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
         }
     }
 }

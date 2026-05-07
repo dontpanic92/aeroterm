@@ -17,6 +17,13 @@ internal interface IUpdateService
     event EventHandler<UpdateInfo?>? UpdateAvailableChanged;
 
     /// <summary>
+    /// Raised when download-related state changes
+    /// (<see cref="IsDownloading"/>, <see cref="DownloadProgress"/>,
+    /// <see cref="IsReadyToApply"/>, or <see cref="LastError"/>).
+    /// </summary>
+    event EventHandler? DownloadStateChanged;
+
+    /// <summary>
     /// Gets the currently available update, or <c>null</c> if the app is up to date
     /// or no check has been performed.
     /// </summary>

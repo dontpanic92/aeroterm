@@ -281,7 +281,19 @@ public class NativeDropdown : Button
             return;
         }
 
-        this.UpdateSelectionFromIndex(this.SelectedIndex, raiseEvent: false);
+        // Refresh SelectedItem / display without pushing SelectedValue back to its
+        // binding source. The items collection just changed; this isn't a user
+        // selection and we must not clobber an inbound SelectedValue that hasn't
+        // been resolved yet (e.g. when ItemsSource is bound before SelectedValue).
+        this.preserveSelectedValue = true;
+        try
+        {
+            this.UpdateSelectionFromIndex(this.SelectedIndex, raiseEvent: false);
+        }
+        finally
+        {
+            this.preserveSelectedValue = false;
+        }
     }
 
     private void UpdateSelectionFromIndex(int oldIndex, bool raiseEvent)
