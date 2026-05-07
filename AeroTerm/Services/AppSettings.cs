@@ -54,6 +54,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private bool quakeModeEnabled;
     private string quakeHotkey = DefaultQuakeHotkey();
     private bool middleClickPastes = true;
+    private bool enableShellIntegration = true;
     private TabBarOrientation tabBarOrientation = TabBarOrientation.Horizontal;
 
     /// <inheritdoc />
@@ -359,6 +360,20 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether AeroTerm injects its
+    /// OSC 133 shell-integration scripts into recognised child shells
+    /// (zsh, bash, fish, PowerShell). When <see langword="true"/> the
+    /// terminal can identify prompt / user-input / command-output
+    /// regions and enable features such as Cmd+Backspace / Ctrl+Shift+
+    /// Backspace input deletion. Defaults to <see langword="true"/>.
+    /// </summary>
+    public bool EnableShellIntegration
+    {
+        get => this.enableShellIntegration;
+        set => this.SetField(ref this.enableShellIntegration, value);
+    }
+
+    /// <summary>
     /// Gets or sets the orientation of the tab strip. Defaults to
     /// <see cref="TabBarOrientation.Horizontal"/> (a classic top-docked
     /// tab bar). Setting <see cref="TabBarOrientation.Vertical"/> swaps
@@ -442,6 +457,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.QuakeModeEnabled = fresh.QuakeModeEnabled;
         this.QuakeHotkey = fresh.QuakeHotkey;
         this.MiddleClickPastes = fresh.MiddleClickPastes;
+        this.EnableShellIntegration = fresh.EnableShellIntegration;
         this.TabBarOrientation = fresh.TabBarOrientation;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);

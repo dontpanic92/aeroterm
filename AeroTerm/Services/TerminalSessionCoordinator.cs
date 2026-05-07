@@ -123,6 +123,29 @@ internal sealed class TerminalSessionCoordinator : IDisposable
         this.LastLaunchSpec = new LaunchSpec(cwd, shell, args, env);
         this.log.LogInformation("Starting shell: {Shell}", shell);
 
+        // Inject AeroTerm shell-integration scripts so the child shell
+        // emits OSC 133 prompt marks. Strict input-deletion features
+        // (Cmd+Backspace etc.) depend on this. Failure to inject is
+        // non-fatal: the shell launches as if integration was disabled.
+        if (this.settings.EnableShellIntegration)
+        {
+            try
+            {
+                var injector = new ShellIntegrationInjector();
+                var result = injector.Inject(shell, args, env);
+                if (result.Injected)
+                {
+                    args = result.Args;
+                    env = result.Env;
+                    this.log.LogInformation("Shell integration injected for {Shell}", shell);
+                }
+            }
+            catch (Exception ex)
+            {
+                this.log.LogWarning(ex, "Shell integration injection failed; launching without it");
+            }
+        }
+
         this.terminalControl = new TerminalControl();
         this.terminalControl.EnableLigature = this.settings.EnableLigature;
         this.terminalControl.ScrollbackLimit = this.settings.ScrollbackLines;

@@ -700,6 +700,18 @@ public class TerminalControl : Control, IDisposable
             return;
         }
 
+        // Cmd+Backspace (macOS) / Ctrl+Shift+Backspace (Win/Linux): delete
+        // the selected portion of the user's current shell input by
+        // driving the shell's line editor with arrow + backspace
+        // keystrokes. Always swallow the key on hit so plain Backspace
+        // can never sneak through and silently truncate input.
+        if (e.Key == Key.Back && IsDeleteSelectedInputModifier(e.KeyModifiers))
+        {
+            this.TryDeleteSelectedInput();
+            e.Handled = true;
+            return;
+        }
+
         if (this.inputHandler.HandleKeyDown(e))
         {
             // A keystroke went to the shell: snap the viewport back to the
@@ -834,6 +846,68 @@ public class TerminalControl : Control, IDisposable
             && !modifiers.HasFlag(KeyModifiers.Shift)
             && !modifiers.HasFlag(KeyModifiers.Alt)
             && !modifiers.HasFlag(KeyModifiers.Meta);
+    }
+
+    private static bool IsDeleteSelectedInputModifier(KeyModifiers modifiers)
+    {
+        // macOS: Cmd+Backspace alone. Win/Linux: Ctrl+Shift+Backspace
+        // (Ctrl+Backspace is already taken by the shell for "delete
+        // word backward").
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return modifiers.HasFlag(KeyModifiers.Meta)
+                && !modifiers.HasFlag(KeyModifiers.Shift)
+                && !modifiers.HasFlag(KeyModifiers.Control)
+                && !modifiers.HasFlag(KeyModifiers.Alt);
+        }
+
+        return modifiers.HasFlag(KeyModifiers.Control)
+            && modifiers.HasFlag(KeyModifiers.Shift)
+            && !modifiers.HasFlag(KeyModifiers.Alt)
+            && !modifiers.HasFlag(KeyModifiers.Meta);
+    }
+
+    private void TryDeleteSelectedInput()
+    {
+        if (this.selection.IsEmpty)
+        {
+            return;
+        }
+
+        var screen = this.buffer.GetScreen();
+        if (screen is null)
+        {
+            return;
+        }
+
+        int liveRows = screen.Cells.GetLength(0);
+        if (liveRows <= 0)
+        {
+            return;
+        }
+
+        var rowSource = new BufferRowSource(this.buffer, screen);
+        var (cursorRow, cursorCol) = screen.CursorPosition;
+
+        if (!InputSelectionDeleter.TryBuildDeleteKeystrokes(
+                this.selection,
+                rowSource,
+                this.promptMarks,
+                this.buffer.ScrollbackCount,
+                liveRows,
+                cursorRow,
+                cursorCol,
+                this.buffer.IsUsingAltBuffer,
+                this.buffer.ApplicationCursorKeys,
+                out byte[] keystrokes))
+        {
+            return;
+        }
+
+        this.ptyBridge.WriteToPty(keystrokes);
+        this.SnapToBottom();
+        this.selection.Clear();
+        this.InvalidateVisual();
     }
 
     private void TryResize()
