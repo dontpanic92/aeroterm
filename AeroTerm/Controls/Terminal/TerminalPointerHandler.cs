@@ -21,12 +21,15 @@ using Avalonia.Threading;
 /// </summary>
 internal sealed class TerminalPointerHandler
 {
+    private const double ScrollbackRowsPerWheelDelta = 3.0;
+
     // Auto-scroll cadence while the pointer is past the viewport edge
     // during a drag-select. Small enough to feel responsive; coarse enough
     // not to eat the selection on a single twitchy touchpad gesture.
     private static readonly TimeSpan DragAutoScrollInterval = TimeSpan.FromMilliseconds(60);
 
     private readonly TerminalControl owner;
+    private readonly WheelDeltaAccumulator scrollbackWheelAccumulator = new();
 
     private bool pointerDragSelecting;
     private int pointerRow = -1;
@@ -284,6 +287,7 @@ internal sealed class TerminalPointerHandler
         var (row, col) = this.owner.PixelToGridPosition(e.GetCurrentPoint(this.owner).Position);
         if (this.owner.InputHandler.HandlePointerWheel(e, row + 1, col + 1))
         {
+            this.scrollbackWheelAccumulator.Reset();
             e.Handled = true;
             return;
         }
@@ -294,32 +298,54 @@ internal sealed class TerminalPointerHandler
         // scrolling via arrow keys / page keys).
         if (this.owner.Buffer.IsUsingAltBuffer)
         {
+            this.scrollbackWheelAccumulator.Reset();
             return;
         }
 
         int scrollbackCount = this.owner.Buffer.ScrollbackCount;
         if (scrollbackCount == 0 && this.owner.ViewportOffset == 0)
         {
+            this.scrollbackWheelAccumulator.Reset();
             return;
         }
 
-        // One wheel notch moves three lines. `e.Delta.Y` is positive when
-        // scrolling up (toward older content).
-        int lines = (int)Math.Round(e.Delta.Y * 3.0);
-        if (lines == 0)
+        double deltaY = e.Delta.Y;
+        if (deltaY == 0 || !double.IsFinite(deltaY))
         {
             return;
         }
 
         int before = this.owner.ViewportOffset;
-        int target = Math.Clamp(before + lines, 0, scrollbackCount);
-        if (target == before)
+        if ((deltaY > 0 && before >= scrollbackCount) || (deltaY < 0 && before <= 0))
+        {
+            this.scrollbackWheelAccumulator.Reset();
+            e.Handled = true;
+            return;
+        }
+
+        // One wheel notch moves three lines. `deltaY` is positive when
+        // scrolling up (toward older content), and the accumulator keeps
+        // sub-line trackpad deltas from being rounded away.
+        int lines = this.scrollbackWheelAccumulator.Add(deltaY, ScrollbackRowsPerWheelDelta);
+        if (lines == 0)
         {
             e.Handled = true;
             return;
         }
 
+        int target = Math.Clamp(before + lines, 0, scrollbackCount);
+        if (target == before)
+        {
+            this.scrollbackWheelAccumulator.Reset();
+            e.Handled = true;
+            return;
+        }
+
         this.owner.ViewportOffset = target;
+        if (target == 0 || target == scrollbackCount)
+        {
+            this.scrollbackWheelAccumulator.Reset();
+        }
 
         // Selection now uses absolute-row coordinates and remains valid
         // across scrollback navigation; nothing to clear here.

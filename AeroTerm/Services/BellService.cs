@@ -26,8 +26,12 @@ internal sealed class BellService : IBellOutputs
     private readonly Window window;
     private readonly ILogger log;
     private readonly Border? flashTarget;
+    private readonly Action<Action, TimeSpan> scheduleRestore;
 
+    private IBrush? restoreBrush;
+    private Avalonia.Thickness restoreThickness;
     private int flashSerial;
+    private bool isFlashing;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BellService"/> class.
@@ -39,10 +43,31 @@ internal sealed class BellService : IBellOutputs
     /// flashed for a visual bell. May be <see langword="null"/>, in which case
     /// visual-bell requests are silently skipped.</param>
     public BellService(AppSettings settings, Window window, Border? flashTarget)
+        : this(settings, window, flashTarget, (callback, interval) => DispatcherTimer.RunOnce(callback, interval))
     {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BellService"/> class with a
+    /// custom visual-bell restore scheduler.
+    /// </summary>
+    /// <param name="settings">Application settings.</param>
+    /// <param name="window">The owning window.</param>
+    /// <param name="flashTarget">The border whose <c>BorderBrush</c> is briefly
+    /// flashed for a visual bell.</param>
+    /// <param name="scheduleRestore">Schedules the delayed visual-bell restore.</param>
+    internal BellService(
+        AppSettings settings,
+        Window window,
+        Border? flashTarget,
+        Action<Action, TimeSpan> scheduleRestore)
+    {
+        ArgumentNullException.ThrowIfNull(scheduleRestore);
+
         this.settings = settings;
         this.window = window;
         this.flashTarget = flashTarget;
+        this.scheduleRestore = scheduleRestore;
         this.log = AppLogger.For<BellService>();
     }
 
@@ -62,9 +87,14 @@ internal sealed class BellService : IBellOutputs
             return;
         }
 
+        if (!this.isFlashing)
+        {
+            this.restoreBrush = this.flashTarget.BorderBrush;
+            this.restoreThickness = this.flashTarget.BorderThickness;
+            this.isFlashing = true;
+        }
+
         int serial = ++this.flashSerial;
-        var originalBrush = this.flashTarget.BorderBrush;
-        var originalThickness = this.flashTarget.BorderThickness;
 
         // Prefer the current theme accent; fall back to an amber tint so
         // the cue is visible even in minimal themes.
@@ -74,13 +104,16 @@ internal sealed class BellService : IBellOutputs
         this.flashTarget.BorderBrush = flashBrush;
         this.flashTarget.BorderThickness = new Avalonia.Thickness(2);
 
-        DispatcherTimer.RunOnce(
+        this.scheduleRestore(
             () =>
             {
                 if (serial == this.flashSerial && this.flashTarget is not null)
                 {
-                    this.flashTarget.BorderBrush = originalBrush;
-                    this.flashTarget.BorderThickness = originalThickness;
+                    this.flashTarget.BorderBrush = this.restoreBrush;
+                    this.flashTarget.BorderThickness = this.restoreThickness;
+                    this.restoreBrush = null;
+                    this.restoreThickness = default;
+                    this.isFlashing = false;
                 }
             },
             TimeSpan.FromMilliseconds(150));

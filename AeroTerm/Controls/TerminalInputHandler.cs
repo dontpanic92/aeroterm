@@ -6,6 +6,7 @@
 namespace AeroTerm.Controls;
 
 using System.Text;
+using AeroTerm.Controls.Terminal;
 using AeroTerm.Pty;
 using Avalonia;
 using Avalonia.Input;
@@ -16,6 +17,8 @@ using Avalonia.Input;
 /// </summary>
 internal sealed class TerminalInputHandler
 {
+    private const double MouseTrackingWheelReportsPerDelta = 1.0;
+
     private static readonly IReadOnlyDictionary<Key, string> SpecialKeys = new Dictionary<Key, string>()
     {
         { Key.Back, "BS" },
@@ -50,6 +53,7 @@ internal sealed class TerminalInputHandler
     };
 
     private readonly Action<byte[]> writeToPty;
+    private readonly WheelDeltaAccumulator mouseTrackingWheelAccumulator = new();
     private Avalonia.Input.MouseButton? pressedButton;
 
     /// <summary>
@@ -225,26 +229,45 @@ internal sealed class TerminalInputHandler
     /// <returns>True if the event was handled.</returns>
     public bool HandlePointerWheel(PointerWheelEventArgs e, int row, int col)
     {
+        return this.HandlePointerWheelDelta(e.Delta.Y, e.KeyModifiers, row, col);
+    }
+
+    /// <summary>
+    /// Handles a scroll wheel delta.
+    /// </summary>
+    /// <param name="deltaY">The vertical wheel delta.</param>
+    /// <param name="modifiers">The keyboard modifiers active during the wheel event.</param>
+    /// <param name="row">The one-based terminal row.</param>
+    /// <param name="col">The one-based terminal column.</param>
+    /// <returns>True if the event was handled.</returns>
+    public bool HandlePointerWheelDelta(double deltaY, KeyModifiers modifiers, int row, int col)
+    {
         if (this.MouseTrackingMode == MouseTrackingMode.None)
+        {
+            this.mouseTrackingWheelAccumulator.Reset();
+            return false;
+        }
+
+        if (deltaY == 0 || !double.IsFinite(deltaY))
         {
             return false;
         }
 
-        int modBits = GetModifierBits(e.KeyModifiers);
-        bool handled = false;
-
-        if (e.Delta.Y > 0)
+        int reports = this.mouseTrackingWheelAccumulator.Add(deltaY, MouseTrackingWheelReportsPerDelta);
+        if (reports == 0)
         {
-            this.SendSgrMouse(64 + modBits, col, row, release: false);
-            handled = true;
-        }
-        else if (e.Delta.Y < 0)
-        {
-            this.SendSgrMouse(65 + modBits, col, row, release: false);
-            handled = true;
+            return true;
         }
 
-        return handled;
+        int modBits = GetModifierBits(modifiers);
+        int button = reports > 0 ? 64 : 65;
+        int reportCount = Math.Abs(reports);
+        for (int i = 0; i < reportCount; i++)
+        {
+            this.SendSgrMouse(button + modBits, col, row, release: false);
+        }
+
+        return true;
     }
 
     /// <summary>
