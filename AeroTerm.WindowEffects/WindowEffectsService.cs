@@ -38,6 +38,23 @@ public sealed class WindowEffectsService
         this.logger = logger;
 
         this.settings.PropertyChanged += this.OnSettingsPropertyChanged;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            // AppKit's animated zoom (`[NSWindow performZoom:]`, used by
+            // Avalonia's WindowState.Maximized) emits a stream of
+            // `windowDidResize` notifications during the animation. The
+            // PropertyChanged-driven re-apply in
+            // HandleMacOSWindowStateChanged runs once and at low
+            // priority; it isn't enough on its own to keep the
+            // transparent-titlebar / Liquid Glass / NSVisualEffectView
+            // configuration intact across the animated transition.
+            // Re-applying on every Resized event catches each frame of
+            // the animation. The re-apply path is idempotent and only
+            // makes a handful of objc_msgSend calls, so the per-frame
+            // cost is negligible.
+            this.window.Resized += this.OnMacOSWindowResized;
+        }
     }
 
     /// <summary>
@@ -168,19 +185,34 @@ public sealed class WindowEffectsService
     }
 
     /// <summary>
-    /// Handles macOS full-screen state transitions by configuring native
-    /// window properties and updating background opacity.
+    /// Reacts to a macOS <see cref="WindowState"/> transition by
+    /// reapplying the native window configuration that AppKit can reset
+    /// across these transitions.
+    /// <para>
+    /// On entering full screen the unified-style <c>NSToolbar</c> is
+    /// detached so its translucent material no longer renders behind our
+    /// custom tab bar in the AppKit-drawn fullscreen titlebar.
+    /// <see cref="EffectiveBlurEnabled"/> is <c>false</c> while full
+    /// screen, so the apply pipeline collapses transparency, opacity,
+    /// and Liquid Glass to their "blur off" state.
+    /// </para>
+    /// <para>
+    /// On leaving full screen, and also on <see cref="WindowState.Maximized"/>
+    /// (which Avalonia implements via <c>[NSWindow zoom:]</c>) and
+    /// <see cref="WindowState.Normal"/>, the transparent-titlebar
+    /// configuration, the unified toolbar, the Liquid Glass backdrop,
+    /// and the transparency level hint are reapplied. AppKit resets
+    /// <c>setOpaque:</c>, the titlebar material view, and the content
+    /// view's subview ordering when it zooms or returns the window to
+    /// its standard frame, which silently degrades
+    /// <c>ActualTransparencyLevel</c> to <c>None</c> unless we
+    /// re-install our configuration. Each interop call is idempotent
+    /// (e.g. <see cref="MacOSInterop.EnableUnifiedTitleBar"/> bails out
+    /// if a toolbar is already attached).
+    /// </para>
     /// </summary>
-    /// <summary>
-    /// Reacts to a macOS full-screen state transition. On entering full
-    /// screen the unified-style <c>NSToolbar</c> is detached so its
-    /// translucent material no longer renders behind our custom tab bar.
-    /// On leaving full screen the transparent-titlebar configuration and
-    /// the unified toolbar are reapplied so the in-window appearance
-    /// matches the pre-fullscreen state.
-    /// </summary>
-    /// <param name="isFullScreen"><c>true</c> when entering full screen.</param>
-    public void HandleMacOSFullScreenTransition(bool isFullScreen)
+    /// <param name="state">The new <see cref="WindowState"/>.</param>
+    public void HandleMacOSWindowStateChanged(WindowState state)
     {
         var nsWindow = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (nsWindow == IntPtr.Zero)
@@ -189,6 +221,8 @@ public sealed class WindowEffectsService
             return;
         }
 
+        bool isFullScreen = state == WindowState.FullScreen;
+        bool wasFullScreen = this.isMacFullScreen;
         this.isMacFullScreen = isFullScreen;
 
         if (isFullScreen)
@@ -201,24 +235,40 @@ public sealed class WindowEffectsService
         }
         else
         {
-            // Restore the in-window appearance to match the pre-fullscreen
-            // configuration. SetTransparentTitlebar / unified toolbar must
-            // be reapplied here because AppKit resets these on exit from
-            // its fullscreen space.
+            // Restore the in-window appearance. SetTransparentTitlebar /
+            // unified toolbar must be reapplied for any non-fullscreen
+            // state because AppKit resets these on exit from its
+            // fullscreen space. The Maximized ↔ Normal transition is
+            // bypassed via MacOSInterop.SetNSWindowFrameNoAnimation
+            // (see MainWindow.ToggleMaximize), so the AppKit-animated
+            // zoom is never invoked and no titlebar-state reset occurs
+            // on that path — but a re-apply here is still cheap and
+            // serves as a safety net.
             MacOSInterop.SetTransparentTitlebar(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
         }
 
-        // Re-run the full apply pipeline. EffectiveBlurEnabled is now
-        // false in fullscreen, so this collapses transparency, opacity,
-        // and Liquid Glass to their "blur off" state, and restores them
-        // on exit.
+        // Re-run the full apply pipeline. EffectiveBlurEnabled is false
+        // in fullscreen, so this collapses transparency, opacity, and
+        // Liquid Glass to their "blur off" state, and restores them on
+        // exit / on a zoom that AppKit-reset the NSWindow configuration.
         this.UpdateTransparencyLevelHint();
         this.UpdateLiquidGlassBackdrop(nsWindow);
         this.UpdateBackgroundOpacity();
 
-        this.MacOSFullScreenChanged?.Invoke(isFullScreen);
+        // Schedule a second wave of re-applies *after* AppKit's animated
+        // zoom completes. `[NSWindow performZoom:]` is animated; the
+        // synchronous re-apply above runs while the animation is still
+        // in flight, and the per-frame Resized handler stops once the
+        // final frame is delivered. The staggered delays catch any
+        // post-animation reset that AppKit may apply.
+        _ = this.ReapplyAfterAnimationAsync(state);
+
+        if (isFullScreen != wasFullScreen)
+        {
+            this.MacOSFullScreenChanged?.Invoke(isFullScreen);
+        }
     }
 
     /// <summary>
@@ -483,6 +533,23 @@ public sealed class WindowEffectsService
     }
 
     /// <summary>
+    /// Returns whether Avalonia's behind-window
+    /// <c>NSVisualEffectView</c> (used to back
+    /// <see cref="WindowTransparencyLevel.AcrylicBlur"/>) should be
+    /// hidden. It must be hidden for blur types we drive ourselves
+    /// (Transparent / LiquidGlass) and unhidden for
+    /// <see cref="BlurType.Acrylic"/>. After AppKit's animated zoom
+    /// the behind-window view's <c>hidden</c> flag and frame can drift
+    /// out of sync with our expected configuration; calling this
+    /// alongside <see cref="MacOSInterop.RefitWindowEffectViews"/>
+    /// keeps them aligned.
+    /// </summary>
+    private bool ShouldHideBehindWindowBlur()
+    {
+        return !(this.EffectiveBlurEnabled && this.settings.BlurType == BlurType.Acrylic);
+    }
+
+    /// <summary>
     /// Installs or removes the macOS Liquid Glass backdrop in response to
     /// the current settings. When <see cref="BlurType.LiquidGlass"/> is
     /// selected and the OS supports it (macOS 26+), an
@@ -533,6 +600,71 @@ public sealed class WindowEffectsService
         int dwmBackdropType = this.MapBlurTypeToDwmBackdrop();
         IntPtr hwnd = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         WindowsInterop.UpdateStoredBackdropType(hwnd, dwmBackdropType);
+    }
+
+    /// <summary>
+    /// Re-applies the macOS native transparency configuration on every
+    /// Avalonia <see cref="WindowBase.Resized"/> event. AppKit's
+    /// animated <c>[NSWindow performZoom:]</c> streams resize
+    /// notifications throughout the animation; this handler keeps our
+    /// configuration intact across the transition. The per-frame cost
+    /// is a handful of objc_msgSend calls.
+    /// </summary>
+    /// <param name="sender">The window raising the event.</param>
+    /// <param name="e">The resize event arguments.</param>
+    private void OnMacOSWindowResized(object? sender, WindowResizedEventArgs e)
+    {
+        if (this.isMacFullScreen)
+        {
+            return;
+        }
+
+        var nsWindow = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+        if (nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        MacOSInterop.SetTransparentTitlebar(nsWindow);
+        MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
+
+        // Re-fit and re-promote Avalonia's behind-window NSVisualEffectView
+        // (used for Acrylic blur) and our NSGlassEffectView so they
+        // continue to cover the contentView after the zoom resizes it.
+        MacOSInterop.RefitWindowEffectViews(nsWindow, this.ShouldHideBehindWindowBlur());
+        this.UpdateLiquidGlassBackdrop(nsWindow);
+    }
+
+    private async Task ReapplyAfterAnimationAsync(WindowState targetState)
+    {
+        // 50 ms / 200 ms / 500 ms covers the standard AppKit zoom
+        // animation duration (~250 ms) with margin on both sides. Each
+        // re-apply path is idempotent; the cost is a handful of
+        // objc_msgSend calls per tick.
+        foreach (int delay in new[] { 50, 200, 500 })
+        {
+            await Task.Delay(delay).ConfigureAwait(true);
+
+            // Abort if the user has moved on to a different WindowState
+            // in the meantime — that transition will have its own
+            // re-apply pipeline.
+            if (this.window.WindowState != targetState)
+            {
+                return;
+            }
+
+            var nsWindow = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+            if (nsWindow == IntPtr.Zero || this.isMacFullScreen)
+            {
+                continue;
+            }
+
+            MacOSInterop.SetTransparentTitlebar(nsWindow);
+            MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
+            MacOSInterop.EnableUnifiedTitleBar(nsWindow);
+            MacOSInterop.RefitWindowEffectViews(nsWindow, this.ShouldHideBehindWindowBlur());
+            this.UpdateLiquidGlassBackdrop(nsWindow);
+        }
     }
 
     private void OnSettingsPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

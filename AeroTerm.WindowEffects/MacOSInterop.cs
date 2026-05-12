@@ -36,6 +36,210 @@ public static class MacOSInterop
     private static bool? isMacOS26OrLaterCached;
 
     /// <summary>
+    /// Returns the current <c>isOpaque</c> flag of an NSWindow. Useful
+    /// for diagnostics — if a transparent window appears solid, this
+    /// flag returning <c>true</c> indicates AppKit (or some other code
+    /// path) re-asserted <c>setOpaque:YES</c>. Returns <c>false</c> on
+    /// non-macOS platforms.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <returns><c>true</c> if the window is currently opaque.</returns>
+    public static bool IsNSWindowOpaque(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        return NativeMethods.ObjCMsgSendBoolRet(
+            nsWindow,
+            NativeMethods.SelRegisterName("isOpaque"));
+    }
+
+    /// <summary>
+    /// Returns whether the NSWindow currently matches its screen's
+    /// visible frame (i.e. is "zoomed" in AppKit terms). Mirrors
+    /// <c>[NSWindow isZoomed]</c>.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <returns><c>true</c> when the window is at the zoomed frame.</returns>
+    public static bool IsNSWindowZoomed(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        return NativeMethods.ObjCMsgSendBoolRet(
+            nsWindow,
+            NativeMethods.SelRegisterName("isZoomed"));
+    }
+
+    /// <summary>
+    /// Returns the current NSWindow frame in screen coordinates. Returns
+    /// an empty rect on non-macOS platforms or when the handle is null.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <returns>The current frame.</returns>
+    public static NSRect GetNSWindowFrame(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return default;
+        }
+
+        return NativeMethods.ObjCMsgSendRectRet(
+            nsWindow,
+            NativeMethods.SelRegisterName("frame"));
+    }
+
+    /// <summary>
+    /// Returns the visible frame of the screen currently containing the
+    /// NSWindow (the screen rect minus menu bar and dock). Used as the
+    /// target frame when maximizing without animation.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <returns>The screen's visible frame, or empty on non-macOS.</returns>
+    public static NSRect GetNSWindowScreenVisibleFrame(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return default;
+        }
+
+        IntPtr screen = NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("screen"));
+        if (screen == IntPtr.Zero)
+        {
+            return default;
+        }
+
+        return NativeMethods.ObjCMsgSendRectRet(
+            screen,
+            NativeMethods.SelRegisterName("visibleFrame"));
+    }
+
+    /// <summary>
+    /// Sets the NSWindow frame directly with
+    /// <c>setFrame:display:YES animate:NO</c>, bypassing AppKit's
+    /// animated zoom. This eliminates the resize-snapshot flash that
+    /// AppKit produces during an animated <c>performZoom:</c>, in which
+    /// our semi-transparent chrome is briefly rendered at full opacity
+    /// inside the snapshot, and which can also leave Avalonia's
+    /// <c>NSVisualEffectView</c> (used for Acrylic blur) in a state
+    /// where it no longer renders blur. The instantaneous frame swap
+    /// avoids both problems.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <param name="frame">The target frame, in screen coordinates.</param>
+    public static void SetNSWindowFrameNoAnimation(IntPtr nsWindow, NSRect frame)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        NativeMethods.ObjCMsgSendRectBoolBool(
+            nsWindow,
+            NativeMethods.SelRegisterName("setFrame:display:animate:"),
+            frame,
+            true,
+            false);
+    }
+
+    /// <summary>
+    /// Resets the frame of any behind-window <c>NSVisualEffectView</c>
+    /// in the contentView's immediate subview tree to match the
+    /// contentView's bounds. Avalonia installs one such view as
+    /// <c>AutoFitContentView._blurBehind</c> for its
+    /// <c>WindowTransparencyLevel.AcrylicBlur</c> support, and that
+    /// view can end up with a stale frame across AppKit's animated
+    /// zoom (its autoresizing-mask-based growth is delta-based and
+    /// drifts during rapid resize streams), causing the Acrylic
+    /// backdrop to stop covering the new client area and leaving the
+    /// window transparent-but-not-blurred. Restoring its frame to
+    /// match the new bounds restores the blur. No-op on non-macOS
+    /// platforms.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <param name="behindWindowHidden">
+    /// Whether the behind-window <c>NSVisualEffectView</c> should be
+    /// hidden. <c>false</c> for Avalonia's Acrylic backdrop; <c>true</c>
+    /// for blur types that don't use Avalonia's behind-window blur
+    /// (Transparent, LiquidGlass, or any non-Avalonia-managed mode).
+    /// </param>
+    public static void RefitWindowEffectViews(IntPtr nsWindow, bool behindWindowHidden)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr contentView = NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("contentView"));
+        if (contentView == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr visualEffectClass = NativeMethods.ObjCGetClass("NSVisualEffectView");
+        if (visualEffectClass == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr subviews = NativeMethods.ObjCMsgSend(
+            contentView,
+            NativeMethods.SelRegisterName("subviews"));
+        if (subviews == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr countSel = NativeMethods.SelRegisterName("count");
+        IntPtr objectAtIndexSel = NativeMethods.SelRegisterName("objectAtIndex:");
+        IntPtr isKindOfClassSel = NativeMethods.SelRegisterName("isKindOfClass:");
+        IntPtr blendingModeSel = NativeMethods.SelRegisterName("blendingMode");
+        IntPtr setFrameSel = NativeMethods.SelRegisterName("setFrame:");
+        IntPtr setHiddenSel = NativeMethods.SelRegisterName("setHidden:");
+        IntPtr boundsSel = NativeMethods.SelRegisterName("bounds");
+
+        NSRect contentBounds = NativeMethods.ObjCMsgSendRectRet(contentView, boundsSel);
+
+        long count = (long)(nint)NativeMethods.ObjCMsgSend(subviews, countSel);
+        for (long i = 0; i < count; i++)
+        {
+            IntPtr subview = NativeMethods.ObjCMsgSendLongRetPtr(subviews, objectAtIndexSel, i);
+            if (subview == IntPtr.Zero)
+            {
+                continue;
+            }
+
+            if (!NativeMethods.ObjCMsgSendPtrRetBool(subview, isKindOfClassSel, visualEffectClass))
+            {
+                continue;
+            }
+
+            // NSVisualEffectBlendingModeBehindWindow = 0
+            // NSVisualEffectBlendingModeWithinWindow = 1
+            // Only resize the behind-window view; the within-window
+            // titlebar material is positioned and hidden by Avalonia's
+            // AutoFitContentView.setFrameSize and our
+            // SetTitleBarMaterialHidden helper respectively.
+            long blendingMode = (long)(nint)NativeMethods.ObjCMsgSend(subview, blendingModeSel);
+            if (blendingMode != 0)
+            {
+                continue;
+            }
+
+            NativeMethods.ObjCMsgSendRect(subview, setFrameSel, contentBounds);
+            NativeMethods.ObjCMsgSendBool(subview, setHiddenSel, behindWindowHidden);
+        }
+    }
+
+    /// <summary>
     /// Configures the NSWindow for a fully transparent background while
     /// preserving native traffic light buttons. Sets the window as non-opaque
     /// with a clear background color, makes the titlebar transparent with a
@@ -466,6 +670,17 @@ public static class MacOSInterop
                 existing,
                 NativeMethods.SelRegisterName("setFrame:"),
                 bounds);
+
+            // Re-promote to back-most. AppKit can reorder contentView's
+            // subviews across [NSWindow zoom:] and fullscreen restores,
+            // which would otherwise let Avalonia's compositor surface
+            // paint over the glass backdrop. NSWindowBelow = -1.
+            NativeMethods.ObjCMsgSendPtrLongPtr(
+                contentView,
+                NativeMethods.SelRegisterName("addSubview:positioned:relativeTo:"),
+                existing,
+                -1,
+                IntPtr.Zero);
             return;
         }
 
@@ -882,6 +1097,17 @@ public static class MacOSInterop
         public static extern void ObjCMsgSendBool(IntPtr receiver, IntPtr selector, [MarshalAs(UnmanagedType.I1)] bool arg);
 
         /// <summary>
+        /// Sends a message with no arguments to an Objective-C object
+        /// and returns a boolean result.
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <returns>The boolean return value.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool ObjCMsgSendBoolRet(IntPtr receiver, IntPtr selector);
+
+        /// <summary>
         /// Sends a message with a long integer argument to an Objective-C object.
         /// </summary>
         /// <param name="receiver">The target object.</param>
@@ -995,5 +1221,22 @@ public static class MacOSInterop
         /// <param name="arg3">Third pointer argument.</param>
         [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
         public static extern void ObjCMsgSendPtrLongPtr(IntPtr receiver, IntPtr selector, IntPtr arg1, long arg2, IntPtr arg3);
+
+        /// <summary>
+        /// Sends a message with one <see cref="NSRect"/> argument and two
+        /// boolean arguments (e.g. <c>setFrame:display:animate:</c>).
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <param name="rect">The rectangle argument.</param>
+        /// <param name="arg1">First boolean argument.</param>
+        /// <param name="arg2">Second boolean argument.</param>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern void ObjCMsgSendRectBoolBool(
+            IntPtr receiver,
+            IntPtr selector,
+            NSRect rect,
+            [MarshalAs(UnmanagedType.I1)] bool arg1,
+            [MarshalAs(UnmanagedType.I1)] bool arg2);
     }
 }

@@ -1135,11 +1135,12 @@ public partial class MainWindow : Window
         {
             this.UpdateMacChromeReservation();
 
-            // Defer until AppKit finishes its full-screen animation so the
-            // toolbar detach / reattach lands on a stable NSWindow state.
-            bool fullscreen = this.WindowState == WindowState.FullScreen;
+            // Defer until AppKit finishes its state transition animation
+            // (fullscreen space, zoom) so the toolbar / titlebar / glass
+            // re-apply lands on a stable NSWindow.
+            var state = this.WindowState;
             Dispatcher.UIThread.Post(
-                () => this.effectsService.HandleMacOSFullScreenTransition(fullscreen),
+                () => this.effectsService.HandleMacOSWindowStateChanged(state),
                 DispatcherPriority.Background);
         }
     }
