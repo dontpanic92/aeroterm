@@ -56,4 +56,13 @@ public sealed class Profile
     /// in. <c>null</c> → use the fallback's cwd (typically the user home).
     /// </summary>
     public string? WorkingDirectory { get; set; }
+
+    /// <summary>
+    /// Returns the human-readable profile name. Overridden so UI controls
+    /// that fall back to <see cref="object.ToString"/> (e.g. when reflection
+    /// on <see cref="Name"/> is trimmed away under PublishAot) still render
+    /// a meaningful label instead of the type's full name.
+    /// </summary>
+    /// <returns>The profile <see cref="Name"/>.</returns>
+    public override string ToString() => this.Name;
 }
