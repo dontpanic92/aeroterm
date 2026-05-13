@@ -3,75 +3,59 @@
              xmlns:vm="using:AeroTerm.ViewModels"
              xmlns:svc="using:AeroTerm.Services"
              xmlns:dialogs="using:AeroTerm.Dialogs"
+             xmlns:themeControls="using:AeroTerm.Theme.Controls"
              x:Class="AeroTerm.Dialogs.ProfilesPage"
              x:CompileBindings="True"
              x:DataType="vm:ProfilesPageViewModel">
-  <Grid ColumnDefinitions="260,*" RowDefinitions="*">
+  <ScrollViewer Padding="20,16,16,16"
+                VerticalScrollBarVisibility="Auto"
+                HorizontalScrollBarVisibility="Disabled">
+    <StackPanel Spacing="20">
 
-    <!-- Sidebar: card-style profile list with bottom action bar. -->
-    <Border Grid.Column="0"
-            Background="{DynamicResource SurfaceLayer1Brush}"
-            BorderBrush="{DynamicResource StrokeMutedBrush}"
-            BorderThickness="0,0,1,0">
-      <DockPanel Margin="8">
-        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto,Auto" Margin="0,8,0,0">
-          <Button Grid.Column="0"
-                  Content="+ New profile"
-                  HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Center"
+      <!-- Profile selector row: dropdown + action buttons. -->
+      <StackPanel Spacing="6">
+        <TextBlock Name="ProfileSelectorLabel"
+                   Text="Profile"
+                   Foreground="{DynamicResource TextSecondaryBrush}"
+                   FontSize="12" />
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+          <themeControls:NativeDropdown Grid.Column="0"
+                                        ItemsSource="{Binding Profiles}"
+                                        DisplayMemberPath="Name"
+                                        SelectedValue="{Binding SelectedProfile, Mode=TwoWay}"
+                                        PlaceholderText="No profiles"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        AutomationProperties.LabeledBy="{Binding #ProfileSelectorLabel}" />
+          <Button Grid.Column="1"
+                  Margin="6,0,0,0"
+                  Padding="10,6"
+                  Content="+ New"
                   Background="{DynamicResource AccentPrimaryBrush}"
                   Foreground="{DynamicResource TextOnAccentBrush}"
                   Click="AddButton_Click"
                   AutomationProperties.Name="Add profile" />
-          <Button Grid.Column="1"
+          <Button Grid.Column="2"
                   Margin="6,0,0,0"
-                  Padding="8,4"
+                  Padding="10,6"
                   Content="Copy"
                   ToolTip.Tip="Duplicate profile"
                   IsEnabled="{Binding HasSelection}"
                   Click="DuplicateButton_Click"
                   AutomationProperties.Name="Duplicate profile" />
-          <Button Grid.Column="2"
-                  Margin="4,0,0,0"
-                  Padding="8,4"
+          <Button Grid.Column="3"
+                  Margin="6,0,0,0"
+                  Padding="10,6"
                   Content="Delete"
                   ToolTip.Tip="Remove profile"
                   IsEnabled="{Binding HasSelection}"
                   Click="RemoveButton_Click"
                   AutomationProperties.Name="Remove profile" />
         </Grid>
-        <ListBox Name="ProfileList"
-                 Background="Transparent"
-                 BorderThickness="0"
-                 ItemsSource="{Binding Profiles}"
-                 AutomationProperties.Name="Profiles"
-                 SelectedItem="{Binding SelectedProfile, Mode=TwoWay}">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="svc:Profile">
-              <StackPanel Spacing="2" Margin="2,4">
-                <TextBlock Text="{Binding Name}"
-                           FontWeight="SemiBold"
-                           FontSize="14"
-                           Foreground="{DynamicResource TextPrimaryBrush}"
-                           TextTrimming="CharacterEllipsis" />
-                <TextBlock Text="{Binding Command}"
-                           FontSize="11"
-                           Foreground="{DynamicResource TextTertiaryBrush}"
-                           TextTrimming="CharacterEllipsis" />
-              </StackPanel>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </DockPanel>
-    </Border>
+      </StackPanel>
 
-    <!-- Editor pane. -->
-    <ScrollViewer Grid.Column="1"
-                  Padding="20,16,16,16"
-                  VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled"
-                  IsEnabled="{Binding HasSelection}">
-      <StackPanel Spacing="20">
+      <!-- Editor pane. -->
+      <StackPanel Spacing="20" IsEnabled="{Binding HasSelection}">
 
         <!-- Header row: large editable name + default badge / button. -->
         <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto"
@@ -84,8 +68,6 @@
                      Margin="0,0,0,4" />
           <TextBox  Grid.Row="1" Grid.Column="0"
                     Text="{Binding SelectedName, Mode=TwoWay}"
-                    FontSize="20"
-                    FontWeight="SemiBold"
                     AutomationProperties.LabeledBy="{Binding #ProfileNameLabel}" />
 
           <StackPanel Grid.Row="1" Grid.Column="1"
@@ -172,6 +154,6 @@
           </StackPanel>
         </StackPanel>
       </StackPanel>
-    </ScrollViewer>
-  </Grid>
+    </StackPanel>
+  </ScrollViewer>
 </UserControl>

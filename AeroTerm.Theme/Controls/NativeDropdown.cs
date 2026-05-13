@@ -71,6 +71,7 @@ public class NativeDropdown : Button
     private bool preserveSelectedValue;
     private bool syncingSelection;
     private NativeDropdownItem? selectedItem;
+    private INotifyCollectionChanged? subscribedItemsSource;
 
     static NativeDropdown()
     {
@@ -262,6 +263,25 @@ public class NativeDropdown : Button
 
     private void OnItemsSourceChanged()
     {
+        if (this.subscribedItemsSource is { } old)
+        {
+            old.CollectionChanged -= this.OnItemsSourceCollectionChanged;
+            this.subscribedItemsSource = null;
+        }
+
+        if (this.ItemsSource is INotifyCollectionChanged incc)
+        {
+            incc.CollectionChanged += this.OnItemsSourceCollectionChanged;
+            this.subscribedItemsSource = incc;
+        }
+
+        this.ReconcileSelectionAfterItemsChanged();
+    }
+
+    private void OnItemsSourceCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
         this.ReconcileSelectionAfterItemsChanged();
     }
 
