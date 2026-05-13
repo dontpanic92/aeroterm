@@ -55,11 +55,36 @@
             </StackPanel>
         </GroupBox>
 
+        <GroupBox Header="{x:Static strings:Strings.AppearanceColorSchemeHeader}" Padding="8,8">
+            <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.ColorScheme}"
+                        Spacing="8">
+                <themeControls:NativeDropdown ItemsSource="{Binding ColorSchemes}"
+                                              DisplayMemberPath="Name"
+                                              AutomationProperties.Name="Color scheme"
+                                              SelectedValue="{Binding SelectedColorScheme, Mode=TwoWay}"
+                                              Width="250" HorizontalAlignment="Left" />
+
+                <ItemsControl ItemsSource="{Binding PreviewSwatches}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="4" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:Int32">
+                            <Border Width="24" Height="24" CornerRadius="3">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{Binding Converter={x:Static vm:IntColorConverter.Instance}}" />
+                                </Border.Background>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </GroupBox>
+
         <GroupBox Header="{x:Static strings:Strings.AppearanceFontHeader}" Padding="8,8">
             <StackPanel Spacing="5">
-                <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontLigature}"
-                          IsChecked="{Binding EnableLigature, Mode=TwoWay}" Content="{x:Static strings:Strings.AppearanceEnableLigature}" />
-
                 <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontSize}"
                             Orientation="Horizontal" Spacing="8">
                     <TextBlock Name="FontSizeLabel" Text="Font Size" VerticalAlignment="Center" />
@@ -68,9 +93,6 @@
                                    AutomationProperties.LabeledBy="{Binding #FontSizeLabel}"
                                    FormatString="F1" Width="100" />
                 </StackPanel>
-
-                <TextBlock Text="Fonts are searched top to bottom. Drag items to reorder priority."
-                           FontSize="11" Foreground="Gray" Margin="0,3,0,3" TextWrapping="Wrap" />
 
                 <Grid dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontPriority}">
                     <Grid.ColumnDefinitions>
@@ -99,62 +121,42 @@
                                 IsEnabled="{Binding CanMoveDown}" />
                     </StackPanel>
                 </Grid>
-            </StackPanel>
-        </GroupBox>
 
-        <GroupBox Header="Ligature preview" Padding="8,8"
-                  AutomationProperties.Name="Ligature preview"
-                  dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}">
-            <StackPanel Spacing="2">
-                <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
-                           Text="{Binding LigaturePreviewLine1}"
-                           FontFamily="{Binding PreviewFontFamily}"
-                           FontSize="{Binding FontSize}"
-                           FontFeatures="{Binding PreviewFontFeatures}"
-                           TextWrapping="NoWrap" />
-                <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
-                           Text="{Binding LigaturePreviewLine2}"
-                           FontFamily="{Binding PreviewFontFamily}"
-                           FontSize="{Binding FontSize}"
-                           FontFeatures="{Binding PreviewFontFeatures}"
-                           TextWrapping="NoWrap" />
-                <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
-                           Text="{Binding LigaturePreviewLine3}"
-                           FontFamily="{Binding PreviewFontFamily}"
-                           FontSize="{Binding FontSize}"
-                           FontFeatures="{Binding PreviewFontFeatures}"
-                           TextWrapping="NoWrap" />
-                <TextBlock Text="Rendered with the current font priority and size."
-                           FontSize="11" FontStyle="Italic" Foreground="Gray"
-                           Margin="0,4,0,0" TextWrapping="Wrap" />
-            </StackPanel>
-        </GroupBox>
+                <TextBlock Text="Fonts are searched top to bottom. Drag items to reorder priority."
+                           FontSize="11" Foreground="Gray" Margin="0,3,0,3" TextWrapping="Wrap" />
 
-        <GroupBox Header="{x:Static strings:Strings.AppearanceColorSchemeHeader}" Padding="8,8">
-            <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.ColorScheme}"
-                        Spacing="8">
-                <themeControls:NativeDropdown ItemsSource="{Binding ColorSchemes}"
-                                              DisplayMemberPath="Name"
-                                              AutomationProperties.Name="Color scheme"
-                                              SelectedValue="{Binding SelectedColorScheme, Mode=TwoWay}"
-                                              Width="250" HorizontalAlignment="Left" />
+                <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FontLigature}"
+                          IsChecked="{Binding EnableLigature, Mode=TwoWay}"
+                          Content="{x:Static strings:Strings.AppearanceEnableLigature}" />
 
-                <ItemsControl ItemsSource="{Binding PreviewSwatches}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" Spacing="4" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="x:Int32">
-                            <Border Width="24" Height="24" CornerRadius="3">
-                                <Border.Background>
-                                    <SolidColorBrush Color="{Binding Converter={x:Static vm:IntColorConverter.Instance}}" />
-                                </Border.Background>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <StackPanel Spacing="2"
+                            AutomationProperties.Name="Ligature preview"
+                            dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}">
+                    <TextBlock Text="Ligature preview"
+                               FontWeight="SemiBold"
+                               Margin="0,5,0,2" />
+                    <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
+                               Text="{Binding LigaturePreviewLine1}"
+                               FontFamily="{Binding PreviewFontFamily}"
+                               FontSize="{Binding FontSize}"
+                               FontFeatures="{Binding PreviewFontFeatures}"
+                               TextWrapping="NoWrap" />
+                    <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
+                               Text="{Binding LigaturePreviewLine2}"
+                               FontFamily="{Binding PreviewFontFamily}"
+                               FontSize="{Binding FontSize}"
+                               FontFeatures="{Binding PreviewFontFeatures}"
+                               TextWrapping="NoWrap" />
+                    <TextBlock dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.LigaturePreview}"
+                               Text="{Binding LigaturePreviewLine3}"
+                               FontFamily="{Binding PreviewFontFamily}"
+                               FontSize="{Binding FontSize}"
+                               FontFeatures="{Binding PreviewFontFeatures}"
+                               TextWrapping="NoWrap" />
+                    <TextBlock Text="Rendered with the current font priority and size."
+                               FontSize="11" FontStyle="Italic" Foreground="Gray"
+                               Margin="0,4,0,0" TextWrapping="Wrap" />
+                </StackPanel>
             </StackPanel>
         </GroupBox>
     </StackPanel>

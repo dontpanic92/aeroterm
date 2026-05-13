@@ -11,12 +11,12 @@
         <GroupBox Header="{x:Static strings:Strings.AppearanceBellHeader}" Padding="8,8">
             <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.Bell}"
                         Spacing="5">
-                <TextBlock Text="Action when the terminal sends BEL (Ctrl+G)"
-                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
                 <themeControls:NativeDropdown ItemsSource="{Binding BellActions}"
                                               AutomationProperties.Name="Bell action"
                                               SelectedValue="{Binding BellAction, Mode=TwoWay}"
                                               Width="200" HorizontalAlignment="Left" />
+                <TextBlock Text="Action when the terminal sends BEL (Ctrl+G)"
+                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
             </StackPanel>
         </GroupBox>
 
