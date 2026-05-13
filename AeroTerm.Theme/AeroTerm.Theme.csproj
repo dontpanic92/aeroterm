@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
-    <PackageReference Include="Avalonia" Version="12.0.0" />
+    <PackageReference Include="Avalonia" Version="12.0.3" />
   </ItemGroup>
 
   <ItemGroup>
