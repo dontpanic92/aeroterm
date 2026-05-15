@@ -16,6 +16,7 @@ using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Data;
+using Avalonia.Input;
 using Avalonia.Metadata;
 
 /// <summary>
@@ -72,6 +73,7 @@ public class NativeDropdown : Button
     private bool syncingSelection;
     private NativeDropdownItem? selectedItem;
     private INotifyCollectionChanged? subscribedItemsSource;
+    private Point? pendingPointerHint;
 
     static NativeDropdown()
     {
@@ -209,7 +211,35 @@ public class NativeDropdown : Button
     protected override void OnClick()
     {
         this.RebuildMenu();
-        base.OnClick();
+        this.menuFlyout.PointerHintPosition = this.pendingPointerHint;
+        try
+        {
+            base.OnClick();
+        }
+        finally
+        {
+            this.pendingPointerHint = null;
+            this.menuFlyout.PointerHintPosition = null;
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPointerPressed(PointerPressedEventArgs e)
+    {
+        this.pendingPointerHint = this.GetPointerPositionInTopLevel(e);
+        base.OnPointerPressed(e);
+    }
+
+    private Point? GetPointerPositionInTopLevel(PointerEventArgs e)
+    {
+        TopLevel? topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel is null)
+        {
+            return null;
+        }
+
+        Point local = e.GetPosition(this);
+        return this.TranslatePoint(local, topLevel);
     }
 
     private void OnSelectedIndexChanged(AvaloniaPropertyChangedEventArgs e)

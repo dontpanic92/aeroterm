@@ -113,7 +113,7 @@ internal sealed class MacOSNativeMenuAdapter : INativeMenuPlatformAdapter
             return this.fallback.ShowAt(flyout, target, showAtPointer: false);
         }
 
-        NSPoint point = this.GetMenuPoint(target, topLevel);
+        NSPoint point = this.GetMenuPoint(flyout, target, topLevel);
         try
         {
             return NativeMethods.ObjCMsgSendPtrPointPtrRetBool(
@@ -135,15 +135,31 @@ internal sealed class MacOSNativeMenuAdapter : INativeMenuPlatformAdapter
         }
     }
 
-    private NSPoint GetMenuPoint(Control target, TopLevel topLevel)
+    private NSPoint GetMenuPoint(NativeMenuFlyout flyout, Control target, TopLevel topLevel)
     {
-        Point translated = target.TranslatePoint(new Point(0, target.Bounds.Height), topLevel)
+        // Default: anchor menu's top-left at the target's bottom-left.
+        Point targetBottomLeft = target.TranslatePoint(new Point(0, target.Bounds.Height), topLevel)
             ?? new Point(0, target.Bounds.Height);
+        Point targetBottomRight = target.TranslatePoint(new Point(target.Bounds.Width, target.Bounds.Height), topLevel)
+            ?? new Point(target.Bounds.Width, target.Bounds.Height);
+
+        double menuLeft = targetBottomLeft.X;
+
+        if (flyout.PointerHintPosition is { } pointer)
+        {
+            // Shift the menu so its left edge sits near the cursor; AppKit menu items
+            // have a built-in left inset, so back off slightly so the text — not the
+            // edge — appears under the pointer. Clamp the left edge to stay within
+            // the target's horizontal bounds so the menu doesn't leak past the box.
+            const double LeftInset = 14.0;
+            double clampedX = Math.Clamp(pointer.X - LeftInset, targetBottomLeft.X, targetBottomRight.X);
+            menuLeft = clampedX;
+        }
 
         return new NSPoint
         {
-            X = translated.X,
-            Y = Math.Max(0, topLevel.Bounds.Height - translated.Y),
+            X = menuLeft,
+            Y = Math.Max(0, topLevel.Bounds.Height - targetBottomLeft.Y),
         };
     }
 

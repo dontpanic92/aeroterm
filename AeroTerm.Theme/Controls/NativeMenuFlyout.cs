@@ -39,6 +39,14 @@ public class NativeMenuFlyout : PopupFlyoutBase
     public AvaloniaList<NativeMenuItemBase> Items { get; }
 
     /// <summary>
+    /// Gets or sets an optional pointer position (in <see cref="TopLevel"/>-relative
+    /// coordinates) used as a hint when computing the menu's open location. Platform
+    /// adapters may use this to align the menu beneath the cursor instead of the
+    /// placement target's edge.
+    /// </summary>
+    internal Point? PointerHintPosition { get; set; }
+
+    /// <summary>
     /// Clears native menu visual state when an adapter observes the backing
     /// platform menu closing outside <see cref="HideCore"/>.
     /// </summary>
