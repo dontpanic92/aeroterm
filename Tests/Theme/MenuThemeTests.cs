@@ -7,6 +7,7 @@ namespace AeroTerm.Tests.Theme;
 
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using AeroTerm.Theme.Helpers;
 using Avalonia;
 using Avalonia.Controls;
@@ -93,7 +94,14 @@ public class MenuThemeTests
                 Assert.That(menu.Height, Is.EqualTo(30));
                 Assert.That(menuItem.MinHeight, Is.EqualTo(30));
                 Assert.That(menuItem.Padding, Is.EqualTo(new Thickness(10, 0)));
-                Assert.That(presenter.Padding.Top, Is.GreaterThan(presenter.Padding.Bottom));
+                if (ExpectAsymmetricBaseline())
+                {
+                    Assert.That(presenter.Padding.Top, Is.GreaterThan(presenter.Padding.Bottom));
+                }
+                else
+                {
+                    Assert.That(presenter.Padding.Top, Is.EqualTo(presenter.Padding.Bottom));
+                }
             });
         }
         finally
@@ -130,7 +138,7 @@ public class MenuThemeTests
             {
                 Assert.That(menuItem.MinHeight, Is.EqualTo(24));
                 Assert.That(menuItem.Padding, Is.EqualTo(new Thickness(0)));
-                Assert.That(headerPresenter.Padding, Is.EqualTo(new Thickness(0, 1, 0, 0)));
+                Assert.That(headerPresenter.Padding, Is.EqualTo(ExpectAsymmetricBaseline() ? new Thickness(0, 1, 0, 0) : new Thickness(0)));
                 Assert.That(gestureText.Margin, Is.EqualTo(new Thickness(20, 0, 8, 0)));
                 Assert.That(gestureText.FontSize, Is.EqualTo(12));
                 Assert.That(iconSlot.Width, Is.EqualTo(30));
@@ -205,6 +213,9 @@ public class MenuThemeTests
         PumpJobs();
         return window;
     }
+
+    private static bool ExpectAsymmetricBaseline() =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 
     private static void CloseHost(Window window)
     {

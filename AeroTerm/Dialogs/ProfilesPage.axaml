@@ -29,7 +29,7 @@
                                         AutomationProperties.LabeledBy="{Binding #ProfileSelectorLabel}" />
           <Button Grid.Column="1"
                   Margin="6,0,0,0"
-                  Padding="10,6"
+                  Padding="10,2"
                   Content="+ New"
                   Background="{DynamicResource AccentPrimaryBrush}"
                   Foreground="{DynamicResource TextOnAccentBrush}"
@@ -37,7 +37,7 @@
                   AutomationProperties.Name="Add profile" />
           <Button Grid.Column="2"
                   Margin="6,0,0,0"
-                  Padding="10,6"
+                  Padding="10,2"
                   Content="Copy"
                   ToolTip.Tip="Duplicate profile"
                   IsEnabled="{Binding HasSelection}"
@@ -45,7 +45,7 @@
                   AutomationProperties.Name="Duplicate profile" />
           <Button Grid.Column="3"
                   Margin="6,0,0,0"
-                  Padding="10,6"
+                  Padding="10,2"
                   Content="Delete"
                   ToolTip.Tip="Remove profile"
                   IsEnabled="{Binding HasSelection}"
@@ -85,7 +85,7 @@
                          Foreground="{DynamicResource TextOnAccentBrush}" />
             </Border>
             <Button Content="Set as default"
-                    Padding="12,6"
+                    Padding="12,2"
                     IsVisible="{Binding !IsSelectedDefault}"
                     Click="SetDefaultButton_Click"
                     AutomationProperties.Name="Set as default profile" />
@@ -113,7 +113,7 @@
                        PlaceholderText="e.g. /bin/zsh - leave empty for the platform default shell" />
               <Button Grid.Column="1"
                       Margin="6,0,0,0"
-                      Padding="14,6"
+                      Padding="14,2"
                       Content="Browse..."
                       Click="BrowseExecutable_Click"
                       AutomationProperties.Name="Browse for executable" />
@@ -146,7 +146,7 @@
                        PlaceholderText="leave empty to inherit the user home directory" />
               <Button Grid.Column="1"
                       Margin="6,0,0,0"
-                      Padding="14,6"
+                      Padding="14,2"
                       Content="Browse..."
                       Click="BrowseWorkingDirectory_Click"
                       AutomationProperties.Name="Browse for working directory" />

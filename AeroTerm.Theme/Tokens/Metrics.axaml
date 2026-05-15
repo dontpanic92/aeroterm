@@ -15,16 +15,42 @@
   <Thickness x:Key="BorderThicknessMedium">1.5</Thickness>
   <Thickness x:Key="BorderThicknessFocus">2</Thickness>
 
-  <!-- IDE-style compact padding. -->
-  <Thickness x:Key="ControlPaddingTight">6,3,6,1</Thickness>
-  <Thickness x:Key="ControlPaddingDefault">10,5,10,3</Thickness>
-  <Thickness x:Key="ControlPaddingRoomy">14,7,14,5</Thickness>
-  <Thickness x:Key="ControlTextBaselinePadding">0,1,0,0</Thickness>
+  <!--
+    IDE-style compact padding.
+
+    The macOS values are intentionally top-heavy (top ≈ bottom + 2 px) to
+    optically center SF Pro / -apple-system glyphs, whose Skia-reported
+    metrics leave more visual space below the baseline than above.
+
+    Windows (Segoe UI Variable) and Linux (DejaVu/Noto via Skia) report
+    balanced vertical metrics, so the same asymmetry pushes glyphs visibly
+    below center. Those platforms therefore use symmetric padding —
+    matching the original pre-f1747a5 proportions — applied uniformly to
+    every control via DynamicResource.
+
+    Adjust per-platform values here; no control template edits required.
+  -->
+  <OnPlatform x:Key="ControlPaddingTight" x:TypeArguments="Thickness" Default="6,2">
+    <On Options="macOS" Content="6,3,6,1" />
+  </OnPlatform>
+  <OnPlatform x:Key="ControlPaddingDefault" x:TypeArguments="Thickness" Default="10,4">
+    <On Options="macOS" Content="10,5,10,3" />
+  </OnPlatform>
+  <OnPlatform x:Key="ControlPaddingRoomy" x:TypeArguments="Thickness" Default="14,6">
+    <On Options="macOS" Content="14,7,14,5" />
+  </OnPlatform>
+  <OnPlatform x:Key="ControlTextBaselinePadding" x:TypeArguments="Thickness" Default="0">
+    <On Options="macOS" Content="0,1,0,0" />
+  </OnPlatform>
   <Thickness x:Key="MenuPopupPadding">4</Thickness>
   <Thickness x:Key="MenuItemPadding">0</Thickness>
-  <Thickness x:Key="MenuItemHeaderPadding">0,1,0,0</Thickness>
+  <OnPlatform x:Key="MenuItemHeaderPadding" x:TypeArguments="Thickness" Default="0">
+    <On Options="macOS" Content="0,1,0,0" />
+  </OnPlatform>
   <Thickness x:Key="MenuBarItemPadding">10,0</Thickness>
-  <Thickness x:Key="MenuBarItemHeaderPadding">0,1,0,0</Thickness>
+  <OnPlatform x:Key="MenuBarItemHeaderPadding" x:TypeArguments="Thickness" Default="0">
+    <On Options="macOS" Content="0,1,0,0" />
+  </OnPlatform>
   <Thickness x:Key="MenuInputGestureMargin">20,0,8,0</Thickness>
   <Thickness x:Key="MenuChevronMargin">0,0,8,0</Thickness>
   <Thickness x:Key="MenuSeparatorMargin">4,4</Thickness>

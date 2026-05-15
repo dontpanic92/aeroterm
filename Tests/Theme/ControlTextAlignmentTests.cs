@@ -8,6 +8,7 @@ namespace AeroTerm.Tests.Theme;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
@@ -62,7 +63,15 @@ public class ControlTextAlignmentTests
             {
                 var presenter = FindTemplatePart<ContentPresenter>(control, "PART_ContentPresenter");
 
-                Assert.That(presenter.Padding.Top, Is.GreaterThan(presenter.Padding.Bottom), control.GetType().Name);
+                if (ExpectAsymmetricBaseline())
+                {
+                    Assert.That(presenter.Padding.Top, Is.GreaterThan(presenter.Padding.Bottom), control.GetType().Name);
+                }
+                else
+                {
+                    Assert.That(presenter.Padding.Top, Is.EqualTo(presenter.Padding.Bottom), control.GetType().Name);
+                }
+
                 Assert.That(presenter.Padding.Left, Is.EqualTo(presenter.Padding.Right), control.GetType().Name);
                 Assert.That(presenter.VerticalContentAlignment, Is.EqualTo(VerticalAlignment.Center), control.GetType().Name);
             }
@@ -95,7 +104,15 @@ public class ControlTextAlignmentTests
                 var presenter = FindTemplatePart<ContentPresenter>(control, "PART_ContentPresenter");
 
                 Assert.That(presenter.Margin.Left, Is.GreaterThan(0), control.GetType().Name);
-                Assert.That(presenter.Padding.Top, Is.GreaterThan(0), control.GetType().Name);
+                if (ExpectAsymmetricBaseline())
+                {
+                    Assert.That(presenter.Padding.Top, Is.GreaterThan(0), control.GetType().Name);
+                }
+                else
+                {
+                    Assert.That(presenter.Padding.Top, Is.EqualTo(0), control.GetType().Name);
+                }
+
                 Assert.That(presenter.Padding.Bottom, Is.EqualTo(0), control.GetType().Name);
                 Assert.That(presenter.VerticalContentAlignment, Is.EqualTo(VerticalAlignment.Center), control.GetType().Name);
             }
@@ -162,8 +179,16 @@ public class ControlTextAlignmentTests
             var comboPresenter = FindTemplatePart<ContentPresenter>(comboBox, "PART_ContentPresenter");
             var nativePresenter = FindTemplatePart<ContentPresenter>(nativeDropdown, "PART_ContentPresenter");
 
-            Assert.That(comboPresenter.Margin.Top, Is.GreaterThan(comboPresenter.Margin.Bottom));
-            Assert.That(nativePresenter.Margin.Top, Is.GreaterThan(nativePresenter.Margin.Bottom));
+            if (ExpectAsymmetricBaseline())
+            {
+                Assert.That(comboPresenter.Margin.Top, Is.GreaterThan(comboPresenter.Margin.Bottom));
+                Assert.That(nativePresenter.Margin.Top, Is.GreaterThan(nativePresenter.Margin.Bottom));
+            }
+            else
+            {
+                Assert.That(comboPresenter.Margin.Top, Is.EqualTo(comboPresenter.Margin.Bottom));
+                Assert.That(nativePresenter.Margin.Top, Is.EqualTo(nativePresenter.Margin.Bottom));
+            }
         }
         finally
         {
@@ -191,7 +216,15 @@ public class ControlTextAlignmentTests
             PumpJobs();
 
             var presenter = FindTemplatePart<ContentPresenter>(menuItem, "PART_HeaderPresenter");
-            Assert.That(presenter.Padding.Top, Is.GreaterThan(0));
+            if (ExpectAsymmetricBaseline())
+            {
+                Assert.That(presenter.Padding.Top, Is.GreaterThan(0));
+            }
+            else
+            {
+                Assert.That(presenter.Padding.Top, Is.EqualTo(0));
+            }
+
             Assert.That(presenter.Padding.Bottom, Is.EqualTo(0));
         }
         finally
@@ -216,10 +249,10 @@ public class ControlTextAlignmentTests
         try
         {
             window.Show();
-            AssertThicknessResource(window, variant, "ControlPaddingTight", topGreaterThanBottom: true);
-            AssertThicknessResource(window, variant, "ControlPaddingDefault", topGreaterThanBottom: true);
-            AssertThicknessResource(window, variant, "ControlPaddingRoomy", topGreaterThanBottom: true);
-            AssertThicknessResource(window, variant, "ControlTextBaselinePadding", topGreaterThanBottom: true);
+            AssertThicknessResource(window, variant, "ControlPaddingTight", topGreaterThanBottom: ExpectAsymmetricBaseline());
+            AssertThicknessResource(window, variant, "ControlPaddingDefault", topGreaterThanBottom: ExpectAsymmetricBaseline());
+            AssertThicknessResource(window, variant, "ControlPaddingRoomy", topGreaterThanBottom: ExpectAsymmetricBaseline());
+            AssertThicknessResource(window, variant, "ControlTextBaselinePadding", topGreaterThanBottom: ExpectAsymmetricBaseline());
         }
         finally
         {
@@ -245,6 +278,9 @@ public class ControlTextAlignmentTests
         return window;
     }
 
+    private static bool ExpectAsymmetricBaseline() =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
     private static void CloseHost(Window window)
     {
         window.Close();
@@ -268,6 +304,10 @@ public class ControlTextAlignmentTests
         if (topGreaterThanBottom)
         {
             Assert.That(thickness.Top, Is.GreaterThan(thickness.Bottom), key);
+        }
+        else
+        {
+            Assert.That(thickness.Top, Is.EqualTo(thickness.Bottom), key);
         }
     }
 

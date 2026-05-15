@@ -47,6 +47,13 @@ public class NativeMenuFlyout : PopupFlyoutBase
     internal Point? PointerHintPosition { get; set; }
 
     /// <summary>
+    /// Gets or sets an optional minimum width applied to the menu's presenter on
+    /// non-native (Avalonia-rendered) platforms. Used by <see cref="NativeDropdown"/>
+    /// to match the popup width to the dropdown button.
+    /// </summary>
+    internal double? MinPresenterWidth { get; set; }
+
+    /// <summary>
     /// Clears native menu visual state when an adapter observes the backing
     /// platform menu closing outside <see cref="HideCore"/>.
     /// </summary>

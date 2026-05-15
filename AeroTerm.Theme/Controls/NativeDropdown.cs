@@ -212,6 +212,7 @@ public class NativeDropdown : Button
     {
         this.RebuildMenu();
         this.menuFlyout.PointerHintPosition = this.pendingPointerHint;
+        this.menuFlyout.MinPresenterWidth = this.Bounds.Width > 0 ? this.Bounds.Width : (double?)null;
         try
         {
             base.OnClick();
@@ -220,6 +221,7 @@ public class NativeDropdown : Button
         {
             this.pendingPointerHint = null;
             this.menuFlyout.PointerHintPosition = null;
+            this.menuFlyout.MinPresenterWidth = null;
         }
     }
 

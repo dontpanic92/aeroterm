@@ -24,7 +24,10 @@ internal sealed class AvaloniaNativeMenuAdapter : INativeMenuPlatformAdapter
     {
         this.Hide(flyout);
 
-        var menu = new MenuFlyout();
+        var menu = new WidthAwareMenuFlyout
+        {
+            MinPresenterWidth = flyout.MinPresenterWidth,
+        };
         foreach (ThemeNativeMenuItemBase item in flyout.Items)
         {
             if (CreateAvaloniaItem(item) is { } avaloniaItem)
@@ -101,5 +104,30 @@ internal sealed class AvaloniaNativeMenuAdapter : INativeMenuPlatformAdapter
         }
 
         return avaloniaItem;
+    }
+
+    /// <summary>
+    /// Menu flyout variant that forwards a minimum presenter width to the
+    /// generated <see cref="MenuFlyoutPresenter"/>. Used so dropdown popups match
+    /// the dropdown button width on Avalonia-rendered platforms.
+    /// </summary>
+    private sealed class WidthAwareMenuFlyout : MenuFlyout
+    {
+        /// <summary>
+        /// Gets or sets the minimum width applied to the menu's presenter.
+        /// </summary>
+        public double? MinPresenterWidth { get; set; }
+
+        /// <inheritdoc/>
+        protected override Control CreatePresenter()
+        {
+            Control presenter = base.CreatePresenter();
+            if (this.MinPresenterWidth is double w && w > 0)
+            {
+                presenter.MinWidth = w;
+            }
+
+            return presenter;
+        }
     }
 }
