@@ -8,6 +8,7 @@ namespace AeroTerm.Controls;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
 using AeroTerm.Services;
 using Avalonia;
 using Avalonia.Animation;
@@ -157,6 +158,7 @@ public sealed class TabStrip : UserControl
     private long scrollAnimStartTicks;
     private TabView? tabView;
     private IReadOnlyList<Profile> profiles = new List<Profile>();
+    private string? defaultProfileId;
     private TabGroupStore? groupStore;
     private DragState? drag;
     private DragPreviewWindow? dragPreview;
@@ -331,6 +333,28 @@ public sealed class TabStrip : UserControl
         set
         {
             this.profiles = value ?? new List<Profile>();
+            this.RebuildProfileFlyout();
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets the id of the profile that should be highlighted as
+    /// the default in the "+" button's dropdown. The default entry is
+    /// promoted to the top of the menu and rendered with a
+    /// "<c> (default)</c>" suffix. When <c>null</c> or unknown the menu
+    /// renders in source order without a marker.
+    /// </summary>
+    public string? DefaultProfileId
+    {
+        get => this.defaultProfileId;
+        set
+        {
+            if (this.defaultProfileId == value)
+            {
+                return;
+            }
+
+            this.defaultProfileId = value;
             this.RebuildProfileFlyout();
         }
     }
@@ -1657,12 +1681,26 @@ public sealed class TabStrip : UserControl
     private void RebuildProfileFlyout()
     {
         this.profileFlyout.Items.Clear();
-        foreach (var profile in this.profiles)
+
+        // Promote the default profile to the top of the menu so the
+        // primary one-click new-tab action is always immediately
+        // visible. Order is otherwise preserved.
+        IEnumerable<Profile> ordered = this.profiles;
+        if (!string.IsNullOrEmpty(this.defaultProfileId))
+        {
+            ordered = this.profiles
+                .OrderBy(p => p.Id == this.defaultProfileId ? 0 : 1);
+        }
+
+        foreach (var profile in ordered)
         {
             var captured = profile;
+            string name = string.IsNullOrWhiteSpace(captured.Name) ? "(unnamed)" : captured.Name;
+            bool isDefault = !string.IsNullOrEmpty(this.defaultProfileId)
+                && captured.Id == this.defaultProfileId;
             var item = new ThemeNativeMenuItem
             {
-                Header = string.IsNullOrWhiteSpace(captured.Name) ? "(unnamed)" : captured.Name,
+                Header = isDefault ? name + " (default)" : name,
             };
             item.Click += (_, _) => this.NewTabWithProfileRequested?.Invoke(captured);
             this.profileFlyout.Items.Add(item);

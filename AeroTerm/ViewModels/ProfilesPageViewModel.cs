@@ -240,6 +240,7 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
         if (this.defaultProfileId == target.Id)
         {
             this.defaultProfileId = this.Profiles.Count > 0 ? this.Profiles[0].Id : null;
+            this.RefreshDefaultMarkers();
         }
 
         this.SelectedProfile = this.Profiles.Count == 0
@@ -260,6 +261,7 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
         }
 
         this.defaultProfileId = this.selectedProfile.Id;
+        this.RefreshDefaultMarkers();
         this.OnPropertyChanged(nameof(this.IsSelectedDefault));
         this.Persist();
     }
@@ -395,7 +397,29 @@ internal sealed class ProfilesPageViewModel : SettingsPageViewModel, INotifyProp
         }
 
         this.defaultProfileId = data.DefaultProfileId;
+        this.RefreshDefaultMarkers();
         this.SelectedProfile = this.Profiles.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Synchronizes <see cref="Profile.IsDefault"/> across the profile
+    /// list with <see cref="defaultProfileId"/>, then re-emits each entry
+    /// through the bound <see cref="ObservableCollection{T}"/> so dependent
+    /// controls (e.g. the NativeDropdown that doesn't observe item-level
+    /// INotifyPropertyChanged) pick up the new label.
+    /// </summary>
+    private void RefreshDefaultMarkers()
+    {
+        for (int i = 0; i < this.Profiles.Count; i++)
+        {
+            var p = this.Profiles[i];
+            bool shouldBeDefault = p.Id == this.defaultProfileId;
+            if (p.IsDefault != shouldBeDefault)
+            {
+                p.IsDefault = shouldBeDefault;
+                this.Profiles[i] = p;
+            }
+        }
     }
 
     private void Persist()

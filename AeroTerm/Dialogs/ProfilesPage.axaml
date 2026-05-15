@@ -21,7 +21,7 @@
         <Grid ColumnDefinitions="*,Auto,Auto,Auto">
           <themeControls:NativeDropdown Grid.Column="0"
                                         ItemsSource="{Binding Profiles}"
-                                        DisplayMemberPath="Name"
+                                        DisplayMemberPath="DisplayName"
                                         SelectedValue="{Binding SelectedProfile, Mode=TwoWay}"
                                         PlaceholderText="No profiles"
                                         HorizontalAlignment="Stretch"

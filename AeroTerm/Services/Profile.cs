@@ -58,11 +58,27 @@ public sealed class Profile
     public string? WorkingDirectory { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this profile is the
+    /// application default. Transient UI state owned by the active
+    /// view models; not persisted (the canonical default pointer lives
+    /// on <see cref="ProfileStoreData.DefaultProfileId"/>).
+    /// </summary>
+    public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// Gets the human-readable label rendered in profile pickers. When
+    /// <see cref="IsDefault"/> is set, the active default marker
+    /// "<c> (default)</c>" is appended so the user can tell at a glance
+    /// which profile new tabs will use.
+    /// </summary>
+    public string DisplayName => this.IsDefault ? this.Name + " (default)" : this.Name;
+
+    /// <summary>
     /// Returns the human-readable profile name. Overridden so UI controls
     /// that fall back to <see cref="object.ToString"/> (e.g. when reflection
     /// on <see cref="Name"/> is trimmed away under PublishAot) still render
     /// a meaningful label instead of the type's full name.
     /// </summary>
-    /// <returns>The profile <see cref="Name"/>.</returns>
-    public override string ToString() => this.Name;
+    /// <returns>The profile <see cref="DisplayName"/>.</returns>
+    public override string ToString() => this.DisplayName;
 }

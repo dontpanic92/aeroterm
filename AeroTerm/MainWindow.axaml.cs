@@ -166,6 +166,7 @@ public partial class MainWindow : Window
         this.tabStrip.TabTransferRequested += this.OnTabTransferRequested;
         this.tabStrip.TabGroupAssignmentRequested += this.OnTabGroupAssignmentRequested;
         this.tabStrip.Profiles = App.Profiles.Profiles;
+        this.tabStrip.DefaultProfileId = App.Profiles.DefaultProfileId;
         this.tabStrip.GroupStore = App.TabGroupStore;
         App.ProfilesChanged += this.OnProfilesChanged;
         this.ApplyTabBarOrientation();
@@ -784,6 +785,7 @@ public partial class MainWindow : Window
         Dispatcher.UIThread.Post(() =>
         {
             this.tabStrip.Profiles = App.Profiles.Profiles;
+            this.tabStrip.DefaultProfileId = App.Profiles.DefaultProfileId;
         });
     }
 
