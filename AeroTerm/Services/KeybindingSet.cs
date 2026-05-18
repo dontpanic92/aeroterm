@@ -189,6 +189,9 @@ public sealed class KeybindingSet
         KeybindingAction.ToggleTabBarOrientation => "Toggle tab bar orientation",
         KeybindingAction.JumpToPreviousCommand => "Jump to previous command",
         KeybindingAction.JumpToNextCommand => "Jump to next command",
+        KeybindingAction.ShowWorkbenchExplorer => "Workbench: show Explorer",
+        KeybindingAction.ShowWorkbenchEditor => "Workbench: show Editor",
+        KeybindingAction.ShowWorkbenchGit => "Workbench: show Git",
         _ => action.ToString(),
     };
 

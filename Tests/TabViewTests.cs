@@ -195,6 +195,24 @@ public class TabViewTests
     }
 
     /// <summary>
+    /// <see cref="TabSession.CurrentWorkingDirectoryChanged"/> follows the
+    /// active content's current-directory event.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabSession_CurrentWorkingDirectoryChanged_FiresWhenActiveContentRaisesIt()
+    {
+        var fake = new FakeTabContent("initial");
+        var t = new TabSession(fake);
+        string? latest = null;
+        t.CurrentWorkingDirectoryChanged += cwd => latest = cwd;
+
+        fake.RaiseCurrentWorkingDirectory("/work");
+
+        Assert.That(latest, Is.EqualTo("/work"));
+        Assert.That(t.CurrentWorkingDirectory, Is.EqualTo("/work"));
+    }
+
+    /// <summary>
     /// <see cref="TabView.DuplicateTab"/> inserts the new tab immediately
     /// after the source tab, not at the end of the collection.
     /// </summary>

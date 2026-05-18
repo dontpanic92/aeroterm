@@ -50,12 +50,27 @@ __aeroterm_osc133_a() { print -n '\e]133;A\a'; }
 __aeroterm_osc133_b() { print -n '\e]133;B\a'; }
 __aeroterm_osc133_c() { print -n '\e]133;C\a'; }
 __aeroterm_osc133_d() { print -n "\e]133;D;${1:-0}\a"; }
+__aeroterm_urlencode_path() {
+    local LC_ALL=C s="$1" i c out=""
+    for (( i = 0; i < ${#s}; i++ )); do
+        c="${s:i:1}"
+        case "$c" in
+            [a-zA-Z0-9.~_/-]) out="${out}${c}" ;;
+            *) out="${out}$(printf '%%%02X' "'$c")" ;;
+        esac
+    done
+    print -rn -- "$out"
+}
+__aeroterm_osc7_cwd() {
+    print -n "\e]7;file://${HOSTNAME:-localhost}$(__aeroterm_urlencode_path "$PWD")\a"
+}
 
 # Pre-prompt hook: emit D for the just-finished command (with its exit
 # code) and A for the new prompt about to render.
 __aeroterm_precmd() {
     local exit=$?
     __aeroterm_osc133_d "$exit"
+    __aeroterm_osc7_cwd
     __aeroterm_osc133_a
     return $exit
 }
@@ -88,6 +103,7 @@ PS1="${PS1}%{$(printf '\e]133;B\a')%}"
 # Final A for the very first prompt: precmd will fire before later
 # prompts, but the first prompt is already mid-render by the time we
 # load. Emit A now so the first command's input region is well-formed.
+__aeroterm_osc7_cwd
 __aeroterm_osc133_a
 """;
 
@@ -107,9 +123,27 @@ AEROTERM_SHELL_INTEGRATION_LOADED=1
 
 __aeroterm_in_prompt=1
 
+__aeroterm_urlencode_path() {
+    local LC_ALL=C s="$1" i c out=""
+    for (( i = 0; i < ${#s}; i++ )); do
+        c="${s:i:1}"
+        case "$c" in
+            [a-zA-Z0-9.~_/-]) out="${out}${c}" ;;
+            *) out="${out}$(printf '%%%02X' "'$c")" ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+__aeroterm_osc7_cwd() {
+    printf '\e]7;file://%s%s\a' "${HOSTNAME:-localhost}" "$(__aeroterm_urlencode_path "$PWD")"
+}
+
 __aeroterm_precmd() {
     local exit=$?
-    printf '\e]133;D;%s\a\e]133;A\a' "$exit"
+    printf '\e]133;D;%s\a' "$exit"
+    __aeroterm_osc7_cwd
+    printf '\e]133;A\a'
     __aeroterm_in_prompt=1
     return $exit
 }
@@ -177,6 +211,11 @@ function global:prompt {
     $bel = $global:__AeroTermBel
     $sb = [System.Text.StringBuilder]::new()
     [void]$sb.Append("$esc]133;D;$exit$bel")
+    $cwdPath = $executionContext.SessionState.Path.CurrentLocation.ProviderPath
+    if ($cwdPath) {
+        $cwdUri = [System.Uri]::new($cwdPath).AbsoluteUri
+        [void]$sb.Append("$esc]7;$cwdUri$bel")
+    }
     [void]$sb.Append("$esc]133;A$bel")
     if (Test-Path Function:\__AeroTerm_OriginalPrompt) {
         [void]$sb.Append((& __AeroTerm_OriginalPrompt))
@@ -218,9 +257,28 @@ if set -q AEROTERM_SHELL_INTEGRATION_LOADED
 end
 set -gx AEROTERM_SHELL_INTEGRATION_LOADED 1
 
+function __aeroterm_urlencode_path
+    set -l parts (string split / -- $argv[1])
+    set -l out ''
+    for i in (seq (count $parts))
+        set -l part (string escape --style=url -- $parts[$i])
+        if test $i -eq 1
+            set out $part
+        else
+            set out "$out/$part"
+        end
+    end
+    printf '%s' $out
+end
+
+function __aeroterm_osc7_cwd
+    printf '\e]7;file://%s%s\a' (prompt_hostname) (__aeroterm_urlencode_path $PWD)
+end
+
 function __aeroterm_emit_a --on-event fish_prompt
     set -l exit $status
     printf '\e]133;D;%s\a' $exit
+    __aeroterm_osc7_cwd
     printf '\e]133;A\a'
 end
 

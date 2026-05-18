@@ -113,6 +113,12 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     public event Action? PaneLayoutChanged;
 
     /// <summary>
+    /// Raised when the active pane's best-known working directory changes.
+    /// Background pane changes are ignored until that pane becomes active.
+    /// </summary>
+    internal event Action<string?>? CurrentWorkingDirectoryChanged;
+
+    /// <summary>
     /// Raised when a new pane has just been added to this session's
     /// tree. The host typically wires per-coordinator plumbing (bell /
     /// bg-color). Internal because <see cref="ITabSessionContent"/>
@@ -192,6 +198,12 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     /// session uses a test seam.
     /// </summary>
     internal TerminalSessionCoordinator? Coordinator => this.tree.ActiveLeaf.Content.Coordinator;
+
+    /// <summary>
+    /// Gets the active pane's best-known working directory, or <c>null</c>
+    /// when no current directory has been reported yet.
+    /// </summary>
+    internal string? CurrentWorkingDirectory => this.tree.ActiveLeaf.Content.CurrentWorkingDirectory;
 
     /// <summary>
     /// Gets the number of panes currently in the split tree.
@@ -384,9 +396,11 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     {
         Action<string> titleHandler = t => this.OnPaneTitleChanged(content, t);
         Action exitHandler = () => this.OnPaneExited(content);
+        Action<string> cwdHandler = cwd => this.OnPaneCurrentWorkingDirectoryChanged(content, cwd);
         content.TitleChanged += titleHandler;
         content.ProcessExitedNormally += exitHandler;
-        this.perPane[content] = new PaneHandlers(titleHandler, exitHandler);
+        content.CurrentWorkingDirectoryChanged += cwdHandler;
+        this.perPane[content] = new PaneHandlers(titleHandler, exitHandler, cwdHandler);
     }
 
     private void UnwirePaneContent(ITabSessionContent content)
@@ -395,6 +409,7 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
         {
             content.TitleChanged -= h.TitleHandler;
             content.ProcessExitedNormally -= h.ExitHandler;
+            content.CurrentWorkingDirectoryChanged -= h.CwdHandler;
         }
     }
 
@@ -415,6 +430,7 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     private void OnActiveLeafChanged(PaneLeaf leaf)
     {
         this.Title = string.IsNullOrEmpty(leaf.Content.Title) ? "AeroTerm" : leaf.Content.Title;
+        this.CurrentWorkingDirectoryChanged?.Invoke(leaf.Content.CurrentWorkingDirectory);
     }
 
     private void OnPaneTitleChanged(ITabSessionContent source, string newTitle)
@@ -455,10 +471,20 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
         this.tree.CloseActive();
     }
 
+    private void OnPaneCurrentWorkingDirectoryChanged(ITabSessionContent source, string cwd)
+    {
+        if (!ReferenceEquals(source, this.tree.ActiveLeaf.Content))
+        {
+            return;
+        }
+
+        this.CurrentWorkingDirectoryChanged?.Invoke(cwd);
+    }
+
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
     {
         this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 
-    private readonly record struct PaneHandlers(Action<string> TitleHandler, Action ExitHandler);
+    private readonly record struct PaneHandlers(Action<string> TitleHandler, Action ExitHandler, Action<string> CwdHandler);
 }

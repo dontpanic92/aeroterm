@@ -128,6 +128,12 @@ public class VtParser
     /// </summary>
     public event EventHandler<PromptMarkEventArgs>? PromptMarkRaised;
 
+    /// <summary>
+    /// Raised when an OSC 7 file URI or shell-integration prompt payload
+    /// reports the terminal's current working directory.
+    /// </summary>
+    public event EventHandler<CurrentDirectoryEventArgs>? CurrentDirectoryChanged;
+
     private enum VtState
     {
         Ground,
@@ -1466,6 +1472,10 @@ public class VtParser
                     this.HandleOscPalette(payload);
                     break;
 
+                case 7: // Current working directory (OSC 7 ; file://host/path)
+                    this.HandleOscCurrentDirectory(payload);
+                    break;
+
                 case 8: // Hyperlink (OSC 8 ; params ; URI)
                     this.HandleOscHyperlink(payload);
                     break;
@@ -1514,6 +1524,50 @@ public class VtParser
                     this.HandleOscShellIntegration(payload);
                     break;
             }
+        }
+    }
+
+    private bool TryParseOsc7CurrentDirectory(string payload, out string currentDirectory)
+    {
+        currentDirectory = string.Empty;
+        if (!Uri.TryCreate(payload, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string path = Uri.UnescapeDataString(uri.AbsolutePath);
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        if (path.Length >= 3 && path[0] == '/' && this.IsWindowsDrivePath(path, 1))
+        {
+            currentDirectory = path.Substring(1).Replace('/', '\\');
+            return true;
+        }
+
+        currentDirectory = path;
+        return true;
+    }
+
+    private bool IsWindowsDrivePath(string text, int startIndex)
+    {
+        if (startIndex + 1 >= text.Length || text[startIndex + 1] != ':')
+        {
+            return false;
+        }
+
+        char drive = text[startIndex];
+        return (drive >= 'A' && drive <= 'Z') || (drive >= 'a' && drive <= 'z');
+    }
+
+    private void HandleOscCurrentDirectory(string payload)
+    {
+        if (this.TryParseOsc7CurrentDirectory(payload, out string currentDirectory))
+        {
+            this.CurrentDirectoryChanged?.Invoke(this, new CurrentDirectoryEventArgs(currentDirectory));
         }
     }
 
@@ -1794,6 +1848,11 @@ public class VtParser
         }
 
         this.ExtractKnownPromptFields(kind, subPayload, out int? exitCode, out string? cwd);
+
+        if (!string.IsNullOrEmpty(cwd))
+        {
+            this.CurrentDirectoryChanged?.Invoke(this, new CurrentDirectoryEventArgs(cwd));
+        }
 
         this.ShellIntegrationReceived?.Invoke(this, new ShellIntegrationEventArgs(legacyKind, subPayload));
         this.PromptMarkRaised?.Invoke(this, new PromptMarkEventArgs(kind, exitCode, cwd, subPayload));

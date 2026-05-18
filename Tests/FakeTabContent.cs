@@ -34,6 +34,9 @@ internal sealed class FakeTabContent : ITabSessionContent
     public event Action? ProcessExitedNormally;
 
     /// <inheritdoc />
+    public event Action<string>? CurrentWorkingDirectoryChanged;
+
+    /// <inheritdoc />
     public string Title { get; private set; }
 
     /// <inheritdoc />
@@ -44,6 +47,9 @@ internal sealed class FakeTabContent : ITabSessionContent
 
     /// <inheritdoc />
     public TerminalControl? Terminal => null;
+
+    /// <inheritdoc />
+    public string? CurrentWorkingDirectory { get; private set; }
 
     /// <summary>
     /// Gets the number of times <see cref="Dispose"/> has been invoked.
@@ -66,6 +72,16 @@ internal sealed class FakeTabContent : ITabSessionContent
     public void RaiseExit()
     {
         this.ProcessExitedNormally?.Invoke();
+    }
+
+    /// <summary>
+    /// Raises the <see cref="CurrentWorkingDirectoryChanged"/> event.
+    /// </summary>
+    /// <param name="cwd">The new current working directory.</param>
+    public void RaiseCurrentWorkingDirectory(string cwd)
+    {
+        this.CurrentWorkingDirectory = cwd;
+        this.CurrentWorkingDirectoryChanged?.Invoke(cwd);
     }
 
     /// <inheritdoc />

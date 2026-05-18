@@ -146,4 +146,13 @@ internal interface IPaletteHost
     /// shell-integration prompt mark.
     /// </summary>
     void JumpToNextCommand();
+
+    /// <summary>Shows the experimental Workbench Explorer view.</summary>
+    void ShowWorkbenchExplorer();
+
+    /// <summary>Shows the experimental Workbench Editor view.</summary>
+    void ShowWorkbenchEditor();
+
+    /// <summary>Shows the experimental Workbench Git view.</summary>
+    void ShowWorkbenchGit();
 }

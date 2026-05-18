@@ -24,6 +24,7 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     private readonly LaunchSpec? launchOverride;
     private TerminalControl? terminalControl;
     private System.ComponentModel.PropertyChangedEventHandler? settingsHandler;
+    private string? shellReportedCwd;
     private bool disposed;
 
     /// <summary>
@@ -76,6 +77,12 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     /// Always invoked on the UI thread.
     /// </summary>
     public event Action? BellRaised;
+
+    /// <summary>
+    /// Raised when the running terminal reports a new current working
+    /// directory through shell integration or OSC 7.
+    /// </summary>
+    internal event Action<string>? CurrentWorkingDirectoryChanged;
 
     /// <summary>
     /// Gets the active terminal control, or <c>null</c> if not yet initialized.
@@ -215,6 +222,7 @@ internal sealed class TerminalSessionCoordinator : IDisposable
             Dispatcher.UIThread.Post(() => this.TitleChanged?.Invoke(title));
         this.terminalControl.BackgroundColorChanged += color =>
             Dispatcher.UIThread.Post(() => this.BackgroundColorChanged?.Invoke(color));
+        this.terminalControl.CurrentDirectoryChanged += this.OnTerminalCurrentDirectoryChanged;
         this.terminalControl.ProcessExited += this.OnProcessExited;
         this.terminalControl.BellRaised += () =>
             Dispatcher.UIThread.Post(() => this.BellRaised?.Invoke());
@@ -262,6 +270,11 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     /// sensible can be determined (e.g. before <see cref="Initialize"/>).</returns>
     internal string? TryGetCurrentWorkingDirectory()
     {
+        if (!string.IsNullOrEmpty(this.shellReportedCwd))
+        {
+            return this.shellReportedCwd;
+        }
+
         string? live = this.TryReadLiveCwd();
         if (!string.IsNullOrEmpty(live))
         {
@@ -388,6 +401,17 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     private void OnProcessExited()
     {
         Dispatcher.UIThread.Post(() => this.ProcessExitedNormally?.Invoke());
+    }
+
+    private void OnTerminalCurrentDirectoryChanged(string cwd)
+    {
+        if (string.IsNullOrEmpty(cwd) || this.shellReportedCwd == cwd)
+        {
+            return;
+        }
+
+        this.shellReportedCwd = cwd;
+        Dispatcher.UIThread.Post(() => this.CurrentWorkingDirectoryChanged?.Invoke(cwd));
     }
 
     /// <summary>

@@ -125,4 +125,13 @@ public enum KeybindingAction
     /// (OSC 133 C / B). Requires shell integration to be enabled in the shell.
     /// </summary>
     JumpToNextCommand,
+
+    /// <summary>Show the experimental Workbench Explorer view.</summary>
+    ShowWorkbenchExplorer,
+
+    /// <summary>Show the experimental Workbench Editor view.</summary>
+    ShowWorkbenchEditor,
+
+    /// <summary>Show the experimental Workbench Git view.</summary>
+    ShowWorkbenchGit,
 }

@@ -32,6 +32,7 @@ internal static class SettingsPageFactory
             new AppearancePageViewModel(settings),
             new TerminalPageViewModel(settings),
             new WindowTabsPageViewModel(settings),
+            new ExperimentalPageViewModel(settings),
             new KeybindingsPageViewModel(keybindingStore),
             new ProfilesPageViewModel(profileStore),
             new UpdatesPageViewModel(settings, updateService),
@@ -53,6 +54,7 @@ internal static class SettingsPageFactory
             new AppearancePageViewModel(settings),
             new TerminalPageViewModel(settings),
             new WindowTabsPageViewModel(settings),
+            new ExperimentalPageViewModel(settings),
             new UpdatesPageViewModel(settings, updateService),
         };
     }

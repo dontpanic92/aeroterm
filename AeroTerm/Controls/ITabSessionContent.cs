@@ -25,6 +25,12 @@ internal interface ITabSessionContent : IDisposable
     event Action? ProcessExitedNormally;
 
     /// <summary>
+    /// Raised when the underlying terminal session reports a new current
+    /// working directory.
+    /// </summary>
+    event Action<string>? CurrentWorkingDirectoryChanged;
+
+    /// <summary>
     /// Gets the current title as reported by the content.
     /// </summary>
     string Title { get; }
@@ -45,6 +51,12 @@ internal interface ITabSessionContent : IDisposable
     /// Returns <c>null</c> for fake content or before <see cref="Start"/>.
     /// </summary>
     TerminalControl? Terminal { get; }
+
+    /// <summary>
+    /// Gets the latest known working directory for the underlying session,
+    /// or <c>null</c> when it is not yet known.
+    /// </summary>
+    string? CurrentWorkingDirectory { get; }
 
     /// <summary>
     /// Starts the underlying session (spawning the shell).

@@ -55,6 +55,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private string quakeHotkey = DefaultQuakeHotkey();
     private bool middleClickPastes = true;
     private bool enableShellIntegration = true;
+    private bool enableWorkbench;
     private TabBarOrientation tabBarOrientation = TabBarOrientation.Horizontal;
 
     /// <inheritdoc />
@@ -374,6 +375,17 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether the experimental Workbench
+    /// feature is enabled. The Workbench adds terminal-cwd-aware Explorer,
+    /// editor, and Git views. Defaults to <see langword="false"/>.
+    /// </summary>
+    public bool EnableWorkbench
+    {
+        get => this.enableWorkbench;
+        set => this.SetField(ref this.enableWorkbench, value);
+    }
+
+    /// <summary>
     /// Gets or sets the orientation of the tab strip. Defaults to
     /// <see cref="TabBarOrientation.Horizontal"/> (a classic top-docked
     /// tab bar). Setting <see cref="TabBarOrientation.Vertical"/> swaps
@@ -458,6 +470,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.QuakeHotkey = fresh.QuakeHotkey;
         this.MiddleClickPastes = fresh.MiddleClickPastes;
         this.EnableShellIntegration = fresh.EnableShellIntegration;
+        this.EnableWorkbench = fresh.EnableWorkbench;
         this.TabBarOrientation = fresh.TabBarOrientation;
         this.LastPersistenceError = fresh.LastPersistenceError;
         return string.IsNullOrEmpty(this.LastPersistenceError);

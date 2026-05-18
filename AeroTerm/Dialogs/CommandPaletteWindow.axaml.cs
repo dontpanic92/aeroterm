@@ -453,5 +453,17 @@ internal partial class CommandPaletteWindow : Window
         public void JumpToNextCommand()
         {
         }
+
+        public void ShowWorkbenchExplorer()
+        {
+        }
+
+        public void ShowWorkbenchEditor()
+        {
+        }
+
+        public void ShowWorkbenchGit()
+        {
+        }
     }
 }

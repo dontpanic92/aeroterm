@@ -70,6 +70,7 @@ public partial class MainWindow : Window
     private readonly DockPanel titleBarTabDock;
     private readonly BellService bellService;
     private readonly TabView tabView;
+    private readonly WorkbenchHost workbenchHost;
     private readonly TabStrip tabStrip;
     private readonly Dictionary<TabSession, Action> tabUnwire = new();
     private readonly Dictionary<AeroTerm.Controls.ITabSessionContent, Action> paneUnwire
@@ -78,6 +79,7 @@ public partial class MainWindow : Window
     private bool isSettingsDialogOpen;
     private bool isCloseConfirmed;
     private bool suppressInitialTab;
+    private string? activeWorkbenchRoot;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
@@ -154,7 +156,9 @@ public partial class MainWindow : Window
         this.tabView = new TabView();
         this.tabView.ActiveTabChanged += this.OnActiveTabChanged;
         this.tabView.LastTabClosed += this.OnLastTabClosed;
-        this.terminalBorder.Child = this.tabView;
+        this.workbenchHost = new WorkbenchHost(this.tabView);
+        this.workbenchHost.SetWorkbenchEnabled(settings.EnableWorkbench);
+        this.terminalBorder.Child = this.workbenchHost;
 
         this.tabStrip = new TabStrip { View = this.tabView };
         this.tabStrip.NewTabRequested += this.CreateAndActivateNewTab;
@@ -201,6 +205,12 @@ public partial class MainWindow : Window
     /// <see cref="DragDropCoordinator"/> for cross-window drop detection.
     /// </summary>
     internal TabStrip Strip => this.tabStrip;
+
+    /// <summary>
+    /// Gets the active terminal pane's latest known working directory. This
+    /// is the root future Workbench views will follow when enabled.
+    /// </summary>
+    internal string? ActiveWorkbenchRoot => this.activeWorkbenchRoot;
 
     /// <summary>
     /// Opens the settings dialog. Called from the macOS native app menu.
@@ -404,6 +414,24 @@ public partial class MainWindow : Window
         if (resolved?.Action == KeybindingAction.ToggleTabBarOrientation)
         {
             this.ToggleTabBarOrientation();
+            return true;
+        }
+
+        if (this.settings.EnableWorkbench && resolved?.Action == KeybindingAction.ShowWorkbenchExplorer)
+        {
+            this.ShowWorkbenchExplorer();
+            return true;
+        }
+
+        if (this.settings.EnableWorkbench && resolved?.Action == KeybindingAction.ShowWorkbenchEditor)
+        {
+            this.ShowWorkbenchEditor();
+            return true;
+        }
+
+        if (this.settings.EnableWorkbench && resolved?.Action == KeybindingAction.ShowWorkbenchGit)
+        {
+            this.ShowWorkbenchGit();
             return true;
         }
 
@@ -616,13 +644,22 @@ public partial class MainWindow : Window
         session.PaneRemoving += onPaneRemoving;
 
         Action exitHandler = () => Dispatcher.UIThread.Post(() => this.OnTabProcessExited(session));
+        Action<string?> cwdHandler = _ => Dispatcher.UIThread.Post(() =>
+        {
+            if (ReferenceEquals(this.tabView.ActiveTab, session))
+            {
+                this.UpdateActiveWorkbenchRoot();
+            }
+        });
         session.ProcessExitedNormally += exitHandler;
+        session.CurrentWorkingDirectoryChanged += cwdHandler;
 
         this.tabUnwire[session] = () =>
         {
             session.PaneAdded -= onPaneAdded;
             session.PaneRemoving -= onPaneRemoving;
             session.ProcessExitedNormally -= exitHandler;
+            session.CurrentWorkingDirectoryChanged -= cwdHandler;
             foreach (var content in session.AllContents)
             {
                 this.UnwirePane(content);
@@ -948,6 +985,7 @@ public partial class MainWindow : Window
     private void OnActiveTabChanged(TabSession? newActive)
     {
         this.UpdateWindowTitleFromActive();
+        this.UpdateActiveWorkbenchRoot();
 
         // Unsubscribe / re-subscribe title tracking on the active tab.
         foreach (var t in this.tabView.Tabs)
@@ -972,6 +1010,12 @@ public partial class MainWindow : Window
         var title = this.tabView.ActiveTab?.Title;
         this.Title = string.IsNullOrEmpty(title) ? "AeroTerm" : title;
         this.titleText.Text = this.Title;
+    }
+
+    private void UpdateActiveWorkbenchRoot()
+    {
+        this.activeWorkbenchRoot = this.tabView.ActiveTab?.CurrentWorkingDirectory;
+        this.workbenchHost.UpdateWorkspaceRoot(this.activeWorkbenchRoot);
     }
 
     private void UpdateTabStripVisibility()
@@ -1169,6 +1213,14 @@ public partial class MainWindow : Window
         {
             Dispatcher.UIThread.Post(this.ApplyTabBarOrientation);
         }
+        else if (e.PropertyName == nameof(AppSettings.EnableWorkbench))
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                this.workbenchHost.SetWorkbenchEnabled(this.settings.EnableWorkbench);
+                this.UpdateActiveWorkbenchRoot();
+            });
+        }
     }
 
     private void ToggleTabBarOrientation()
@@ -1176,6 +1228,24 @@ public partial class MainWindow : Window
         this.settings.TabBarOrientation = this.settings.TabBarOrientation == TabBarOrientation.Vertical
             ? TabBarOrientation.Horizontal
             : TabBarOrientation.Vertical;
+    }
+
+    private void ShowWorkbenchExplorer()
+    {
+        this.workbenchHost.ShowExplorer();
+        this.workbenchHost.SetWorkbenchEnabled(this.settings.EnableWorkbench);
+    }
+
+    private void ShowWorkbenchEditor()
+    {
+        this.workbenchHost.ShowEditor();
+        this.workbenchHost.SetWorkbenchEnabled(this.settings.EnableWorkbench);
+    }
+
+    private void ShowWorkbenchGit()
+    {
+        this.workbenchHost.ShowGit();
+        this.workbenchHost.SetWorkbenchEnabled(this.settings.EnableWorkbench);
     }
 
     private void ApplyTabBarOrientation()

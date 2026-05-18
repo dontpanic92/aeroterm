@@ -43,6 +43,7 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.coordinator.TerminalReady += this.OnTerminalReady;
         this.coordinator.TitleChanged += this.OnCoordinatorTitleChanged;
         this.coordinator.ProcessExitedNormally += this.OnCoordinatorProcessExited;
+        this.coordinator.CurrentWorkingDirectoryChanged += this.OnCoordinatorCurrentWorkingDirectoryChanged;
     }
 
     /// <inheritdoc />
@@ -50,6 +51,9 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
 
     /// <inheritdoc />
     public event Action? ProcessExitedNormally;
+
+    /// <inheritdoc />
+    public event Action<string>? CurrentWorkingDirectoryChanged;
 
     /// <inheritdoc />
     public string Title => this.title;
@@ -62,6 +66,9 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
 
     /// <inheritdoc />
     public TerminalControl? Terminal => this.terminal;
+
+    /// <inheritdoc />
+    public string? CurrentWorkingDirectory => this.coordinator.TryGetCurrentWorkingDirectory();
 
     /// <inheritdoc />
     public void Start()
@@ -115,6 +122,7 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.coordinator.TerminalReady -= this.OnTerminalReady;
         this.coordinator.TitleChanged -= this.OnCoordinatorTitleChanged;
         this.coordinator.ProcessExitedNormally -= this.OnCoordinatorProcessExited;
+        this.coordinator.CurrentWorkingDirectoryChanged -= this.OnCoordinatorCurrentWorkingDirectoryChanged;
         if (this.terminal is not null)
         {
             this.terminal.TopInsetChanged -= this.OnTerminalTopInsetChanged;
@@ -180,5 +188,10 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     private void OnCoordinatorProcessExited()
     {
         this.ProcessExitedNormally?.Invoke();
+    }
+
+    private void OnCoordinatorCurrentWorkingDirectoryChanged(string cwd)
+    {
+        this.CurrentWorkingDirectoryChanged?.Invoke(cwd);
     }
 }

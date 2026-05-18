@@ -295,6 +295,43 @@ public static class PaletteCommandSource
                 }));
         }
 
+        // --- Workbench commands ---------------------------------------------
+        if (settings.EnableWorkbench)
+        {
+            list.Add(new PaletteCommand(
+                Id: "workbench.explorer",
+                Title: "Workbench: Show Explorer",
+                Subtitle: "Follow the active terminal cwd.",
+                Category: "Workbench",
+                Execute: () =>
+                {
+                    host.ShowWorkbenchExplorer();
+                    return ValueTask.CompletedTask;
+                }));
+
+            list.Add(new PaletteCommand(
+                Id: "workbench.editor",
+                Title: "Workbench: Show Editor",
+                Subtitle: "Open the lightweight editor placeholder.",
+                Category: "Workbench",
+                Execute: () =>
+                {
+                    host.ShowWorkbenchEditor();
+                    return ValueTask.CompletedTask;
+                }));
+
+            list.Add(new PaletteCommand(
+                Id: "workbench.git",
+                Title: "Workbench: Show Git",
+                Subtitle: "Open the Git view placeholder.",
+                Category: "Workbench",
+                Execute: () =>
+                {
+                    host.ShowWorkbenchGit();
+                    return ValueTask.CompletedTask;
+                }));
+        }
+
         // --- Window commands -------------------------------------------------
         list.Add(new PaletteCommand(
             Id: "window.toggle-transparency",

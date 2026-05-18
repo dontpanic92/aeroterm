@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:AeroTerm.ViewModels"
+             xmlns:dialogs="using:AeroTerm.Dialogs"
+             x:Class="AeroTerm.Dialogs.ExperimentalPage"
+             x:CompileBindings="True"
+             x:DataType="vm:ExperimentalPageViewModel">
+    <StackPanel Spacing="10">
+        <GroupBox Header="Workbench" Padding="8,8">
+            <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.Workbench}"
+                        Spacing="5">
+                <CheckBox IsChecked="{Binding EnableWorkbench, Mode=TwoWay}"
+                          Content="Enable experimental Workbench" />
+                <TextBlock Text="Adds terminal-cwd-aware Explorer, editor, and Git views. The feature is experimental and disabled by default."
+                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
+            </StackPanel>
+        </GroupBox>
+    </StackPanel>
+</UserControl>

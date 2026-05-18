@@ -171,6 +171,11 @@ public class SettingsSearchTests
     [TestCase("close", "Window & Tabs")]
     [TestCase("quake", "Window & Tabs")]
     [TestCase("hotkey", "Window & Tabs")]
+    [TestCase("experimental", "Experimental")]
+    [TestCase("workbench", "Experimental")]
+    [TestCase("explorer", "Experimental")]
+    [TestCase("editor", "Experimental")]
+    [TestCase("git", "Experimental")]
     [TestCase("channel", "Updates")]
     [TestCase("update", "Updates")]
     public void SettingsPageFactory_SearchTerms_RouteToOwningPage(string query, string expectedPage)

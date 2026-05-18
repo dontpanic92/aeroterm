@@ -276,4 +276,17 @@ public class ShellIntegrationInjectorTests
         Assert.That(ShellIntegrationScripts.PowerShellIntegration, Does.Contain("133;C"));
         Assert.That(ShellIntegrationScripts.PowerShellIntegration, Does.Contain("133;D"));
     }
+
+    /// <summary>
+    /// The integration scripts emit OSC 7 current-directory hints for the
+    /// Workbench cwd model.
+    /// </summary>
+    [Test]
+    public void Scripts_ContainExpectedOsc7CwdMarks()
+    {
+        Assert.That(ShellIntegrationScripts.ZshIntegration, Does.Contain("]7;file://"));
+        Assert.That(ShellIntegrationScripts.BashIntegration, Does.Contain("]7;file://"));
+        Assert.That(ShellIntegrationScripts.FishIntegration, Does.Contain("]7;file://"));
+        Assert.That(ShellIntegrationScripts.PowerShellIntegration, Does.Contain("]7;"));
+    }
 }

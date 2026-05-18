@@ -190,6 +190,57 @@ public class AppSettingsTests
     }
 
     /// <summary>
+    /// Brand-new <see cref="AppSettings"/> instances keep the experimental
+    /// Workbench disabled unless the user opts in.
+    /// </summary>
+    [Test]
+    public void EnableWorkbench_DefaultsToFalse()
+    {
+        var settings = new AppSettings();
+        Assert.That(settings.EnableWorkbench, Is.False);
+    }
+
+    /// <summary>
+    /// <see cref="AppSettings.EnableWorkbench"/> survives a save / reload
+    /// round-trip through the source-generated JSON context for both values.
+    /// </summary>
+    [Test]
+    public void EnableWorkbench_RoundTripsThroughJson()
+    {
+        var ctx = AppSettingsJsonContext.Default.AppSettings;
+
+        var a = new AppSettings { EnableWorkbench = true };
+        string jsonA = JsonSerializer.Serialize(a, ctx);
+        var loadedA = JsonSerializer.Deserialize(jsonA, ctx);
+        Assert.That(loadedA, Is.Not.Null);
+        Assert.That(loadedA!.EnableWorkbench, Is.True);
+
+        var b = new AppSettings { EnableWorkbench = false };
+        string jsonB = JsonSerializer.Serialize(b, ctx);
+        var loadedB = JsonSerializer.Deserialize(jsonB, ctx);
+        Assert.That(loadedB, Is.Not.Null);
+        Assert.That(loadedB!.EnableWorkbench, Is.False);
+    }
+
+    /// <summary>
+    /// Legacy settings files written before the Workbench experiment existed
+    /// deserialize cleanly and keep the experiment disabled by default.
+    /// </summary>
+    [Test]
+    public void EnableWorkbench_MissingFromLegacyJson_DefaultsToFalse()
+    {
+        const string LegacyJson =
+            "{\n" +
+            "  \"EnableBlurBehind\": true,\n" +
+            "  \"FontSize\": 11\n" +
+            "}";
+
+        var loaded = JsonSerializer.Deserialize(LegacyJson, AppSettingsJsonContext.Default.AppSettings);
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.EnableWorkbench, Is.False);
+    }
+
+    /// <summary>
     /// <see cref="AppSettings.BellAction"/> survives a JSON round-trip for
     /// every enum value — including the newly-introduced
     /// <see cref="BellAction.VisualAndAudio"/>.

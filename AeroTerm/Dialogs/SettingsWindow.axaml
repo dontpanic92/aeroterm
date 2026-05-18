@@ -80,6 +80,10 @@
                             <dialogs:WindowTabsPage />
                         </DataTemplate>
 
+                        <DataTemplate DataType="vm:ExperimentalPageViewModel">
+                            <dialogs:ExperimentalPage />
+                        </DataTemplate>
+
                         <DataTemplate DataType="vm:UpdatesPageViewModel">
                             <dialogs:UpdatesPage />
                         </DataTemplate>

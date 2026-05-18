@@ -71,6 +71,19 @@ public class VtParserOsc133Tests
         Assert.That(captured.CurrentDirectory, Is.EqualTo("/home/me"));
     }
 
+    /// <summary>OSC 133;A;cwd= also raises the current-directory event.</summary>
+    [Test]
+    public void Osc133_A_WithCwd_RaisesCurrentDirectory()
+    {
+        var parser = new VtParser(new TerminalBuffer(2, 1), _ => { });
+        string? cwd = null;
+        parser.CurrentDirectoryChanged += (_, e) => cwd = e.CurrentDirectory;
+
+        parser.Process(Encoding.UTF8.GetBytes("\x1B]133;A;cwd=/home/me\x1B\\"));
+
+        Assert.That(cwd, Is.EqualTo("/home/me"));
+    }
+
     /// <summary>Unknown sub-letters are silently ignored, not crashed on.</summary>
     [Test]
     public void Osc133_UnknownKind_IsIgnored()

@@ -173,4 +173,13 @@ public partial class MainWindow : IPaletteHost
     {
         this.tabView.ActiveTab?.Terminal?.JumpToNextCommand();
     }
+
+    /// <inheritdoc />
+    void IPaletteHost.ShowWorkbenchExplorer() => this.ShowWorkbenchExplorer();
+
+    /// <inheritdoc />
+    void IPaletteHost.ShowWorkbenchEditor() => this.ShowWorkbenchEditor();
+
+    /// <inheritdoc />
+    void IPaletteHost.ShowWorkbenchGit() => this.ShowWorkbenchGit();
 }

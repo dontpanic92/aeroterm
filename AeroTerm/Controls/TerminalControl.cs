@@ -68,6 +68,7 @@ public class TerminalControl : Control, IDisposable
     private int searchSnapshotScrollbackCount;
     private int searchSnapshotRows;
     private int lastEvictedDelta;
+    private string? currentDirectory;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -104,6 +105,7 @@ public class TerminalControl : Control, IDisposable
             text => this.clipboard.WriteClipboardFromParser(text));
         this.parser.BellRaised += (_, _) => this.BellRaised?.Invoke();
         this.parser.PromptMarkRaised += this.OnPromptMarkRaised;
+        this.parser.CurrentDirectoryChanged += this.OnParserCurrentDirectoryChanged;
 
         this.ptyBridge = new TerminalPtyBridge(ptyFactory, new ReaderHost(this));
         this.ptyBridge.ProcessExited += () => this.ProcessExited?.Invoke();
@@ -179,6 +181,11 @@ public class TerminalControl : Control, IDisposable
     public event Action? BellRaised;
 
     /// <summary>
+    /// Occurs when the terminal reports a current working directory.
+    /// </summary>
+    public event Action<string>? CurrentDirectoryChanged;
+
+    /// <summary>
     /// Raised whenever <see cref="TopInset"/> changes. The argument is the
     /// new inset in pixels. Hosts that overlay sibling visuals on top of the
     /// terminal (e.g., the search overlay) subscribe to this so they can
@@ -232,6 +239,12 @@ public class TerminalControl : Control, IDisposable
     /// <see cref="Grid"/> or similar panel.
     /// </summary>
     public Control SearchOverlayVisual => this.searchOverlay;
+
+    /// <summary>
+    /// Gets the latest working directory reported by the terminal stream, or
+    /// <see langword="null"/> if the shell has not reported one yet.
+    /// </summary>
+    public string? CurrentDirectory => this.currentDirectory;
 
     /// <summary>
     /// Gets the current primary font family name.
@@ -1354,6 +1367,17 @@ public class TerminalControl : Control, IDisposable
         int col = this.buffer.CursorCol;
         var mark = new PromptMark(e.Kind, absRow, col, e.ExitCode, e.CurrentDirectory);
         this.promptMarks.Add(mark);
+    }
+
+    private void OnParserCurrentDirectoryChanged(object? sender, CurrentDirectoryEventArgs e)
+    {
+        if (string.IsNullOrEmpty(e.CurrentDirectory) || this.currentDirectory == e.CurrentDirectory)
+        {
+            return;
+        }
+
+        this.currentDirectory = e.CurrentDirectory;
+        this.CurrentDirectoryChanged?.Invoke(e.CurrentDirectory);
     }
 
     private bool JumpToMark(bool previous)
