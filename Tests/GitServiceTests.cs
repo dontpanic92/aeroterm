@@ -41,6 +41,7 @@ public sealed class GitServiceTests
     {
         if (Directory.Exists(this.tempDir))
         {
+            ClearReadOnlyAttributes(this.tempDir);
             Directory.Delete(this.tempDir, recursive: true);
         }
     }
@@ -84,6 +85,24 @@ public sealed class GitServiceTests
         Assert.That(status.Staged.Select(entry => entry.Path), Contains.Item("staged.txt"));
         Assert.That(status.Unstaged.Select(entry => entry.Path), Contains.Item("tracked.txt"));
         Assert.That(status.Untracked.Select(entry => entry.Path), Contains.Item("untracked.txt"));
+    }
+
+    private static void ClearReadOnlyAttributes(string directory)
+    {
+        foreach (var path in Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories))
+        {
+            var attributes = File.GetAttributes(path);
+            if ((attributes & FileAttributes.ReadOnly) != 0)
+            {
+                File.SetAttributes(path, attributes & ~FileAttributes.ReadOnly);
+            }
+        }
+
+        var directoryAttributes = File.GetAttributes(directory);
+        if ((directoryAttributes & FileAttributes.ReadOnly) != 0)
+        {
+            File.SetAttributes(directory, directoryAttributes & ~FileAttributes.ReadOnly);
+        }
     }
 
     private async Task InitializeRepositoryAsync(GitService service)
