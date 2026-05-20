@@ -51,9 +51,10 @@ __aeroterm_osc133_b() { print -n '\e]133;B\a'; }
 __aeroterm_osc133_c() { print -n '\e]133;C\a'; }
 __aeroterm_osc133_d() { print -n "\e]133;D;${1:-0}\a"; }
 __aeroterm_urlencode_path() {
+    emulate -L zsh
     local LC_ALL=C s="$1" i c out=""
-    for (( i = 0; i < ${#s}; i++ )); do
-        c="${s:i:1}"
+    for (( i = 1; i <= ${#s}; i++ )); do
+        c="${s[i]}"
         case "$c" in
             [a-zA-Z0-9.~_/-]) out="${out}${c}" ;;
             *) out="${out}$(printf '%%%02X' "'$c")" ;;
