@@ -85,6 +85,15 @@ public class TerminalBuffer
     private int defaultBg = 0xFFFFFF;
     private int detectedBg = 0xFFFFFF;
 
+    // Theme baseline defaults — the colours last installed via
+    // RecolorDefaults (i.e. the active color scheme). Distinct from
+    // defaultFg/defaultBg, which can be transiently overridden by OSC 10/11
+    // emitted by client applications. ResetTerminalDefault* (OSC 110/111)
+    // restores these baselines instead of the xterm built-ins, so apps like
+    // the Copilot CLI cannot leave the canvas painted white after exit.
+    private int themeDefaultFg = 0x000000;
+    private int themeDefaultBg = 0xFFFFFF;
+
     // Character set state: G0–G3 designations, and which is active (GL).
     private bool g0IsLineDrawing;
     private bool g1IsLineDrawing;
@@ -1500,11 +1509,13 @@ public class TerminalBuffer
     }
 
     /// <summary>
-    /// Reset the terminal default foreground color to the built-in default.
+    /// Reset the terminal default foreground color to the active color
+    /// scheme baseline (set by <see cref="RecolorDefaults"/>). Invoked by
+    /// OSC 110.
     /// </summary>
     public void ResetTerminalDefaultForeground()
     {
-        this.defaultFg = 0x000000;
+        this.defaultFg = this.themeDefaultFg;
     }
 
     /// <summary>
@@ -1518,11 +1529,26 @@ public class TerminalBuffer
     }
 
     /// <summary>
-    /// Reset the terminal default background color to the built-in default.
+    /// Reset the terminal default background color to the active color
+    /// scheme baseline (set by <see cref="RecolorDefaults"/>). Invoked by
+    /// OSC 111. Invalidates the background-detection histogram so the
+    /// canvas repaints with the restored colour instead of staying on the
+    /// previous app's bg (e.g. when the Copilot CLI or vim exits).
     /// </summary>
     public void ResetTerminalDefaultBackground()
     {
-        this.defaultBg = 0xFFFFFF;
+        lock (this.screenLock)
+        {
+            if (this.defaultBg == this.themeDefaultBg)
+            {
+                return;
+            }
+
+            this.defaultBg = this.themeDefaultBg;
+            this.detectedBg = this.themeDefaultBg;
+            this.allDirty = true;
+            this.bgHistogramValid = false;
+        }
     }
 
     /// <summary>
@@ -1661,6 +1687,8 @@ public class TerminalBuffer
 
             this.defaultFg = newFg;
             this.defaultBg = newBg;
+            this.themeDefaultFg = newFg;
+            this.themeDefaultBg = newBg;
             this.detectedBg = newBg;
             this.allDirty = true;
             this.bgHistogramValid = false;
