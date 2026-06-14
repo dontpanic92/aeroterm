@@ -211,15 +211,12 @@ internal sealed class WorkbenchHost : UserControl
     /// <param name="enabled">Whether the Workbench experiment is enabled.</param>
     public void SetWorkbenchEnabled(bool enabled)
     {
-        this.sidebar.IsVisible = enabled;
-        this.sidebarColumn.Width = enabled
-            ? new GridLength(SidebarWidth, GridUnitType.Pixel)
-            : new GridLength(0, GridUnitType.Pixel);
-
-        if (enabled)
-        {
-            this.ShowSection(this.activeSection);
-        }
+        // The Workbench left sidebar has been retired in favour of the
+        // per-terminal view-switch buttons hosted by CoordinatorTabContent.
+        // Keep the sidebar permanently collapsed regardless of the flag.
+        this.sidebar.IsVisible = false;
+        this.sidebarColumn.Width = new GridLength(0, GridUnitType.Pixel);
+        _ = enabled;
     }
 
     /// <summary>

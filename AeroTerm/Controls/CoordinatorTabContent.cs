@@ -5,9 +5,13 @@
 
 namespace AeroTerm.Controls;
 
+using System.ComponentModel;
 using AeroTerm.Services;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Layout;
+using Avalonia.Media;
 
 /// <summary>
 /// Production <see cref="ITabSessionContent"/> that wraps a
@@ -21,10 +25,17 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     private readonly TerminalSessionCoordinator coordinator;
     private readonly AppSettings? settings;
     private readonly Grid host = new();
+    private readonly Border workbenchButtonStrip;
+    private readonly Button terminalViewButton;
+    private readonly Button gitViewButton;
+    private readonly Control gitPaneView;
+    private readonly IBrush activeButtonBrush;
     private TerminalControl? terminal;
     private string title = "AeroTerm";
     private bool disposed;
     private bool started;
+    private bool showingGitPane;
+    private float lastTopInset;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CoordinatorTabContent"/> class.
@@ -44,6 +55,26 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.coordinator.TitleChanged += this.OnCoordinatorTitleChanged;
         this.coordinator.ProcessExitedNormally += this.OnCoordinatorProcessExited;
         this.coordinator.CurrentWorkingDirectoryChanged += this.OnCoordinatorCurrentWorkingDirectoryChanged;
+
+        this.activeButtonBrush = ResolveActiveButtonBrush(this.host);
+        this.gitPaneView = BuildGitPanePlaceholder();
+        this.gitPaneView.IsVisible = false;
+        this.gitPaneView.ZIndex = 1;
+        this.host.Children.Add(this.gitPaneView);
+
+        this.terminalViewButton = this.BuildViewButton(BuildTerminalIcon(), "Terminal view", this.ShowTerminalView);
+        this.gitViewButton = this.BuildViewButton(BuildGitIcon(), "Git view", this.ShowGitView);
+        this.workbenchButtonStrip = this.BuildWorkbenchButtonStrip();
+        this.workbenchButtonStrip.ZIndex = 100;
+        this.host.Children.Add(this.workbenchButtonStrip);
+
+        if (this.settings is not null)
+        {
+            this.settings.PropertyChanged += this.OnSettingsPropertyChanged;
+        }
+
+        this.UpdateWorkbenchButtonsVisibility();
+        this.UpdateActiveViewVisuals();
     }
 
     /// <inheritdoc />
@@ -123,6 +154,11 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.coordinator.TitleChanged -= this.OnCoordinatorTitleChanged;
         this.coordinator.ProcessExitedNormally -= this.OnCoordinatorProcessExited;
         this.coordinator.CurrentWorkingDirectoryChanged -= this.OnCoordinatorCurrentWorkingDirectoryChanged;
+        if (this.settings is not null)
+        {
+            this.settings.PropertyChanged -= this.OnSettingsPropertyChanged;
+        }
+
         if (this.terminal is not null)
         {
             this.terminal.TopInsetChanged -= this.OnTerminalTopInsetChanged;
@@ -144,18 +180,80 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         return new CoordinatorTabContent(coordinator, settings);
     }
 
+    /// <summary>
+    /// Builds the placeholder shown when the Git view is selected. This is an
+    /// intentionally empty surface for this phase; a later phase replaces its
+    /// content with the real Git pane. It is painted with the opaque theme
+    /// surface brush (the same background as the settings dialog) so it reads
+    /// as a solid panel rather than a translucent overlay.
+    /// </summary>
+    /// <returns>The placeholder control.</returns>
+    private static Control BuildGitPanePlaceholder()
+    {
+        var border = new Border { Name = "GitPanePlaceholder" };
+        border.Bind(Border.BackgroundProperty, border.GetResourceObservable("SurfaceBackgroundBrush"));
+        return border;
+    }
+
+    private static IBrush ResolveActiveButtonBrush(Control reference)
+    {
+        if (reference.TryGetResource("TabStripActiveAccentBrush", reference.ActualThemeVariant, out var value))
+        {
+            if (value is IBrush brush)
+            {
+                return brush;
+            }
+
+            if (value is Color color)
+            {
+                return new SolidColorBrush(color);
+            }
+        }
+
+        return new SolidColorBrush(Color.FromArgb(0xFF, 0x4F, 0xA3, 0xFF));
+    }
+
+    private static PathIcon BuildTerminalIcon()
+    {
+        // A terminal window: outer frame with a small '>' prompt glyph.
+        return new PathIcon
+        {
+            Width = 12,
+            Height = 12,
+            Data = Geometry.Parse(
+                "M128,192 H896 V832 H128 Z M128,320 H896 M256,448 L384,576 256,704 M512,704 H704"),
+        };
+    }
+
+    private static PathIcon BuildGitIcon()
+    {
+        // A simple branch glyph: a vertical line with a branch splitting off
+        // to a node, evoking source-control branching.
+        return new PathIcon
+        {
+            Width = 12,
+            Height = 12,
+            Data = Geometry.Parse(
+                "M320,192 a96,96 0 1,0 0.1,0 Z M320,288 V736 M320,832 a96,96 0 1,0 0.1,0 Z " +
+                "M704,256 a96,96 0 1,0 0.1,0 Z M704,352 V480 a128,128 0 0,1 -128,128 H320"),
+        };
+    }
+
     private void OnTerminalReady(TerminalControl control)
     {
         this.terminal = control;
         this.host.Children.Add(control);
         this.host.Children.Add(control.SearchOverlayVisual);
         this.SyncSearchOverlayMargin(control.TopInset);
+        this.UpdateButtonStripMargin(control.TopInset);
         control.TopInsetChanged += this.OnTerminalTopInsetChanged;
+        this.ApplyActiveViewVisibility();
     }
 
     private void OnTerminalTopInsetChanged(object? sender, float topInset)
     {
         this.SyncSearchOverlayMargin(topInset);
+        this.UpdateButtonStripMargin(topInset);
     }
 
     private void SyncSearchOverlayMargin(float topInset)
@@ -193,5 +291,137 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     private void OnCoordinatorCurrentWorkingDirectoryChanged(string cwd)
     {
         this.CurrentWorkingDirectoryChanged?.Invoke(cwd);
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(AppSettings.EnableWorkbench))
+        {
+            if (this.settings is { EnableWorkbench: false })
+            {
+                // Snap back to the terminal so a hidden Git pane can't strand
+                // the live session off-screen when the feature is turned off.
+                this.showingGitPane = false;
+            }
+
+            this.UpdateWorkbenchButtonsVisibility();
+            this.ApplyActiveViewVisibility();
+            this.UpdateActiveViewVisuals();
+        }
+    }
+
+    private void ShowTerminalView()
+    {
+        if (!this.showingGitPane)
+        {
+            return;
+        }
+
+        this.showingGitPane = false;
+        this.ApplyActiveViewVisibility();
+        this.UpdateActiveViewVisuals();
+        this.terminal?.Focus();
+    }
+
+    private void ShowGitView()
+    {
+        if (this.showingGitPane)
+        {
+            return;
+        }
+
+        this.showingGitPane = true;
+        this.ApplyActiveViewVisibility();
+        this.UpdateActiveViewVisuals();
+    }
+
+    private void ApplyActiveViewVisibility()
+    {
+        // The terminal keeps running underneath; we only toggle visibility so
+        // the PTY is never torn down when the Git pane is shown.
+        if (this.terminal is not null)
+        {
+            this.terminal.IsVisible = !this.showingGitPane;
+
+            // Only force the find overlay closed while the Git pane is shown.
+            // When the terminal is visible we leave the overlay's own
+            // open/closed state alone so it isn't spuriously revealed.
+            if (this.showingGitPane)
+            {
+                this.terminal.SearchOverlayVisual.IsVisible = false;
+            }
+        }
+
+        this.gitPaneView.IsVisible = this.showingGitPane;
+    }
+
+    private void UpdateWorkbenchButtonsVisibility()
+    {
+        this.workbenchButtonStrip.IsVisible = this.settings?.EnableWorkbench == true;
+    }
+
+    private void UpdateActiveViewVisuals()
+    {
+        this.terminalViewButton.Background = this.showingGitPane ? Brushes.Transparent : this.activeButtonBrush;
+        this.gitViewButton.Background = this.showingGitPane ? this.activeButtonBrush : Brushes.Transparent;
+    }
+
+    private void UpdateButtonStripMargin(float topInset)
+    {
+        this.lastTopInset = topInset;
+
+        // Sit just below the floating title bar inset, hugging the right edge.
+        // Offset further left than the search overlay (12 px) so the two don't
+        // stack directly on top of each other when search is open.
+        this.workbenchButtonStrip.Margin = new Thickness(0, topInset + 8, 8, 0);
+
+        // Keep the Git pane below the floating title bar so it doesn't cover it.
+        this.gitPaneView.Margin = new Thickness(0, topInset, 0, 0);
+    }
+
+    private Border BuildWorkbenchButtonStrip()
+    {
+        var panel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 2,
+            Children = { this.terminalViewButton, this.gitViewButton },
+        };
+
+        var strip = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00)),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(2),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, this.lastTopInset + 8, 8, 0),
+            Opacity = 0.45,
+            Child = panel,
+        };
+
+        // Elegant, see-through by default; fully opaque while hovered.
+        strip.PointerEntered += (_, _) => strip.Opacity = 1.0;
+        strip.PointerExited += (_, _) => strip.Opacity = 0.45;
+        return strip;
+    }
+
+    private Button BuildViewButton(PathIcon icon, string accessibleName, Action onClick)
+    {
+        var button = new Button
+        {
+            Content = icon,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(5),
+            CornerRadius = new CornerRadius(4),
+            MinWidth = 0,
+            MinHeight = 0,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+        };
+        Avalonia.Automation.AutomationProperties.SetName(button, accessibleName);
+        button.Click += (_, _) => onClick();
+        return button;
     }
 }
