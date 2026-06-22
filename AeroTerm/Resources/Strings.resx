@@ -42,6 +42,9 @@
   <data name="ConfirmCloseTitle" xml:space="preserve">
     <value>Close window?</value>
   </data>
+  <data name="SettingsLoadErrorTitle" xml:space="preserve">
+    <value>Settings could not be loaded</value>
+  </data>
   <data name="FontPickerTitle" xml:space="preserve">
     <value>Add Font</value>
   </data>

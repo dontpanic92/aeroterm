@@ -221,6 +221,21 @@ public partial class MainWindow : Window
     }
 
     /// <inheritdoc />
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+
+        // If settings could not be loaded (corrupt file or a transient read
+        // failure while another instance was writing), surface the detailed
+        // reason to the user once, then clear it so it doesn't reappear.
+        if (!string.IsNullOrEmpty(this.settings.LastPersistenceError))
+        {
+            _ = this.ShowSettingsLoadErrorAsync(this.settings.LastPersistenceError);
+            this.settings.ClearLastPersistenceError();
+        }
+    }
+
+    /// <inheritdoc />
     protected override void OnClosing(WindowClosingEventArgs e)
     {
         // Multi-tab confirm-on-close, unless the user already answered
@@ -285,6 +300,22 @@ public partial class MainWindow : Window
 
         zeroBasedIndex = -1;
         return false;
+    }
+
+    private async Task ShowSettingsLoadErrorAsync(string detail)
+    {
+        try
+        {
+            await NativeMessageBox.ShowOkAsync(
+                this,
+                Strings.SettingsLoadErrorTitle,
+                detail,
+                Strings.ButtonOk);
+        }
+        catch (Exception ex)
+        {
+            this.log.LogWarning(ex, "Failed to show settings-load-error dialog.");
+        }
     }
 
     private async Task ShowCloseConfirmAndRetryAsync(int tabCount)

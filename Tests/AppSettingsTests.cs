@@ -416,7 +416,7 @@ public class AppSettingsTests
         }
 
         string log = File.ReadAllText(logPath);
-        Assert.That(log, Does.Contain("Failed to load settings from"));
+        Assert.That(log, Does.Contain("Failed to parse settings from"));
         Assert.That(log, Does.Contain("using default settings"));
         Assert.That(log, Does.Contain("settings.json"));
 
@@ -448,7 +448,7 @@ public class AppSettingsTests
 
             Assert.That(settings.FontSize, Is.EqualTo(11));
             Assert.That(settings.ConfirmOnClose, Is.True);
-            Assert.That(settings.LastPersistenceError, Is.EqualTo("Settings file did not contain an object."));
+            Assert.That(settings.LastPersistenceError, Does.Contain("did not contain a settings object"));
         }
         finally
         {
@@ -459,10 +459,102 @@ public class AppSettingsTests
         string log = File.ReadAllText(logPath);
         Assert.That(log, Does.Contain("Failed to load settings from"));
         Assert.That(log, Does.Contain("using default settings"));
-        Assert.That(log, Does.Contain("Settings file did not contain an object."));
+        Assert.That(log, Does.Contain("did not contain a settings object"));
 
         Directory.Delete(settingsDirectory, recursive: true);
         Directory.Delete(logDirectory, recursive: true);
+    }
+
+    /// <summary>
+    /// A transient read failure (e.g. another instance momentarily holding the
+    /// file exclusively) must fall back to defaults WITHOUT quarantining the
+    /// file, and a subsequent <see cref="AppSettings.Save"/> must refuse to
+    /// overwrite the still-good on-disk config.
+    /// </summary>
+    [Test]
+    public void Load_TransientIoFailure_DoesNotQuarantineOrClobber()
+    {
+        string settingsDirectory = CreateTemporaryDirectory();
+        string logDirectory = CreateTemporaryDirectory();
+
+        try
+        {
+            AppLogger.Initialize(new FileLogger(logDirectory));
+            string path = Path.Combine(settingsDirectory, "settings.json");
+            File.WriteAllText(path, "{\"FontSize\":17}");
+
+            // Hold the file exclusively so every read attempt fails transiently.
+            using (var lockStream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+                var settings = AppSettings.Default;
+
+                // Fell back to defaults but did NOT quarantine the file.
+                Assert.That(settings.FontSize, Is.EqualTo(11));
+                Assert.That(settings.LastPersistenceError, Does.Contain("could not read"));
+                Assert.That(Directory.GetFiles(settingsDirectory, "*.bad-*"), Is.Empty);
+
+                // A failed transient load must not overwrite the real file.
+                Assert.That(settings.Save(), Is.False);
+            }
+
+            // The user's original config is intact, still unquarantined.
+            Assert.That(File.ReadAllText(path), Does.Contain("17"));
+            Assert.That(Directory.GetFiles(settingsDirectory, "*.bad-*"), Is.Empty);
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+            AppSettings.ResetForTesting();
+            Directory.Delete(settingsDirectory, recursive: true);
+            Directory.Delete(logDirectory, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// After a transient load failure, once the file becomes readable a
+    /// <see cref="AppSettings.Reload"/> recovers the real values, clears the
+    /// suppress-save guard, and the next <see cref="AppSettings.Save"/>
+    /// persists normally.
+    /// </summary>
+    [Test]
+    public void Reload_AfterTransientFailure_RecoversAndAllowsSave()
+    {
+        string settingsDirectory = CreateTemporaryDirectory();
+        string logDirectory = CreateTemporaryDirectory();
+
+        try
+        {
+            AppLogger.Initialize(new FileLogger(logDirectory));
+            string path = Path.Combine(settingsDirectory, "settings.json");
+            File.WriteAllText(path, "{\"FontSize\":17}");
+
+            AppSettings settings;
+            using (var lockStream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+                settings = AppSettings.Default;
+                Assert.That(settings.Save(), Is.False, "save must be suppressed after a transient load failure");
+            }
+
+            // File is readable again: Reload recovers and clears the guard.
+            Assert.That(settings.Reload(), Is.True);
+            Assert.That(settings.FontSize, Is.EqualTo(17));
+
+            settings.FontSize = 22;
+            Assert.That(settings.Save(), Is.True);
+
+            // The new value was persisted to disk.
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+            Assert.That(AppSettings.Default.FontSize, Is.EqualTo(22));
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+            AppSettings.ResetForTesting();
+            Directory.Delete(settingsDirectory, recursive: true);
+            Directory.Delete(logDirectory, recursive: true);
+        }
     }
 
     private static string CreateTemporaryDirectory()

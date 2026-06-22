@@ -9,6 +9,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading;
 using AeroTerm.Diagnostics;
 using AeroTerm.WindowEffects;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,12 @@ using Microsoft.Extensions.Logging;
 /// </summary>
 public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings, IWindowGeometrySettings
 {
+    /// <summary>
+    /// Base backoff (milliseconds) between settings file I/O retries. Each
+    /// attempt waits this value multiplied by the attempt number.
+    /// </summary>
+    private const int SettingsIoRetryDelayMs = 40;
+
     private static readonly string DefaultSettingsDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "AeroTerm");
@@ -57,6 +64,8 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private bool enableShellIntegration = true;
     private bool enableWorkbench;
     private TabBarOrientation tabBarOrientation = TabBarOrientation.Horizontal;
+
+    private bool loadedWithTransientError;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -405,6 +414,21 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     {
         var settingsPath = GetSettingsPath();
         var tempPath = settingsPath + ".tmp";
+
+        // Safety net for concurrent instances / failed loads: if this
+        // instance fell back to defaults because the on-disk file could not
+        // be read for a *transient* reason (e.g. another instance was
+        // momentarily replacing it), do NOT persist — otherwise we would
+        // clobber the user's real config with defaults. The next successful
+        // Reload() clears the flag.
+        if (this.loadedWithTransientError)
+        {
+            AppLogger.For<AppSettings>().LogWarning(
+                "Skipping settings save because the last load failed transiently; refusing to overwrite existing config at {Path}.",
+                settingsPath);
+            return false;
+        }
+
         try
         {
             Directory.CreateDirectory(GetSettingsDirectory());
@@ -423,7 +447,10 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(tempPath, settingsPath, overwrite: true);
+            // Retry the rename-over: a concurrent instance may briefly hold
+            // settings.json open for reading, causing a transient sharing
+            // violation. Last-writer-wins is intentional.
+            MoveWithRetry(tempPath, settingsPath);
             this.LastPersistenceError = string.Empty;
             return true;
         }
@@ -473,6 +500,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.EnableWorkbench = fresh.EnableWorkbench;
         this.TabBarOrientation = fresh.TabBarOrientation;
         this.LastPersistenceError = fresh.LastPersistenceError;
+        this.loadedWithTransientError = fresh.loadedWithTransientError;
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }
 
@@ -572,7 +600,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         {
             if (File.Exists(settingsPath))
             {
-                var json = File.ReadAllText(settingsPath);
+                var json = ReadAllTextWithRetry(settingsPath);
                 json = MigrateLegacyJson(json);
 
                 // Schema-mismatch guard: if the file contains a non-empty
@@ -586,30 +614,49 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
                 // Detect that case explicitly and quarantine the file.
                 if (TryGetUnrecognisedSchema(json, out var unrecognised))
                 {
-                    string error = $"Settings file has no recognised properties (saw {unrecognised}).";
                     log.LogWarning(
                         "Settings file at {Path} has no recognised properties; quarantining and using defaults. Unknown keys: {Keys}",
                         settingsPath,
                         unrecognised);
-                    QuarantineCorruptFile(settingsPath, error);
+                    var quarantinePath = QuarantineCorruptFile(settingsPath, "no recognised properties");
                     return new AppSettings
                     {
-                        LastPersistenceError = error,
+                        LastPersistenceError = BuildCorruptError(
+                            settingsPath,
+                            $"the file has no recognised settings (found: {unrecognised}).",
+                            quarantinePath),
                     };
                 }
 
-                var settings = JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings) as AppSettings;
+                AppSettings? settings;
+                try
+                {
+                    settings = JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings) as AppSettings;
+                }
+                catch (JsonException ex)
+                {
+                    // Genuine corruption (malformed JSON). Quarantine so the
+                    // bad file can't be re-saved over, and surface a detailed
+                    // reason to the user.
+                    log.LogWarning(ex, "Failed to parse settings from {Path}; using default settings.", settingsPath);
+                    var quarantinePath = QuarantineCorruptFile(settingsPath, ex.Message);
+                    return new AppSettings
+                    {
+                        LastPersistenceError = BuildCorruptError(settingsPath, ex.Message, quarantinePath),
+                    };
+                }
+
                 if (settings is null)
                 {
-                    const string Error = "Settings file did not contain an object.";
+                    const string Reason = "the file did not contain a settings object.";
                     log.LogWarning(
                         "Failed to load settings from {Path}: {Message}; using default settings.",
                         settingsPath,
-                        Error);
-                    QuarantineCorruptFile(settingsPath, Error);
+                        Reason);
+                    var quarantinePath = QuarantineCorruptFile(settingsPath, Reason);
                     return new AppSettings
                     {
-                        LastPersistenceError = Error,
+                        LastPersistenceError = BuildCorruptError(settingsPath, Reason, quarantinePath),
                     };
                 }
 
@@ -619,17 +666,48 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
 
             log.LogInformation("No settings file at {Path}; using built-in defaults.", settingsPath);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            log.LogWarning(ex, "Failed to load settings from {Path}; using default settings.", settingsPath);
-            QuarantineCorruptFile(settingsPath, ex.Message);
+            // Transient / environmental failure (file locked by another
+            // instance, AV scanner, permission glitch). Do NOT quarantine and
+            // do NOT let this default-laden instance overwrite the real config
+            // on shutdown — that is exactly how concurrent instances used to
+            // destroy each other's settings.
+            log.LogWarning(ex, "Could not read settings from {Path}; using defaults for this session without overwriting the file.", settingsPath);
             return new AppSettings
             {
-                LastPersistenceError = ex.Message,
+                LastPersistenceError = BuildTransientError(settingsPath, ex.Message),
+                loadedWithTransientError = true,
             };
         }
 
         return new AppSettings();
+    }
+
+    /// <summary>
+    /// Builds a detailed, user-facing message describing why a corrupt or
+    /// unreadable settings file was replaced with defaults, including the
+    /// quarantine location when the bad file was preserved.
+    /// </summary>
+    private static string BuildCorruptError(string settingsPath, string reason, string? quarantinePath)
+    {
+        var message = $"AeroTerm could not load your settings from \"{settingsPath}\" because {reason} Default settings are being used for this session.";
+        if (!string.IsNullOrEmpty(quarantinePath))
+        {
+            message += $" The unreadable file was preserved at \"{quarantinePath}\".";
+        }
+
+        return message;
+    }
+
+    /// <summary>
+    /// Builds a detailed, user-facing message for a transient read failure.
+    /// The on-disk file is left untouched and will not be overwritten this
+    /// session.
+    /// </summary>
+    private static string BuildTransientError(string settingsPath, string detail)
+    {
+        return $"AeroTerm could not read your settings from \"{settingsPath}\" (it may be in use by another AeroTerm instance). Detail: {detail}. Default settings are being used for this session and your saved file will not be overwritten.";
     }
 
     /// <summary>
@@ -688,13 +766,16 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     /// silently overwritten with defaults on the next save. Best effort:
     /// any failure here is logged and swallowed so startup still proceeds.
     /// </summary>
-    private static void QuarantineCorruptFile(string settingsPath, string reason)
+    /// <param name="settingsPath">The path of the unreadable settings file.</param>
+    /// <param name="reason">A human-readable reason for the quarantine.</param>
+    /// <returns>The path the file was moved to, or <see langword="null"/> if it could not be quarantined.</returns>
+    private static string? QuarantineCorruptFile(string settingsPath, string reason)
     {
         try
         {
             if (!File.Exists(settingsPath))
             {
-                return;
+                return null;
             }
 
             var stamp = DateTime.UtcNow.ToString("yyyyMMddTHHmmssZ", System.Globalization.CultureInfo.InvariantCulture);
@@ -704,10 +785,12 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
                 "Quarantined unreadable settings file to {Quarantine} ({Reason}).",
                 quarantinePath,
                 reason);
+            return quarantinePath;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             AppLogger.For<AppSettings>().LogWarning(ex, "Failed to quarantine corrupt settings file {Path}.", settingsPath);
+            return null;
         }
     }
 
@@ -723,6 +806,59 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             AppLogger.For<AppSettings>().LogDebug(ex, "Failed to remove temp file {Path}.", path);
+        }
+    }
+
+    /// <summary>
+    /// Reads a file's full text, retrying a bounded number of times on
+    /// transient sharing violations. A concurrently running instance may be
+    /// replacing the file (atomic temp-file + rename), which briefly makes it
+    /// unreadable; a short backoff lets that window pass. The file is opened
+    /// with <see cref="FileShare.ReadWrite"/> so a concurrent writer does not
+    /// have to fail just because we hold a read handle.
+    /// </summary>
+    /// <param name="path">The file to read.</param>
+    /// <returns>The file contents as text.</returns>
+    private static string ReadAllTextWithRetry(string path)
+    {
+        const int MaxAttempts = 5;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+            catch (IOException) when (attempt < MaxAttempts && File.Exists(path))
+            {
+                Thread.Sleep(SettingsIoRetryDelayMs * attempt);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Renames <paramref name="source"/> over <paramref name="destination"/>,
+    /// retrying a bounded number of times on transient sharing violations
+    /// caused by a concurrently running instance momentarily reading the
+    /// destination. Last-writer-wins is intentional.
+    /// </summary>
+    /// <param name="source">The temp file to promote.</param>
+    /// <param name="destination">The target settings path.</param>
+    private static void MoveWithRetry(string source, string destination)
+    {
+        const int MaxAttempts = 5;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(source, destination, overwrite: true);
+                return;
+            }
+            catch (IOException) when (attempt < MaxAttempts)
+            {
+                Thread.Sleep(SettingsIoRetryDelayMs * attempt);
+            }
         }
     }
 

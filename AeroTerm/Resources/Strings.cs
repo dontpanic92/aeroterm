@@ -45,6 +45,9 @@ public static class Strings
     /// <summary>Gets the confirm-close dialog title.</summary>
     public static string ConfirmCloseTitle => Get(nameof(ConfirmCloseTitle));
 
+    /// <summary>Gets the title for the dialog shown when settings fail to load.</summary>
+    public static string SettingsLoadErrorTitle => Get(nameof(SettingsLoadErrorTitle));
+
     /// <summary>Gets the font-picker dialog title.</summary>
     public static string FontPickerTitle => Get(nameof(FontPickerTitle));
 
