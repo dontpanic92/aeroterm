@@ -19,6 +19,35 @@ using System.Threading.Tasks;
 internal sealed class GitService
 {
     /// <summary>
+    /// Creates process start information for a Git command.
+    /// </summary>
+    /// <param name="workingDirectory">Process working directory.</param>
+    /// <param name="arguments">Git arguments.</param>
+    /// <returns>Configured process start information.</returns>
+    internal static ProcessStartInfo CreateStartInfo(string workingDirectory, params string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        startInfo.ArgumentList.Add("-C");
+        startInfo.ArgumentList.Add(workingDirectory);
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        return startInfo;
+    }
+
+    /// <summary>
     /// Gets the current repository status for a working directory.
     /// </summary>
     /// <param name="workingDirectory">Terminal working directory.</param>
@@ -144,22 +173,7 @@ internal sealed class GitService
     /// <returns>The Git command result.</returns>
     internal async Task<GitCommandResult> RunGitAsync(string workingDirectory, params string[] arguments)
     {
-        var startInfo = new ProcessStartInfo("git")
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-            UseShellExecute = false,
-        };
-
-        startInfo.ArgumentList.Add("-C");
-        startInfo.ArgumentList.Add(workingDirectory);
-        foreach (var argument in arguments)
-        {
-            startInfo.ArgumentList.Add(argument);
-        }
+        var startInfo = CreateStartInfo(workingDirectory, arguments);
 
         try
         {

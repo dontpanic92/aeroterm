@@ -87,6 +87,28 @@ public sealed class GitServiceTests
         Assert.That(status.Untracked.Select(entry => entry.Path), Contains.Item("untracked.txt"));
     }
 
+    /// <summary>
+    /// Git commands are configured for hidden, non-shell execution with captured output.
+    /// </summary>
+    [Test]
+    public void CreateStartInfo_ConfiguresHiddenRedirectedProcess()
+    {
+        var startInfo = GitService.CreateStartInfo(this.tempDir, "status", "--short");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(startInfo.FileName, Is.EqualTo("git"));
+            Assert.That(startInfo.WorkingDirectory, Is.EqualTo(this.tempDir));
+            Assert.That(startInfo.UseShellExecute, Is.False);
+            Assert.That(startInfo.CreateNoWindow, Is.True);
+            Assert.That(startInfo.RedirectStandardOutput, Is.True);
+            Assert.That(startInfo.RedirectStandardError, Is.True);
+            Assert.That(startInfo.StandardOutputEncoding, Is.EqualTo(Encoding.UTF8));
+            Assert.That(startInfo.StandardErrorEncoding, Is.EqualTo(Encoding.UTF8));
+            Assert.That(startInfo.ArgumentList, Is.EqualTo(new[] { "-C", this.tempDir, "status", "--short" }));
+        });
+    }
+
     private static void ClearReadOnlyAttributes(string directory)
     {
         foreach (var path in Directory.EnumerateFileSystemEntries(directory, "*", SearchOption.AllDirectories))
