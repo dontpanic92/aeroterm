@@ -88,6 +88,74 @@ public sealed class GitServiceTests
     }
 
     /// <summary>
+    /// Unstaged modifications compare index content against working-tree content.
+    /// </summary>
+    /// <returns>A task that completes when comparison loading has finished.</returns>
+    [Test]
+    public async Task GetFileComparisonAsync_UnstagedModificationLoadsOldAndNewSides()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        File.WriteAllText(Path.Combine(this.tempDir, "tracked.txt"), "changed", new UTF8Encoding(false));
+        var status = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        var entry = status.Unstaged.Single(item => item.Path == "tracked.txt");
+
+        var comparison = await service.GetFileComparisonAsync(status.RepositoryRoot!, entry).ConfigureAwait(false);
+
+        Assert.That(comparison.Succeeded, Is.True, comparison.ErrorMessage);
+        Assert.That(comparison.OldSide!.Text, Is.EqualTo("initial"));
+        Assert.That(comparison.OldSide.SourceLabel, Is.EqualTo("Index"));
+        Assert.That(comparison.NewSide!.Text, Is.EqualTo("changed"));
+        Assert.That(comparison.NewSide.SourceLabel, Is.EqualTo("Working tree"));
+        Assert.That(comparison.OldSide.Highlights[0].Kind, Is.EqualTo(GitDiffHighlightKind.Modified));
+        Assert.That(comparison.NewSide.Highlights[0].Kind, Is.EqualTo(GitDiffHighlightKind.Modified));
+    }
+
+    /// <summary>
+    /// Staged additions compare an empty old side against the index blob.
+    /// </summary>
+    /// <returns>A task that completes when comparison loading has finished.</returns>
+    [Test]
+    public async Task GetFileComparisonAsync_StagedAdditionLoadsIndexAsNewSide()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        File.WriteAllText(Path.Combine(this.tempDir, "added.txt"), "added", new UTF8Encoding(false));
+        var addResult = await service.RunGitAsync(this.tempDir, "add", "added.txt").ConfigureAwait(false);
+        Assert.That(addResult.Succeeded, Is.True, addResult.ErrorMessage);
+        var status = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        var entry = status.Staged.Single(item => item.Path == "added.txt");
+
+        var comparison = await service.GetFileComparisonAsync(status.RepositoryRoot!, entry).ConfigureAwait(false);
+
+        Assert.That(comparison.Succeeded, Is.True, comparison.ErrorMessage);
+        Assert.That(comparison.OldSide!.Text, Is.Empty);
+        Assert.That(comparison.NewSide!.Text, Is.EqualTo("added"));
+        Assert.That(comparison.NewSide.Highlights, Is.EqualTo(new[] { new GitDiffHighlightRange(1, 1, GitDiffHighlightKind.Added) }));
+    }
+
+    /// <summary>
+    /// Untracked files compare an empty old side against the working-tree file.
+    /// </summary>
+    /// <returns>A task that completes when comparison loading has finished.</returns>
+    [Test]
+    public async Task GetFileComparisonAsync_UntrackedFileHighlightsWholeNewSide()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        File.WriteAllText(Path.Combine(this.tempDir, "untracked.txt"), "first\nsecond", new UTF8Encoding(false));
+        var status = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        var entry = status.Untracked.Single(item => item.Path == "untracked.txt");
+
+        var comparison = await service.GetFileComparisonAsync(status.RepositoryRoot!, entry).ConfigureAwait(false);
+
+        Assert.That(comparison.Succeeded, Is.True, comparison.ErrorMessage);
+        Assert.That(comparison.OldSide!.Text, Is.Empty);
+        Assert.That(comparison.NewSide!.Text, Is.EqualTo("first\nsecond"));
+        Assert.That(comparison.NewSide.Highlights, Is.EqualTo(new[] { new GitDiffHighlightRange(1, 2, GitDiffHighlightKind.Added) }));
+    }
+
+    /// <summary>
     /// Git commands are configured for hidden, non-shell execution with captured output.
     /// </summary>
     [Test]

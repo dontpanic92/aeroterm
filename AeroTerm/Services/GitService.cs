@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -18,6 +19,8 @@ using System.Threading.Tasks;
 /// </summary>
 internal sealed class GitService
 {
+    private readonly TextEditorService textEditorService = new();
+
     /// <summary>
     /// Creates process start information for a Git command.
     /// </summary>
@@ -157,12 +160,83 @@ internal sealed class GitService
     /// <returns>The Git command result.</returns>
     internal Task<GitCommandResult> GetDiffAsync(string repositoryRoot, GitFileStatus status)
     {
+        return this.GetDiffAsync(repositoryRoot, status, contextLines: null);
+    }
+
+    /// <summary>
+    /// Gets a diff for a status entry with an optional context line count.
+    /// </summary>
+    /// <param name="repositoryRoot">Repository root.</param>
+    /// <param name="status">Status entry to diff.</param>
+    /// <param name="contextLines">Number of context lines, or <see langword="null"/> for Git's default.</param>
+    /// <returns>The Git command result.</returns>
+    internal Task<GitCommandResult> GetDiffAsync(string repositoryRoot, GitFileStatus status, int? contextLines)
+    {
+        var arguments = new List<string> { "diff" };
         if (status.Bucket == GitStatusBucket.Staged)
         {
-            return this.RunGitAsync(repositoryRoot, "diff", "--staged", "--", status.Path);
+            arguments.Add("--staged");
         }
 
-        return this.RunGitAsync(repositoryRoot, "diff", "--", status.Path);
+        if (contextLines is not null)
+        {
+            arguments.Add($"--unified={contextLines.Value.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        arguments.Add("--");
+        arguments.Add(status.Path);
+        return this.RunGitAsync(repositoryRoot, arguments.ToArray());
+    }
+
+    /// <summary>
+    /// Loads old and new full-file content for a status entry.
+    /// </summary>
+    /// <param name="repositoryRoot">Repository root.</param>
+    /// <param name="status">Status entry to compare.</param>
+    /// <returns>The loaded comparison or a user-visible error state.</returns>
+    internal async Task<GitFileComparison> GetFileComparisonAsync(string repositoryRoot, GitFileStatus status)
+    {
+        if (status.Bucket == GitStatusBucket.Untracked)
+        {
+            var workingTreeSide = this.LoadWorkingTreeSide(repositoryRoot, status.Path, "Working tree");
+            if (workingTreeSide.Side is null)
+            {
+                return this.ErrorComparison(status.Path, workingTreeSide.ErrorMessage);
+            }
+
+            return new GitFileComparison(
+                status.Path,
+                this.EmptySide("Empty"),
+                workingTreeSide.Side with { Highlights = this.FullFileHighlights(workingTreeSide.Side.Text, GitDiffHighlightKind.Added) },
+                false,
+                null);
+        }
+
+        var diff = await this.GetDiffAsync(repositoryRoot, status, 0).ConfigureAwait(true);
+        if (!diff.Succeeded)
+        {
+            return this.ErrorComparison(status.Path, diff.ErrorMessage);
+        }
+
+        if (GitDiffParser.Parse(diff.Output).Any(file => file.IsBinary))
+        {
+            return new GitFileComparison(status.Path, null, null, true, null);
+        }
+
+        var highlights = GitDiffHighlightParser.Parse(diff.Output);
+        var oldSide = await this.LoadOldSideAsync(repositoryRoot, status, highlights.OldRanges).ConfigureAwait(true);
+        if (oldSide.Side is null)
+        {
+            return this.ErrorComparison(status.Path, oldSide.ErrorMessage);
+        }
+
+        var newSide = await this.LoadNewSideAsync(repositoryRoot, status, highlights.NewRanges).ConfigureAwait(true);
+        if (newSide.Side is null)
+        {
+            return this.ErrorComparison(status.Path, newSide.ErrorMessage);
+        }
+
+        return new GitFileComparison(status.Path, oldSide.Side, newSide.Side, false, null);
     }
 
     /// <summary>
@@ -270,11 +344,11 @@ internal sealed class GitService
             {
                 var indexStatus = line[2];
                 var workTreeStatus = line[3];
-                var path = this.GetRenamedPorcelainPath(line);
-                staged.Add(new GitFileStatus(path, indexStatus, workTreeStatus, GitStatusBucket.Staged));
+                var (path, originalPath) = this.GetRenamedPorcelainPath(line);
+                staged.Add(new GitFileStatus(path, indexStatus, workTreeStatus, GitStatusBucket.Staged, originalPath));
                 if (workTreeStatus != '.')
                 {
-                    unstaged.Add(new GitFileStatus(path, indexStatus, workTreeStatus, GitStatusBucket.Unstaged));
+                    unstaged.Add(new GitFileStatus(path, indexStatus, workTreeStatus, GitStatusBucket.Unstaged, originalPath));
                 }
             }
             else if (line.StartsWith("u ", StringComparison.Ordinal) && line.Length > 10)
@@ -332,17 +406,166 @@ internal sealed class GitService
         return line[(index + 1)..];
     }
 
-    private string GetRenamedPorcelainPath(string line)
+    private GitFileComparison ErrorComparison(string path, string? errorMessage)
+    {
+        return new GitFileComparison(path, null, null, false, errorMessage ?? "Unable to load file comparison.");
+    }
+
+    private GitFileSideContent EmptySide(string sourceLabel)
+    {
+        return new GitFileSideContent(string.Empty, sourceLabel, Array.Empty<GitDiffHighlightRange>());
+    }
+
+    private IReadOnlyList<GitDiffHighlightRange> FullFileHighlights(string text, GitDiffHighlightKind kind)
+    {
+        var lineCount = this.CountTextLines(text);
+        return lineCount == 0
+            ? Array.Empty<GitDiffHighlightRange>()
+            : new[] { new GitDiffHighlightRange(1, lineCount, kind) };
+    }
+
+    private int CountTextLines(string text)
+    {
+        if (text.Length == 0)
+        {
+            return 0;
+        }
+
+        var count = 1;
+        foreach (var character in text)
+        {
+            if (character == '\n')
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private string ToWorkingTreePath(string repositoryRoot, string repositoryRelativePath)
+    {
+        return Path.GetFullPath(Path.Combine(
+            repositoryRoot,
+            repositoryRelativePath.Replace('/', Path.DirectorySeparatorChar)));
+    }
+
+    private bool ContainsBinaryData(string text)
+    {
+        foreach (var character in text)
+        {
+            if (character == '\0')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task<(GitFileSideContent? Side, string? ErrorMessage)> LoadOldSideAsync(
+        string repositoryRoot,
+        GitFileStatus status,
+        IReadOnlyList<GitDiffHighlightRange> highlights)
+    {
+        if (status.Bucket == GitStatusBucket.Staged)
+        {
+            if (status.IndexStatus == 'A')
+            {
+                return (this.EmptySide("Empty"), null);
+            }
+
+            return await this.LoadGitBlobSideAsync(
+                repositoryRoot,
+                $"HEAD:{status.OriginalPath ?? status.Path}",
+                "HEAD",
+                highlights).ConfigureAwait(true);
+        }
+
+        return await this.LoadGitBlobSideAsync(
+            repositoryRoot,
+            $":{status.Path}",
+            "Index",
+            highlights).ConfigureAwait(true);
+    }
+
+    private async Task<(GitFileSideContent? Side, string? ErrorMessage)> LoadNewSideAsync(
+        string repositoryRoot,
+        GitFileStatus status,
+        IReadOnlyList<GitDiffHighlightRange> highlights)
+    {
+        if (status.Bucket == GitStatusBucket.Staged)
+        {
+            if (status.IndexStatus == 'D')
+            {
+                return (this.EmptySide("Empty"), null);
+            }
+
+            return await this.LoadGitBlobSideAsync(repositoryRoot, $":{status.Path}", "Index", highlights).ConfigureAwait(true);
+        }
+
+        if (status.WorkTreeStatus == 'D')
+        {
+            return (this.EmptySide("Empty"), null);
+        }
+
+        return this.LoadWorkingTreeSide(repositoryRoot, status.Path, "Working tree", highlights);
+    }
+
+    private async Task<(GitFileSideContent? Side, string? ErrorMessage)> LoadGitBlobSideAsync(
+        string repositoryRoot,
+        string revisionPath,
+        string sourceLabel,
+        IReadOnlyList<GitDiffHighlightRange> highlights)
+    {
+        var result = await this.RunGitAsync(repositoryRoot, "show", revisionPath).ConfigureAwait(true);
+        if (!result.Succeeded)
+        {
+            return (null, result.ErrorMessage);
+        }
+
+        if (this.ContainsBinaryData(result.Output))
+        {
+            return (null, "Binary files cannot be opened in the Git page.");
+        }
+
+        if (Encoding.UTF8.GetByteCount(result.Output) > TextEditorService.MaxEditableBytes)
+        {
+            return (null, $"The file is larger than the {TextEditorService.MaxEditableBytes / 1024 / 1024} MiB editor limit.");
+        }
+
+        return (new GitFileSideContent(result.Output, sourceLabel, highlights), null);
+    }
+
+    private (GitFileSideContent? Side, string? ErrorMessage) LoadWorkingTreeSide(
+        string repositoryRoot,
+        string repositoryRelativePath,
+        string sourceLabel,
+        IReadOnlyList<GitDiffHighlightRange>? highlights = null)
+    {
+        var result = this.textEditorService.Open(this.ToWorkingTreePath(repositoryRoot, repositoryRelativePath));
+        if (result.Document is null)
+        {
+            return (null, result.ErrorMessage);
+        }
+
+        return (new GitFileSideContent(
+            result.Document.Text,
+            sourceLabel,
+            highlights ?? Array.Empty<GitDiffHighlightRange>()), null);
+    }
+
+    private (string Path, string? OriginalPath) GetRenamedPorcelainPath(string line)
     {
         var index = this.IndexOfNthSpace(line, 9);
         if (index < 0 || index + 1 >= line.Length)
         {
-            return line;
+            return (line, null);
         }
 
-        var path = line[(index + 1)..];
-        var separator = path.IndexOf('\t', StringComparison.Ordinal);
-        return separator >= 0 ? path[..separator] : path;
+        var paths = line[(index + 1)..];
+        var separator = paths.IndexOf('\t', StringComparison.Ordinal);
+        return separator >= 0 ? (paths[..separator], paths[(separator + 1)..]) : (paths, null);
     }
 
     private int IndexOfNthSpace(string value, int count)

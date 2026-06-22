@@ -12,11 +12,13 @@ namespace AeroTerm.Services;
 /// <param name="IndexStatus">Index status code.</param>
 /// <param name="WorkTreeStatus">Working-tree status code.</param>
 /// <param name="Bucket">Status bucket for display and actions.</param>
+/// <param name="OriginalPath">Original repository-relative path for renames, if Git reported one.</param>
 internal sealed record GitFileStatus(
     string Path,
     char IndexStatus,
     char WorkTreeStatus,
-    GitStatusBucket Bucket)
+    GitStatusBucket Bucket,
+    string? OriginalPath = null)
 {
     /// <inheritdoc/>
     public override string ToString()

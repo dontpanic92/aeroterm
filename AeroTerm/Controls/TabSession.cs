@@ -268,6 +268,11 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     public void FocusInput() => this.tree.ActiveLeaf.Content.FocusInput();
 
     /// <summary>
+    /// Shows the Git review surface for the active pane.
+    /// </summary>
+    public void ShowGitView() => this.tree.ActiveLeaf.Content.ShowGitView();
+
+    /// <summary>
     /// Creates a new <see cref="TabSession"/> that mirrors the active
     /// pane's launch configuration (shell, args, env, cwd). The
     /// returned session is not yet started — callers must add it to a

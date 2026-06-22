@@ -69,6 +69,11 @@ internal interface ITabSessionContent : IDisposable
     void FocusInput();
 
     /// <summary>
+    /// Shows the Git review surface for this content, if supported.
+    /// </summary>
+    void ShowGitView();
+
+    /// <summary>
     /// Creates a new, independent <see cref="ITabSessionContent"/> configured
     /// to launch a sibling session based on this one — typically reusing the
     /// same shell / args / env snapshot and a best-effort live working

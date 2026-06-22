@@ -7,22 +7,26 @@ namespace AeroTerm.Controls;
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using AeroTerm.Services;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
+using AvaloniaEdit;
+using AvaloniaEdit.Document;
+using AvaloniaEdit.Rendering;
 
 /// <summary>
-/// A view-only Git pane that lists the repository's changes on the left and
-/// renders the selected change as a side-by-side (old | new) diff on the right.
+/// A view-only Git pane that lists repository changes and renders the selected
+/// change as full-file old/new editors with highlighted changed lines.
 /// </summary>
 internal sealed class GitDiffPane : UserControl
 {
     private static readonly IBrush RemovedBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xE5, 0x39, 0x35));
     private static readonly IBrush AddedBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x43, 0xA0, 0x47));
+    private static readonly IBrush ModifiedBrush = new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xB3, 0x00));
     private static readonly IBrush GutterBrush = new SolidColorBrush(Color.FromArgb(0x80, 0x80, 0x80, 0x80));
     private static readonly FontFamily MonoFont = FontFamily.Parse("monospace");
 
@@ -32,14 +36,19 @@ internal sealed class GitDiffPane : UserControl
     private readonly TextBlock statusText;
     private readonly ListBox changesList;
     private readonly TextBlock diffHeader;
-    private readonly StackPanel oldColumn;
-    private readonly StackPanel newColumn;
+    private readonly TextBlock oldHeader;
+    private readonly TextBlock newHeader;
+    private readonly TextEditor oldEditor;
+    private readonly TextEditor newEditor;
+    private readonly HighlightColorizer oldColorizer = new();
+    private readonly HighlightColorizer newColorizer = new();
     private readonly Panel diffPlaceholder;
     private readonly TextBlock diffPlaceholderText;
-    private readonly Grid diffGrid;
+    private readonly Grid comparisonGrid;
 
     private GitRepositoryStatus? currentStatus;
     private int refreshToken;
+    private bool suppressEditorScrollSync;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GitDiffPane"/> class.
@@ -103,9 +112,13 @@ internal sealed class GitDiffPane : UserControl
             Margin = new Thickness(10, 10, 10, 6),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        this.oldColumn = new StackPanel();
-        this.newColumn = new StackPanel();
-        this.diffGrid = this.BuildDiffGrid();
+        this.oldHeader = this.BuildSideHeader();
+        this.newHeader = this.BuildSideHeader();
+        this.oldEditor = this.BuildEditor(this.oldColorizer);
+        this.newEditor = this.BuildEditor(this.newColorizer);
+        this.oldEditor.TextArea.TextView.ScrollOffsetChanged += (_, _) => this.SyncScrollOffset(this.oldEditor, this.newEditor);
+        this.newEditor.TextArea.TextView.ScrollOffsetChanged += (_, _) => this.SyncScrollOffset(this.newEditor, this.oldEditor);
+        this.comparisonGrid = this.BuildComparisonGrid();
         this.diffPlaceholderText = new TextBlock
         {
             Foreground = Brushes.Gray,
@@ -119,7 +132,7 @@ internal sealed class GitDiffPane : UserControl
 
         var diffBody = new Panel
         {
-            Children = { this.diffGrid, this.diffPlaceholder },
+            Children = { this.comparisonGrid, this.diffPlaceholder },
         };
 
         var rightPanel = new Grid
@@ -176,8 +189,17 @@ internal sealed class GitDiffPane : UserControl
         }
 
         this.currentStatus = status;
-        this.changesList.ItemsSource = BuildChangeItems(status);
-        this.ShowDiffPlaceholder("Select a change to view its diff.");
+        var items = BuildChangeItems(status);
+        this.changesList.ItemsSource = items;
+        if (items.Count > 0)
+        {
+            this.changesList.SelectedIndex = 0;
+            await this.UpdateDiffAsync().ConfigureAwait(true);
+        }
+        else
+        {
+            this.ShowDiffPlaceholder("Select a change to view its diff.");
+        }
 
         if (!status.IsRepository)
         {
@@ -218,36 +240,39 @@ internal sealed class GitDiffPane : UserControl
         return items;
     }
 
-    private static Control BuildLine(int? lineNumber, string? text, IBrush background)
+    private TextBlock BuildSideHeader()
     {
-        var gutter = new TextBlock
+        return new TextBlock
         {
-            Text = lineNumber?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
-            Width = 44,
-            TextAlignment = TextAlignment.Right,
-            Margin = new Thickness(0, 0, 8, 0),
+            FontFamily = MonoFont,
+            FontSize = 11,
+            Foreground = Brushes.Gray,
+            Margin = new Thickness(6, 0, 6, 4),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+    }
+
+    private TextEditor BuildEditor(HighlightColorizer colorizer)
+    {
+        var editor = new TextEditor
+        {
+            Document = new TextDocument(string.Empty),
+            IsReadOnly = true,
+            ShowLineNumbers = true,
+            WordWrap = false,
             FontFamily = MonoFont,
             FontSize = 12,
-            Foreground = GutterBrush,
+            Background = Brushes.Transparent,
+            Foreground = Brushes.Black,
+            LineNumbersForeground = GutterBrush,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
         };
-        var content = new TextBlock
-        {
-            Text = text ?? string.Empty,
-            FontFamily = MonoFont,
-            FontSize = 12,
-            TextWrapping = TextWrapping.NoWrap,
-        };
-        var line = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Children = { gutter, content },
-        };
-        return new Border
-        {
-            Background = background,
-            Padding = new Thickness(4, 0, 4, 0),
-            Child = line,
-        };
+        editor.TextArea.Background = Brushes.Transparent;
+        editor.TextArea.Foreground = Brushes.Black;
+        editor.TextArea.Caret.CaretBrush = Brushes.Black;
+        editor.TextArea.TextView.LineTransformers.Add(colorizer);
+        return editor;
     }
 
     private async Task UpdateDiffAsync()
@@ -266,91 +291,90 @@ internal sealed class GitDiffPane : UserControl
             return;
         }
 
-        if (item.Status.Bucket == GitStatusBucket.Untracked)
-        {
-            this.ShowDiffPlaceholder("Untracked file. Stage it to inspect the staged diff.");
-            return;
-        }
-
         var token = this.refreshToken;
-        var diff = await this.gitService.GetDiffAsync(root, item.Status).ConfigureAwait(true);
+        this.ShowDiffPlaceholder("Loading full-file diff...");
+        var comparison = await this.gitService.GetFileComparisonAsync(root, item.Status).ConfigureAwait(true);
         if (token != this.refreshToken || !ReferenceEquals(this.changesList.SelectedItem, item))
         {
             return;
         }
 
-        if (!diff.Succeeded)
-        {
-            this.ShowDiffPlaceholder(string.IsNullOrWhiteSpace(diff.ErrorMessage)
-                ? "Unable to load diff."
-                : diff.ErrorMessage);
-            return;
-        }
-
-        var files = GitDiffParser.Parse(diff.Output);
-        var rows = files.SelectMany(f => f.Rows).ToArray();
-        if (files.Any(f => f.IsBinary))
+        if (comparison.IsBinary)
         {
             this.ShowDiffPlaceholder("Binary file. No textual diff to display.");
             return;
         }
 
-        if (rows.Length == 0)
+        if (!comparison.Succeeded)
         {
-            this.ShowDiffPlaceholder("No changes to display.");
+            this.ShowDiffPlaceholder(string.IsNullOrWhiteSpace(comparison.ErrorMessage)
+                ? "Unable to load diff."
+                : comparison.ErrorMessage);
             return;
         }
 
-        this.RenderRows(rows);
+        await Dispatcher.UIThread.InvokeAsync(() => this.RenderComparison(comparison));
     }
 
-    private void RenderRows(IReadOnlyList<GitDiffRow> rows)
+    private void RenderComparison(GitFileComparison comparison)
     {
-        this.oldColumn.Children.Clear();
-        this.newColumn.Children.Clear();
+        var oldSide = comparison.OldSide!;
+        var newSide = comparison.NewSide!;
+        this.oldHeader.Text = $"Old: {oldSide.SourceLabel}";
+        this.newHeader.Text = $"New: {newSide.SourceLabel}";
+        this.SetEditorContent(this.oldEditor, this.oldColorizer, oldSide);
+        this.SetEditorContent(this.newEditor, this.newColorizer, newSide);
+        this.diffPlaceholder.IsVisible = false;
+        this.comparisonGrid.IsVisible = true;
+    }
 
-        foreach (var row in rows)
+    private void SetEditorContent(TextEditor editor, HighlightColorizer colorizer, GitFileSideContent side)
+    {
+        editor.Text = side.Text;
+        colorizer.SetHighlights(side.Highlights);
+        editor.TextArea.TextView.Redraw();
+    }
+
+    private void SyncScrollOffset(TextEditor source, TextEditor target)
+    {
+        if (this.suppressEditorScrollSync)
         {
-            this.oldColumn.Children.Add(BuildLine(
-                row.OldLineNumber,
-                row.OldText,
-                row.Kind == GitDiffRowKind.Removed ? RemovedBrush : Brushes.Transparent));
-            this.newColumn.Children.Add(BuildLine(
-                row.NewLineNumber,
-                row.NewText,
-                row.Kind == GitDiffRowKind.Added ? AddedBrush : Brushes.Transparent));
+            return;
         }
 
-        this.diffPlaceholder.IsVisible = false;
-        this.diffGrid.IsVisible = true;
+        this.suppressEditorScrollSync = true;
+        var offset = source.TextArea.TextView.ScrollOffset;
+        target.ScrollToHorizontalOffset(offset.X);
+        target.ScrollToVerticalOffset(offset.Y);
+        this.suppressEditorScrollSync = false;
     }
 
     private void ShowDiffPlaceholder(string message)
     {
-        this.oldColumn.Children.Clear();
-        this.newColumn.Children.Clear();
+        this.ClearEditors();
         this.diffPlaceholderText.Text = message;
         this.diffPlaceholder.IsVisible = true;
-        this.diffGrid.IsVisible = false;
+        this.comparisonGrid.IsVisible = false;
     }
 
-    private Grid BuildDiffGrid()
+    private void ClearEditors()
     {
-        var oldScroll = new ScrollViewer
-        {
-            Content = this.oldColumn,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-        };
-        var newScroll = new ScrollViewer
-        {
-            Content = this.newColumn,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-        };
+        this.oldHeader.Text = string.Empty;
+        this.newHeader.Text = string.Empty;
+        this.SetEditorContent(this.oldEditor, this.oldColorizer, this.EmptySide());
+        this.SetEditorContent(this.newEditor, this.newColorizer, this.EmptySide());
+    }
 
-        var columns = new Grid
+    private Grid BuildComparisonGrid()
+    {
+        var grid = new Grid
         {
+            Margin = new Thickness(10, 0, 10, 10),
+            RowDefinitions =
+            {
+                new RowDefinition(GridLength.Auto),
+                new RowDefinition(1, GridUnitType.Star),
+            },
             ColumnDefinitions =
             {
                 new ColumnDefinition(1, GridUnitType.Star),
@@ -358,25 +382,73 @@ internal sealed class GitDiffPane : UserControl
                 new ColumnDefinition(1, GridUnitType.Star),
             },
         };
+
         var divider = new Border
         {
             Width = 1,
             Background = GutterBrush,
         };
-        Grid.SetColumn(oldScroll, 0);
+        Grid.SetRowSpan(divider, 2);
+        Grid.SetColumn(this.oldHeader, 0);
         Grid.SetColumn(divider, 1);
-        Grid.SetColumn(newScroll, 2);
-        columns.Children.Add(oldScroll);
-        columns.Children.Add(divider);
-        columns.Children.Add(newScroll);
-
-        var grid = new Grid();
-        grid.Children.Add(new ScrollViewer
-        {
-            Content = columns,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-        });
+        Grid.SetColumn(this.newHeader, 2);
+        Grid.SetRow(this.oldEditor, 1);
+        Grid.SetColumn(this.oldEditor, 0);
+        Grid.SetRow(this.newEditor, 1);
+        Grid.SetColumn(this.newEditor, 2);
+        grid.Children.Add(this.oldHeader);
+        grid.Children.Add(divider);
+        grid.Children.Add(this.newHeader);
+        grid.Children.Add(this.oldEditor);
+        grid.Children.Add(this.newEditor);
         return grid;
+    }
+
+    private GitFileSideContent EmptySide()
+    {
+        return new GitFileSideContent(string.Empty, string.Empty, Array.Empty<GitDiffHighlightRange>());
+    }
+
+    private sealed class HighlightColorizer : DocumentColorizingTransformer
+    {
+        private IReadOnlyList<GitDiffHighlightRange> highlights = Array.Empty<GitDiffHighlightRange>();
+
+        public void SetHighlights(IReadOnlyList<GitDiffHighlightRange> ranges)
+        {
+            this.highlights = ranges;
+        }
+
+        protected override void ColorizeLine(DocumentLine line)
+        {
+            var brush = this.GetBrush(line.LineNumber);
+            if (brush is null)
+            {
+                return;
+            }
+
+            this.ChangeLinePart(
+                line.Offset,
+                line.EndOffset,
+                element => element.TextRunProperties.SetBackgroundBrush(brush));
+        }
+
+        private IBrush? GetBrush(int lineNumber)
+        {
+            foreach (var range in this.highlights)
+            {
+                if (lineNumber >= range.StartLine && lineNumber < range.StartLine + range.LineCount)
+                {
+                    return range.Kind switch
+                    {
+                        GitDiffHighlightKind.Added => AddedBrush,
+                        GitDiffHighlightKind.Removed => RemovedBrush,
+                        GitDiffHighlightKind.Modified => ModifiedBrush,
+                        _ => null,
+                    };
+                }
+            }
+
+            return null;
+        }
     }
 }

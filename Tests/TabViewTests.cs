@@ -46,6 +46,20 @@ public class TabViewTests
     }
 
     /// <summary>
+    /// Showing the Git view delegates to the active pane content.
+    /// </summary>
+    [AvaloniaTest]
+    public void ShowGitView_DelegatesToActiveContent()
+    {
+        var fake = new FakeTabContent("a");
+        var tab = new TabSession(fake);
+
+        tab.ShowGitView();
+
+        Assert.That(fake.ShowGitViewCount, Is.EqualTo(1));
+    }
+
+    /// <summary>
     /// Closing the active middle tab of three activates the right neighbour.
     /// </summary>
     [AvaloniaTest]

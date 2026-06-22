@@ -1244,7 +1244,7 @@ public partial class MainWindow : Window
 
     private void ShowWorkbenchGit()
     {
-        this.workbenchHost.ShowGit();
+        this.tabView.ActiveTab?.ShowGitView();
         this.workbenchHost.SetWorkbenchEnabled(this.settings.EnableWorkbench);
     }
 

@@ -57,6 +57,11 @@ internal sealed class FakeTabContent : ITabSessionContent
     public int DisposeCount { get; private set; }
 
     /// <summary>
+    /// Gets the number of times <see cref="ShowGitView"/> has been invoked.
+    /// </summary>
+    public int ShowGitViewCount { get; private set; }
+
+    /// <summary>
     /// Raises the <see cref="TitleChanged"/> event.
     /// </summary>
     /// <param name="t">The new title.</param>
@@ -92,6 +97,12 @@ internal sealed class FakeTabContent : ITabSessionContent
     /// <inheritdoc />
     public void FocusInput()
     {
+    }
+
+    /// <inheritdoc />
+    public void ShowGitView()
+    {
+        this.ShowGitViewCount++;
     }
 
     /// <inheritdoc />

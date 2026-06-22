@@ -1,6 +1,8 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:chrome="using:Avalonia.Controls.Chrome"
+             xmlns:edit="using:AvaloniaEdit"
+             xmlns:editing="using:AvaloniaEdit.Editing"
              xmlns:theme="using:AeroTerm.Theme"
              x:Class="AeroTerm.App"
              Name="AeroTerm"
@@ -27,6 +29,37 @@
                 <WindowDrawnDecorationsTemplate>
                     <WindowDrawnDecorationsContent />
                 </WindowDrawnDecorationsTemplate>
+            </Setter>
+        </ControlTheme>
+        <ControlTheme x:Key="{x:Type edit:TextEditor}"
+                      TargetType="edit:TextEditor">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ScrollViewer Name="PART_ScrollViewer"
+                                  HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                                  VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}">
+                        <ContentPresenter Name="PART_ContentPresenter" />
+                    </ScrollViewer>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+        <ControlTheme x:Key="{x:Type editing:TextArea}"
+                      TargetType="editing:TextArea">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <DockPanel Focusable="False">
+                        <ItemsControl DockPanel.Dock="Left"
+                                      Focusable="False"
+                                      ItemsSource="{TemplateBinding LeftMargins}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                        <ContentPresenter Name="PART_CP" Focusable="False" />
+                    </DockPanel>
+                </ControlTemplate>
             </Setter>
         </ControlTheme>
     </Application.Resources>

@@ -117,6 +117,20 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     public void FocusInput() => this.terminal?.Focus();
 
     /// <inheritdoc />
+    public void ShowGitView()
+    {
+        if (this.showingGitPane)
+        {
+            return;
+        }
+
+        this.showingGitPane = true;
+        this.ApplyActiveViewVisibility();
+        this.UpdateActiveViewVisuals();
+        _ = this.gitPaneView.RefreshAsync();
+    }
+
+    /// <inheritdoc />
     public ITabSessionContent Duplicate()
     {
         if (this.settings is null)
@@ -311,19 +325,6 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.ApplyActiveViewVisibility();
         this.UpdateActiveViewVisuals();
         this.terminal?.Focus();
-    }
-
-    private void ShowGitView()
-    {
-        if (this.showingGitPane)
-        {
-            return;
-        }
-
-        this.showingGitPane = true;
-        this.ApplyActiveViewVisibility();
-        this.UpdateActiveViewVisuals();
-        _ = this.gitPaneView.RefreshAsync();
     }
 
     private void ApplyActiveViewVisibility()
