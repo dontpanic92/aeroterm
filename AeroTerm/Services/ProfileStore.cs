@@ -234,8 +234,7 @@ public sealed class ProfileStore
             }
         }
 
-        env["TERM"] = "xterm-256color";
-        env["COLORTERM"] = "truecolor";
+        TerminalEnvironment.ApplyDefaults(env);
         return new LaunchSpec(cwd, shell, args, env);
     }
 

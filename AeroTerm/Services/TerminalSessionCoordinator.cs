@@ -343,8 +343,7 @@ internal sealed class TerminalSessionCoordinator : IDisposable
             }
         }
 
-        env["TERM"] = "xterm-256color";
-        env["COLORTERM"] = "truecolor";
+        TerminalEnvironment.ApplyDefaults(env);
         return env;
     }
 

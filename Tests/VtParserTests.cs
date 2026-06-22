@@ -884,6 +884,45 @@ public class VtParserTests
     }
 
     /// <summary>
+    /// DECRQM should advertise Unicode grapheme-clustering mode support.
+    /// </summary>
+    [Test]
+    public void Process_DecrqmGraphemeClustering_ReportsPermanentlySet()
+    {
+        byte[]? response = null;
+        var buffer = new TerminalBuffer(4, 2);
+        var parser = new VtParser(buffer, _ => { }, bytes => response = bytes);
+
+        parser.Process(Encoding.UTF8.GetBytes("\x1B[?2027$p"));
+
+        Assert.That(response, Is.Not.Null);
+        string resp = Encoding.ASCII.GetString(response!);
+        Assert.That(resp, Is.EqualTo("\x1B[?2027;3$y"));
+    }
+
+    /// <summary>
+    /// Terminal capability queriers use DA1 as a sentinel after feature probes.
+    /// </summary>
+    [Test]
+    public void Process_DecrqmGraphemeClusteringBeforeDa1_RespondsBeforeSentinel()
+    {
+        var responses = new List<string>();
+        var buffer = new TerminalBuffer(4, 2);
+        var parser = new VtParser(
+            buffer,
+            _ => { },
+            bytes => responses.Add(Encoding.ASCII.GetString(bytes)));
+
+        parser.Process(Encoding.UTF8.GetBytes("\x1B[?2027$p\x1B[c"));
+
+        Assert.That(responses, Is.EqualTo(new[]
+        {
+            "\x1B[?2027;3$y",
+            "\x1B[?64;22c",
+        }));
+    }
+
+    /// <summary>
     /// Cursor blink mode 12 should toggle blinking.
     /// </summary>
     [Test]

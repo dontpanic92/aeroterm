@@ -1082,6 +1082,8 @@ public class VtParser
                 case 2026: // Synchronized output
                     this.buffer.SynchronizedOutput = enable;
                     break;
+                case 2027: // Unicode grapheme clustering mode
+                    break;
             }
         }
     }
@@ -1175,6 +1177,7 @@ public class VtParser
             1006 => this.buffer.SgrMouseEnabled ? 1 : 2,
             2004 => this.buffer.BracketedPasteEnabled ? 1 : 2,
             2026 => this.buffer.SynchronizedOutput ? 1 : 2,
+            2027 => 3,
             _ => 0, // unknown mode
         };
     }

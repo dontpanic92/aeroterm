@@ -82,6 +82,30 @@ public class ProfileTests
         Assert.That(spec.Cwd, Is.EqualTo("/tmp/override"));
     }
 
+    /// <summary>Terminal defaults advertise the Copilot prompt frame by default.</summary>
+    [Test]
+    public void ApplyDefaults_AddsCopilotPromptFrameDefault()
+    {
+        var env = new Dictionary<string, string>();
+
+        TerminalEnvironment.ApplyDefaults(env);
+
+        Assert.That(env["TERM"], Is.EqualTo("xterm-256color"));
+        Assert.That(env["COLORTERM"], Is.EqualTo("truecolor"));
+        Assert.That(env["COPILOT_PROMPT_FRAME"], Is.EqualTo("1"));
+    }
+
+    /// <summary>Terminal defaults preserve an explicit Copilot prompt-frame opt-out.</summary>
+    [Test]
+    public void ApplyDefaults_PreservesCopilotPromptFrameOverride()
+    {
+        var env = new Dictionary<string, string> { ["COPILOT_PROMPT_FRAME"] = "0" };
+
+        TerminalEnvironment.ApplyDefaults(env);
+
+        Assert.That(env["COPILOT_PROMPT_FRAME"], Is.EqualTo("0"));
+    }
+
     private static LaunchSpec MakeFallback() => new(
         "/home/test",
         "/bin/sh",
