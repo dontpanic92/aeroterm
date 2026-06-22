@@ -7,6 +7,7 @@ namespace AeroTerm.Services;
 
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 
 /// <summary>
@@ -34,6 +35,25 @@ internal sealed class ShellIntegrationInjector
     /// can detect that AeroTerm injected them.
     /// </summary>
     public const string InjectedEnvVar = "AEROTERM_SHELL_INTEGRATION";
+
+    /// <summary>
+    /// Env var naming a per-session file that the integration script writes
+    /// the working directory to on every prompt. Provides a reliable cwd
+    /// side-channel for shells whose <c>cd</c> is invisible to the host
+    /// (notably Windows PowerShell under ConPTY).
+    /// </summary>
+    public const string CwdFileEnvVar = "AEROTERM_CWD_FILE";
+
+    /// <summary>
+    /// Sentinel the integration scripts set (as an environment variable) once
+    /// they have loaded, to guard against re-sourcing within the same shell.
+    /// Because it is an environment variable it is inherited by child
+    /// processes, so it must be stripped from each freshly launched shell's
+    /// environment — otherwise an inherited value (e.g. when AeroTerm is
+    /// started from within another integrated shell) suppresses integration
+    /// and breaks cwd reporting.
+    /// </summary>
+    public const string LoadedSentinelEnvVar = "AEROTERM_SHELL_INTEGRATION_LOADED";
 
     private readonly Func<string> dataDirFactory;
 
@@ -121,6 +141,22 @@ internal sealed class ShellIntegrationInjector
             // If we cannot even resolve the data dir, the user is better
             // served by an un-integrated shell than a broken one.
             return new ShellInjectionResult(command, newArgs, newEnv, Injected: false);
+        }
+
+        // Per-session cwd side-channel file. The integration scripts write the
+        // working directory here on every prompt so the host can read it even
+        // when escape-sequence cwd reporting is unavailable.
+        newEnv[CwdFileEnvVar] = Path.Combine(dataDir, "cwd-" + Guid.NewGuid().ToString("N") + ".txt");
+
+        // Strip any inherited "already loaded" sentinel so this freshly
+        // launched shell always loads integration. Without this, launching
+        // AeroTerm from within another integrated shell leaks the sentinel and
+        // silently disables integration (and thus cwd reporting).
+        foreach (var key in newEnv.Keys
+            .Where(k => string.Equals(k, LoadedSentinelEnvVar, StringComparison.OrdinalIgnoreCase))
+            .ToList())
+        {
+            newEnv.Remove(key);
         }
 
         try

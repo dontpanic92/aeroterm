@@ -28,7 +28,7 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     private readonly Border workbenchButtonStrip;
     private readonly Button terminalViewButton;
     private readonly Button gitViewButton;
-    private readonly Control gitPaneView;
+    private readonly GitDiffPane gitPaneView;
     private readonly IBrush activeButtonBrush;
     private TerminalControl? terminal;
     private string title = "AeroTerm";
@@ -57,7 +57,7 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.coordinator.CurrentWorkingDirectoryChanged += this.OnCoordinatorCurrentWorkingDirectoryChanged;
 
         this.activeButtonBrush = ResolveActiveButtonBrush(this.host);
-        this.gitPaneView = BuildGitPanePlaceholder();
+        this.gitPaneView = new GitDiffPane(() => this.coordinator.TryGetCurrentWorkingDirectory());
         this.gitPaneView.IsVisible = false;
         this.gitPaneView.ZIndex = 1;
         this.host.Children.Add(this.gitPaneView);
@@ -180,21 +180,6 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         return new CoordinatorTabContent(coordinator, settings);
     }
 
-    /// <summary>
-    /// Builds the placeholder shown when the Git view is selected. This is an
-    /// intentionally empty surface for this phase; a later phase replaces its
-    /// content with the real Git pane. It is painted with the opaque theme
-    /// surface brush (the same background as the settings dialog) so it reads
-    /// as a solid panel rather than a translucent overlay.
-    /// </summary>
-    /// <returns>The placeholder control.</returns>
-    private static Control BuildGitPanePlaceholder()
-    {
-        var border = new Border { Name = "GitPanePlaceholder" };
-        border.Bind(Border.BackgroundProperty, border.GetResourceObservable("SurfaceBackgroundBrush"));
-        return border;
-    }
-
     private static IBrush ResolveActiveButtonBrush(Control reference)
     {
         if (reference.TryGetResource("TabStripActiveAccentBrush", reference.ActualThemeVariant, out var value))
@@ -290,6 +275,11 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
 
     private void OnCoordinatorCurrentWorkingDirectoryChanged(string cwd)
     {
+        if (this.showingGitPane)
+        {
+            _ = this.gitPaneView.RefreshAsync();
+        }
+
         this.CurrentWorkingDirectoryChanged?.Invoke(cwd);
     }
 
@@ -333,6 +323,7 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.showingGitPane = true;
         this.ApplyActiveViewVisibility();
         this.UpdateActiveViewVisuals();
+        _ = this.gitPaneView.RefreshAsync();
     }
 
     private void ApplyActiveViewVisibility()

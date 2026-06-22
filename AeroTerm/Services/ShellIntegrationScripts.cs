@@ -216,6 +216,18 @@ function global:prompt {
     if ($cwdPath) {
         $cwdUri = [System.Uri]::new($cwdPath).AbsoluteUri
         [void]$sb.Append("$esc]7;$cwdUri$bel")
+        # Also report the cwd via ConEmu's OSC 9;9, written straight to the
+        # console rather than embedded in the returned prompt string. Windows
+        # PowerShell renders the prompt through a path that can drop embedded
+        # escape sequences under ConPTY, so the OSC 7 above may never reach the
+        # host. OSC 9;9 emitted with [Console]::Write is forwarded verbatim by
+        # ConPTY, making it the reliable cwd channel on Windows.
+        [Console]::Write("$esc]9;9;$cwdPath$bel")
+        # Most reliable of all: write the cwd to AeroTerm's per-session file
+        # side-channel, which does not depend on any escape-sequence passthrough.
+        if ($env:AEROTERM_CWD_FILE) {
+            try { [System.IO.File]::WriteAllText($env:AEROTERM_CWD_FILE, $cwdPath) } catch { }
+        }
     }
     [void]$sb.Append("$esc]133;A$bel")
     if (Test-Path Function:\__AeroTerm_OriginalPrompt) {

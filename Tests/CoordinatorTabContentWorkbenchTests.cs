@@ -119,11 +119,11 @@ public sealed class CoordinatorTabContentWorkbenchTests
             .First(b => b.Child is StackPanel);
     }
 
-    private static Border GetPlaceholder(CoordinatorTabContent content)
+    private static GitDiffPane GetPlaceholder(CoordinatorTabContent content)
     {
         return content.Host.GetLogicalDescendants()
-            .OfType<Border>()
-            .First(b => b.Name == "GitPanePlaceholder");
+            .OfType<GitDiffPane>()
+            .First();
     }
 
     private static Button GetButton(CoordinatorTabContent content, string accessibleName)

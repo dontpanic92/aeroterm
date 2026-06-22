@@ -1480,6 +1480,10 @@ public class VtParser
                     this.HandleOscHyperlink(payload);
                     break;
 
+                case 9: // ConEmu extensions (OSC 9 ; 9 ; <path> reports the cwd)
+                    this.HandleOscConEmu(payload);
+                    break;
+
                 case 10: // Set/query foreground color
                     this.HandleOscColor(payload, isForeground: true);
                     break;
@@ -1569,6 +1573,28 @@ public class VtParser
         {
             this.CurrentDirectoryChanged?.Invoke(this, new CurrentDirectoryEventArgs(currentDirectory));
         }
+    }
+
+    private void HandleOscConEmu(string payload)
+    {
+        // ConEmu's OSC 9 multiplexes several sub-commands by a leading
+        // numeric selector. Sub-command 9 reports the working directory as a
+        // raw filesystem path: OSC 9 ; 9 ; &lt;path&gt; ST. This is the channel
+        // ConPTY forwards verbatim, so it is the most reliable cwd signal on
+        // Windows (where shells such as Windows PowerShell may not pass OSC 7
+        // through their prompt rendering). Other sub-commands are ignored.
+        if (!payload.StartsWith("9;", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        string path = payload[2..].Trim().Trim('"');
+        if (path.Length == 0)
+        {
+            return;
+        }
+
+        this.CurrentDirectoryChanged?.Invoke(this, new CurrentDirectoryEventArgs(path));
     }
 
     private void HandleOscColor(string payload, bool isForeground)

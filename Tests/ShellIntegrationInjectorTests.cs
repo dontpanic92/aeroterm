@@ -289,4 +289,59 @@ public class ShellIntegrationInjectorTests
         Assert.That(ShellIntegrationScripts.FishIntegration, Does.Contain("]7;file://"));
         Assert.That(ShellIntegrationScripts.PowerShellIntegration, Does.Contain("]7;"));
     }
+
+    /// <summary>
+    /// The PowerShell integration additionally emits the cwd via ConEmu's
+    /// OSC 9;9 written straight to the console, because Windows PowerShell can
+    /// strip escape sequences embedded in the rendered prompt string under
+    /// ConPTY (whereas OSC 9;9 is forwarded verbatim).
+    /// </summary>
+    [Test]
+    public void PowerShellScript_EmitsOsc99CwdViaConsole()
+    {
+        Assert.That(ShellIntegrationScripts.PowerShellIntegration, Does.Contain("]9;9;"));
+        Assert.That(ShellIntegrationScripts.PowerShellIntegration, Does.Contain("[Console]::Write(\"$esc]9;9;$cwdPath$bel\")"));
+    }
+
+    /// <summary>
+    /// Injection exposes a per-session cwd side-channel file via the
+    /// <see cref="ShellIntegrationInjector.CwdFileEnvVar"/> environment
+    /// variable, and the PowerShell script writes the cwd to it each prompt.
+    /// </summary>
+    [Test]
+    public void Inject_PowerShell_SetsCwdFileEnvVar()
+    {
+        var injector = new ShellIntegrationInjector(() => this.tempDir);
+        var env = new Dictionary<string, string> { ["TERM"] = "xterm-256color" };
+
+        var result = injector.Inject("powershell.exe", System.Array.Empty<string>(), env);
+
+        Assert.That(result.Injected, Is.True);
+        Assert.That(result.Env.ContainsKey(ShellIntegrationInjector.CwdFileEnvVar), Is.True);
+        Assert.That(result.Env[ShellIntegrationInjector.CwdFileEnvVar], Is.Not.Empty);
+        Assert.That(
+            ShellIntegrationScripts.PowerShellIntegration,
+            Does.Contain("[System.IO.File]::WriteAllText($env:AEROTERM_CWD_FILE, $cwdPath)"));
+    }
+
+    /// <summary>
+    /// An inherited "already loaded" sentinel is stripped from the launched
+    /// shell's environment so integration is not silently suppressed (e.g.
+    /// when AeroTerm is started from within another integrated shell).
+    /// </summary>
+    [Test]
+    public void Inject_PowerShell_StripsInheritedLoadedSentinel()
+    {
+        var injector = new ShellIntegrationInjector(() => this.tempDir);
+        var env = new Dictionary<string, string>
+        {
+            ["TERM"] = "xterm-256color",
+            [ShellIntegrationInjector.LoadedSentinelEnvVar] = "1",
+        };
+
+        var result = injector.Inject("powershell.exe", System.Array.Empty<string>(), env);
+
+        Assert.That(result.Injected, Is.True);
+        Assert.That(result.Env.ContainsKey(ShellIntegrationInjector.LoadedSentinelEnvVar), Is.False);
+    }
 }

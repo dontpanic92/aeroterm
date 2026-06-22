@@ -25,6 +25,7 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     private TerminalControl? terminalControl;
     private System.ComponentModel.PropertyChangedEventHandler? settingsHandler;
     private string? shellReportedCwd;
+    private string? cwdFilePath;
     private bool disposed;
 
     /// <summary>
@@ -144,6 +145,7 @@ internal sealed class TerminalSessionCoordinator : IDisposable
                 {
                     args = result.Args;
                     env = result.Env;
+                    env.TryGetValue(ShellIntegrationInjector.CwdFileEnvVar, out this.cwdFilePath);
                     this.log.LogInformation("Shell integration injected for {Shell}", shell);
                 }
             }
@@ -256,6 +258,18 @@ internal sealed class TerminalSessionCoordinator : IDisposable
         }
 
         this.terminalControl?.Dispose();
+
+        if (!string.IsNullOrEmpty(this.cwdFilePath))
+        {
+            try
+            {
+                File.Delete(this.cwdFilePath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                this.log.LogDebug(ex, "Failed to delete cwd side-channel file {Path}.", this.cwdFilePath);
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -273,6 +287,12 @@ internal sealed class TerminalSessionCoordinator : IDisposable
         if (!string.IsNullOrEmpty(this.shellReportedCwd))
         {
             return this.shellReportedCwd;
+        }
+
+        string? fromFile = this.TryReadCwdFile();
+        if (!string.IsNullOrEmpty(fromFile))
+        {
+            return fromFile;
         }
 
         string? live = this.TryReadLiveCwd();
@@ -380,6 +400,118 @@ internal sealed class TerminalSessionCoordinator : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Reads the live current directory of a Windows process by walking its
+    /// PEB. Requires only same-user access rights (no elevation). Returns
+    /// <c>null</c> when the lookup is not possible (e.g. mismatched bitness or
+    /// access denied), letting callers fall back to the launch cwd.
+    /// </summary>
+    /// <param name="pid">Target process id.</param>
+    /// <returns>The current directory, or <c>null</c> on failure.</returns>
+    private static string? ReadWindowsCwd(int pid)
+    {
+        // 64-bit-only: the PEB / RTL_USER_PROCESS_PARAMETERS offsets below are
+        // for the x64 layout. Reading across a WOW64 boundary needs a separate
+        // path we deliberately skip.
+        if (!Environment.Is64BitProcess)
+        {
+            return null;
+        }
+
+        const int ProcessQueryInformation = 0x0400;
+        const int ProcessVmRead = 0x0010;
+
+        // x64 layout offsets.
+        const int PebProcessParametersOffset = 0x20;
+        const int ProcessParametersCurrentDirectoryOffset = 0x38; // CURDIR.DosPath
+        const int UnicodeStringBufferOffset = 0x08; // PWSTR within UNICODE_STRING
+
+        IntPtr handle = NativeMethods.OpenProcess(ProcessQueryInformation | ProcessVmRead, false, pid);
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            var basicInformation = default(NativeMethods.ProcessBasicInformation);
+            int status = NativeMethods.NtQueryInformationProcess(
+                handle,
+                0,
+                ref basicInformation,
+                Marshal.SizeOf<NativeMethods.ProcessBasicInformation>(),
+                out _);
+            if (status != 0 || basicInformation.PebBaseAddress == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            if (!TryReadPointer(handle, basicInformation.PebBaseAddress + PebProcessParametersOffset, out IntPtr processParameters) ||
+                processParameters == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            IntPtr currentDirectory = processParameters + ProcessParametersCurrentDirectoryOffset;
+            if (!TryReadUInt16(handle, currentDirectory, out ushort length) || length == 0)
+            {
+                return null;
+            }
+
+            if (!TryReadPointer(handle, currentDirectory + UnicodeStringBufferOffset, out IntPtr buffer) ||
+                buffer == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            var raw = new byte[length];
+            if (!NativeMethods.ReadProcessMemory(handle, buffer, raw, length, out IntPtr read) ||
+                read.ToInt64() != length)
+            {
+                return null;
+            }
+
+            string path = System.Text.Encoding.Unicode.GetString(raw).TrimEnd('\0', '\\');
+            return string.IsNullOrEmpty(path) ? null : path;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
+        {
+            return null;
+        }
+        finally
+        {
+            NativeMethods.CloseHandle(handle);
+        }
+    }
+
+    private static bool TryReadPointer(IntPtr process, IntPtr address, out IntPtr value)
+    {
+        var buffer = new byte[IntPtr.Size];
+        if (NativeMethods.ReadProcessMemory(process, address, buffer, buffer.Length, out IntPtr read) &&
+            read.ToInt64() == buffer.Length)
+        {
+            value = new IntPtr(BitConverter.ToInt64(buffer, 0));
+            return true;
+        }
+
+        value = IntPtr.Zero;
+        return false;
+    }
+
+    private static bool TryReadUInt16(IntPtr process, IntPtr address, out ushort value)
+    {
+        var buffer = new byte[sizeof(ushort)];
+        if (NativeMethods.ReadProcessMemory(process, address, buffer, buffer.Length, out IntPtr read) &&
+            read.ToInt64() == buffer.Length)
+        {
+            value = BitConverter.ToUInt16(buffer, 0);
+            return true;
+        }
+
+        value = 0;
+        return false;
+    }
+
     private void ApplyFontSettings()
     {
         if (this.terminalControl is null)
@@ -415,11 +547,48 @@ internal sealed class TerminalSessionCoordinator : IDisposable
     }
 
     /// <summary>
+    /// Reads the working directory the shell-integration script writes to a
+    /// per-session side-channel file on every prompt. This is the most
+    /// reliable cwd signal for shells (notably Windows PowerShell) whose
+    /// <c>cd</c> neither updates the OS process directory nor reaches the host
+    /// via escape sequences under ConPTY.
+    /// </summary>
+    /// <returns>The reported directory, or <c>null</c> when unavailable.</returns>
+    private string? TryReadCwdFile()
+    {
+        if (string.IsNullOrEmpty(this.cwdFilePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (!File.Exists(this.cwdFilePath))
+            {
+                return null;
+            }
+
+            using var stream = new FileStream(
+                this.cwdFilePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            string content = reader.ReadToEnd().Trim();
+            return string.IsNullOrEmpty(content) ? null : content;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Platform-specific best-effort lookup of the child shell's live cwd.
     /// Returns <c>null</c> on failure; callers fall back to the launch cwd.
     /// Linux reads the <c>/proc/&lt;pid&gt;/cwd</c> symlink; macOS shells out
-    /// to <c>lsof</c>; Windows has no reliable userland mechanism without
-    /// elevated permissions, so we always return <c>null</c> there.
+    /// to <c>lsof</c>; Windows reads the child process's PEB to recover the
+    /// current directory (works for same-user processes without elevation).
     /// </summary>
     private string? TryReadLiveCwd()
     {
@@ -443,6 +612,11 @@ internal sealed class TerminalSessionCoordinator : IDisposable
             {
                 return ReadMacOsCwdViaLsof(pid.Value);
             }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return ReadWindowsCwd(pid.Value);
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Diagnostics.Tracing.EventSourceException)
         {
@@ -454,5 +628,97 @@ internal sealed class TerminalSessionCoordinator : IDisposable
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// P/Invoke declarations for reading a Windows process's PEB.
+    /// </summary>
+    private static class NativeMethods
+    {
+        /// <summary>
+        /// Opens an existing local process object.
+        /// </summary>
+        /// <param name="desiredAccess">Access rights mask.</param>
+        /// <param name="inheritHandle">Whether the handle is inheritable.</param>
+        /// <param name="processId">Target process id.</param>
+        /// <returns>A process handle, or <see cref="IntPtr.Zero"/> on failure.</returns>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr OpenProcess(int desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, int processId);
+
+        /// <summary>
+        /// Closes an open object handle.
+        /// </summary>
+        /// <param name="handle">Handle to close.</param>
+        /// <returns><see langword="true"/> on success.</returns>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool CloseHandle(IntPtr handle);
+
+        /// <summary>
+        /// Reads memory from another process's address space.
+        /// </summary>
+        /// <param name="process">Process handle.</param>
+        /// <param name="baseAddress">Address to read from.</param>
+        /// <param name="buffer">Destination buffer.</param>
+        /// <param name="size">Number of bytes to read.</param>
+        /// <param name="bytesRead">Bytes actually read.</param>
+        /// <returns><see langword="true"/> on success.</returns>
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ReadProcessMemory(IntPtr process, IntPtr baseAddress, byte[] buffer, int size, out IntPtr bytesRead);
+
+        /// <summary>
+        /// Retrieves information about the specified process.
+        /// </summary>
+        /// <param name="process">Process handle.</param>
+        /// <param name="processInformationClass">Information class (0 = basic).</param>
+        /// <param name="processInformation">Receives the basic information.</param>
+        /// <param name="processInformationLength">Buffer length in bytes.</param>
+        /// <param name="returnLength">Bytes returned.</param>
+        /// <returns>An NTSTATUS code (0 on success).</returns>
+        [DllImport("ntdll.dll")]
+        public static extern int NtQueryInformationProcess(
+            IntPtr process,
+            int processInformationClass,
+            ref ProcessBasicInformation processInformation,
+            int processInformationLength,
+            out int returnLength);
+
+        /// <summary>
+        /// Subset of PROCESS_BASIC_INFORMATION exposing the PEB base address.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ProcessBasicInformation
+        {
+            /// <summary>
+            /// Reserved exit-status field.
+            /// </summary>
+            public IntPtr ExitStatus;
+
+            /// <summary>
+            /// Base address of the process environment block.
+            /// </summary>
+            public IntPtr PebBaseAddress;
+
+            /// <summary>
+            /// Reserved affinity-mask field.
+            /// </summary>
+            public IntPtr AffinityMask;
+
+            /// <summary>
+            /// Reserved base-priority field.
+            /// </summary>
+            public IntPtr BasePriority;
+
+            /// <summary>
+            /// Unique process id.
+            /// </summary>
+            public IntPtr UniqueProcessId;
+
+            /// <summary>
+            /// Parent process id.
+            /// </summary>
+            public IntPtr InheritedFromUniqueProcessId;
+        }
     }
 }
