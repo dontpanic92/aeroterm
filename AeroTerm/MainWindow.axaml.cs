@@ -78,6 +78,7 @@ public partial class MainWindow : Window
     private bool isSettingsDialogOpen;
     private bool isCloseConfirmed;
     private bool suppressInitialTab;
+    private string closeTrigger = "external-close-request";
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
@@ -228,6 +229,15 @@ public partial class MainWindow : Window
     /// <inheritdoc />
     protected override void OnClosing(WindowClosingEventArgs e)
     {
+        this.log.LogInformation(
+            "Main window closing requested — PID={ProcessId}, Trigger={Trigger}, Tabs={TabCount}, WindowState={WindowState}, Size={Width}x{Height}.",
+            Environment.ProcessId,
+            this.closeTrigger,
+            this.tabView.Tabs.Count,
+            this.WindowState,
+            this.Width,
+            this.Height);
+
         // Multi-tab confirm-on-close, unless the user already answered
         // "yes" on an earlier pass through this handler (guard flag reset
         // just before we re-invoke Close()).
@@ -236,6 +246,11 @@ public partial class MainWindow : Window
             && this.tabView.Tabs.Count > 1)
         {
             e.Cancel = true;
+            this.log.LogInformation(
+                "Main window close deferred for confirmation — PID={ProcessId}, Trigger={Trigger}, Tabs={TabCount}.",
+                Environment.ProcessId,
+                this.closeTrigger,
+                this.tabView.Tabs.Count);
             _ = this.ShowCloseConfirmAndRetryAsync(this.tabView.Tabs.Count);
             return;
         }
@@ -246,7 +261,7 @@ public partial class MainWindow : Window
         }
 
         WindowSettingsPersistence.Capture(this, this.settings);
-        this.settings.Save();
+        this.settings.Save($"main-window-close:{this.closeTrigger}");
 
         // Dispose every remaining tab (sends SIGHUP to each PTY child).
         var remaining = this.tabView.Tabs.ToArray();
@@ -768,7 +783,7 @@ public partial class MainWindow : Window
 
         if (this.tabView.Tabs.Count == 0)
         {
-            this.Close();
+            this.RequestClose("last-tab-detached");
         }
     }
 
@@ -787,7 +802,7 @@ public partial class MainWindow : Window
 
         if (this.tabView.Tabs.Count == 0)
         {
-            this.Close();
+            this.RequestClose("last-tab-transferred");
         }
     }
 
@@ -953,6 +968,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        this.log.LogInformation(
+            "Terminal process exited — PID={ProcessId}, TabTitle={TabTitle}, TabsBeforeClose={TabCount}.",
+            Environment.ProcessId,
+            session.Title,
+            this.tabView.Tabs.Count);
+
         // If this was the last tab, CloseTab raises LastTabClosed which
         // closes the window; otherwise a neighbour is activated.
         this.tabView.CloseTab(session);
@@ -1043,7 +1064,7 @@ public partial class MainWindow : Window
 
     private void OnLastTabClosed()
     {
-        this.Close();
+        this.RequestClose("last-tab-closed");
     }
 
     private async void OnWindowOpened(object? sender, EventArgs e)
@@ -1336,6 +1357,12 @@ public partial class MainWindow : Window
 
     private void CloseButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
+        this.RequestClose("titlebar-close-button");
+    }
+
+    private void RequestClose(string trigger)
+    {
+        this.closeTrigger = trigger;
         this.Close();
     }
 }

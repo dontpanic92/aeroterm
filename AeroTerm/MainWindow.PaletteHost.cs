@@ -118,7 +118,7 @@ public partial class MainWindow : IPaletteHost
     }
 
     /// <inheritdoc />
-    void IPaletteHost.CloseHostWindow() => this.Close();
+    void IPaletteHost.CloseHostWindow() => this.RequestClose("command-palette-close-window");
 
     /// <inheritdoc />
     void IPaletteHost.ReloadKeybindings() => App.ReloadKeybindings();

@@ -35,7 +35,14 @@ public static class Program
         AppLogger.Initialize(new FileLogger(logDir));
 
         var log = AppLogger.For("Startup");
-        log.LogInformation("AeroTerm starting — OS={OsDescription}, Runtime={FrameworkDescription}", RuntimeInformation.OSDescription, RuntimeInformation.FrameworkDescription);
+        log.LogInformation(
+            "AeroTerm starting — PID={ProcessId}, Executable={Executable}, WorkingDirectory={WorkingDirectory}, Log={LogPath}, OS={OsDescription}, Runtime={FrameworkDescription}",
+            Environment.ProcessId,
+            Environment.ProcessPath,
+            Environment.CurrentDirectory,
+            AppLogger.LogFilePath,
+            RuntimeInformation.OSDescription,
+            RuntimeInformation.FrameworkDescription);
 
         try
         {
@@ -43,7 +50,7 @@ public static class Program
         }
         finally
         {
-            log.LogInformation("AeroTerm shutting down.");
+            log.LogInformation("AeroTerm shutting down — PID={ProcessId}.", Environment.ProcessId);
             AppLogger.Shutdown();
         }
     }

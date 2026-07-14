@@ -557,6 +557,158 @@ public class AppSettingsTests
         }
     }
 
+    /// <summary>
+    /// A process holding an older in-memory snapshot must not overwrite a
+    /// settings file changed by another AeroTerm instance after startup.
+    /// </summary>
+    [Test]
+    public void Save_WhenFileChangedAfterLoad_RefusesToOverwrite()
+    {
+        string settingsDirectory = CreateTemporaryDirectory();
+        string logDirectory = CreateTemporaryDirectory();
+
+        try
+        {
+            AppLogger.Initialize(new FileLogger(logDirectory));
+            string path = Path.Combine(settingsDirectory, "settings.json");
+            File.WriteAllText(path, "{\"FontSize\":17,\"WindowWidth\":800}");
+
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+            var staleSettings = AppSettings.Default;
+            Assert.That(staleSettings.FontSize, Is.EqualTo(17));
+
+            const string NewerJson = "{\"FontSize\":22,\"WindowWidth\":1200}";
+            File.WriteAllText(path, NewerJson);
+
+            staleSettings.WindowWidth = 900;
+            Assert.That(staleSettings.Save(), Is.False);
+            Assert.That(staleSettings.LastPersistenceError, Does.Contain("another AeroTerm instance"));
+            Assert.That(File.ReadAllText(path), Is.EqualTo(NewerJson));
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+            AppSettings.ResetForTesting();
+            Directory.Delete(settingsDirectory, recursive: true);
+            Directory.Delete(logDirectory, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Two settings instances that both started before the first save are
+    /// serialized so only the first snapshot can be persisted.
+    /// </summary>
+    [Test]
+    public void Save_ConcurrentSnapshots_RejectsSecondStaleWriter()
+    {
+        string settingsDirectory = CreateTemporaryDirectory();
+        string logDirectory = CreateTemporaryDirectory();
+
+        try
+        {
+            AppLogger.Initialize(new FileLogger(logDirectory));
+            string path = Path.Combine(settingsDirectory, "settings.json");
+            File.WriteAllText(path, "{\"FontSize\":17}");
+
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+            var first = AppSettings.Default;
+
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+            var second = AppSettings.Default;
+
+            first.FontSize = 20;
+            second.FontSize = 24;
+
+            Assert.That(first.Save(), Is.True);
+            Assert.That(second.Save(), Is.False);
+
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+            Assert.That(AppSettings.Default.FontSize, Is.EqualTo(20));
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+            AppSettings.ResetForTesting();
+            Directory.Delete(settingsDirectory, recursive: true);
+            Directory.Delete(logDirectory, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Saving a window-state change preserves unmodified settings and
+    /// properties written by a newer AeroTerm version.
+    /// </summary>
+    [Test]
+    public void Save_UpdatesOnlyModifiedProperties()
+    {
+        string settingsDirectory = CreateTemporaryDirectory();
+        string logDirectory = CreateTemporaryDirectory();
+
+        try
+        {
+            AppLogger.Initialize(new FileLogger(logDirectory));
+            string path = Path.Combine(settingsDirectory, "settings.json");
+            File.WriteAllText(
+                path,
+                "{\"FontSize\":17,\"WindowWidth\":800,\"FutureSetting\":\"preserve-me\"}");
+
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+            var settings = AppSettings.Default;
+            settings.WindowWidth = 1200;
+
+            Assert.That(settings.Save(), Is.True);
+
+            using var saved = JsonDocument.Parse(File.ReadAllText(path));
+            Assert.That(saved.RootElement.GetProperty("FontSize").GetDouble(), Is.EqualTo(17));
+            Assert.That(saved.RootElement.GetProperty("WindowWidth").GetInt32(), Is.EqualTo(1200));
+            Assert.That(saved.RootElement.GetProperty("FutureSetting").GetString(), Is.EqualTo("preserve-me"));
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+            AppSettings.ResetForTesting();
+            Directory.Delete(settingsDirectory, recursive: true);
+            Directory.Delete(logDirectory, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// The custom fallback-font collection setter participates in
+    /// dirty-property persistence for an existing settings file.
+    /// </summary>
+    [Test]
+    public void Save_PersistsModifiedFallbackFonts()
+    {
+        string settingsDirectory = CreateTemporaryDirectory();
+        string logDirectory = CreateTemporaryDirectory();
+
+        try
+        {
+            AppLogger.Initialize(new FileLogger(logDirectory));
+            string path = Path.Combine(settingsDirectory, "settings.json");
+            File.WriteAllText(path, "{\"FallbackFonts\":[\"Menlo\"],\"FontSize\":17}");
+
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+            var settings = AppSettings.Default;
+            settings.FallbackFonts = new List<string> { "JetBrains Mono", "Symbols Nerd Font" };
+
+            Assert.That(settings.Save(), Is.True);
+
+            AppSettings.SetStorageDirectoryForTesting(settingsDirectory);
+            Assert.That(
+                AppSettings.Default.FallbackFonts,
+                Is.EqualTo(new[] { "JetBrains Mono", "Symbols Nerd Font" }));
+            Assert.That(AppSettings.Default.FontSize, Is.EqualTo(17));
+        }
+        finally
+        {
+            AppLogger.Shutdown();
+            AppSettings.ResetForTesting();
+            Directory.Delete(settingsDirectory, recursive: true);
+            Directory.Delete(logDirectory, recursive: true);
+        }
+    }
+
     private static string CreateTemporaryDirectory()
     {
         string path = Path.Combine(Path.GetTempPath(), "AeroTermTests", Path.GetRandomFileName());

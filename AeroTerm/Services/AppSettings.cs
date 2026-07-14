@@ -7,6 +7,8 @@ namespace AeroTerm.Services;
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
@@ -34,6 +36,8 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private static string? settingsDirectoryOverride;
 
     private static Lazy<AppSettings> defaultInstance = CreateDefaultInstance();
+
+    private readonly HashSet<string> modifiedProperties = new(StringComparer.Ordinal);
 
     private bool enableBlurBehind = true;
     private BlurType blurType = BlurType.Acrylic;
@@ -66,6 +70,8 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private TabBarOrientation tabBarOrientation = TabBarOrientation.Horizontal;
 
     private bool loadedWithTransientError;
+    private bool settingsFileExistedAtLoad;
+    private string? persistedRevision;
 
     /// <inheritdoc />
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -213,6 +219,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
             }
 
             this.fallbackFonts = value ?? new List<string>();
+            this.modifiedProperties.Add(nameof(this.FallbackFonts));
             this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.FallbackFonts)));
         }
     }
@@ -408,11 +415,27 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     /// <summary>
     /// Save settings to disk.
     /// </summary>
+    /// <param name="reason">The application action that requested persistence.</param>
+    /// <param name="caller">The member that requested persistence.</param>
     /// <returns><c>true</c> if the settings were saved successfully; otherwise, <c>false</c>.</returns>
-    public bool Save()
+    public bool Save(string reason = "unspecified", [CallerMemberName] string caller = "")
     {
         var settingsPath = GetSettingsPath();
-        var tempPath = settingsPath + ".tmp";
+        var tempPath = $"{settingsPath}.tmp-{Environment.ProcessId}-{Guid.NewGuid():N}";
+        var log = AppLogger.For<AppSettings>();
+        string changedProperties = this.modifiedProperties.Count == 0
+            ? "(none)"
+            : string.Join(", ", this.modifiedProperties.Order());
+
+        log.LogInformation(
+            "Settings save requested — PID={ProcessId}, Reason={Reason}, Caller={Caller}, Path={Path}, ChangedProperties={ChangedProperties}, FileExistedAtLoad={FileExistedAtLoad}, LoadedRevision={LoadedRevision}.",
+            Environment.ProcessId,
+            reason,
+            caller,
+            settingsPath,
+            changedProperties,
+            this.settingsFileExistedAtLoad,
+            this.persistedRevision ?? "(none)");
 
         // Safety net for concurrent instances / failed loads: if this
         // instance fell back to defaults because the on-disk file could not
@@ -422,8 +445,10 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         // Reload() clears the flag.
         if (this.loadedWithTransientError)
         {
-            AppLogger.For<AppSettings>().LogWarning(
-                "Skipping settings save because the last load failed transiently; refusing to overwrite existing config at {Path}.",
+            log.LogWarning(
+                "Skipping settings save — PID={ProcessId}, Reason={Reason}; the last load failed transiently, so config at {Path} will not be overwritten.",
+                Environment.ProcessId,
+                reason,
                 settingsPath);
             return false;
         }
@@ -431,7 +456,25 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         try
         {
             Directory.CreateDirectory(GetSettingsDirectory());
-            var json = JsonSerializer.Serialize(this, AppSettingsJsonContext.Default.AppSettings);
+            using var saveLock = AcquireSaveLock(settingsPath + ".lock");
+            string? persistedJson = File.Exists(settingsPath)
+                ? ReadAllTextWithRetry(settingsPath)
+                : null;
+
+            if (this.HasPersistedFileChanged(persistedJson))
+            {
+                this.LastPersistenceError =
+                    "Settings were changed by another AeroTerm instance after this instance started. "
+                    + "The stale settings were not saved; reload or restart AeroTerm before saving again.";
+                log.LogWarning(
+                    "Skipping stale settings save — PID={ProcessId}, Reason={Reason}; {Path} changed after this instance loaded it.",
+                    Environment.ProcessId,
+                    reason,
+                    settingsPath);
+                return false;
+            }
+
+            var json = this.BuildJsonForSave(persistedJson);
 
             // Atomic write: serialise to a sibling temp file, fsync, then
             // rename over the target. This prevents a half-written
@@ -451,12 +494,28 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
             // violation. Last-writer-wins is intentional.
             MoveWithRetry(tempPath, settingsPath);
             this.LastPersistenceError = string.Empty;
+            this.settingsFileExistedAtLoad = true;
+            this.persistedRevision = ComputeRevision(json);
+            this.AcceptChanges();
+            log.LogInformation(
+                "Settings save completed — PID={ProcessId}, Reason={Reason}, Caller={Caller}, Path={Path}, Revision={Revision}.",
+                Environment.ProcessId,
+                reason,
+                caller,
+                settingsPath,
+                this.persistedRevision);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException or JsonException)
         {
             this.LastPersistenceError = ex.Message;
-            AppLogger.For<AppSettings>().LogError(ex, "Failed to save settings.");
+            log.LogError(
+                ex,
+                "Settings save failed — PID={ProcessId}, Reason={Reason}, Caller={Caller}, Path={Path}.",
+                Environment.ProcessId,
+                reason,
+                caller,
+                settingsPath);
             TryDeleteFile(tempPath);
             return false;
         }
@@ -500,6 +559,9 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.TabBarOrientation = fresh.TabBarOrientation;
         this.LastPersistenceError = fresh.LastPersistenceError;
         this.loadedWithTransientError = fresh.loadedWithTransientError;
+        this.settingsFileExistedAtLoad = fresh.settingsFileExistedAtLoad;
+        this.persistedRevision = fresh.persistedRevision;
+        this.AcceptChanges();
         return string.IsNullOrEmpty(this.LastPersistenceError);
     }
 
@@ -599,8 +661,8 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         {
             if (File.Exists(settingsPath))
             {
-                var json = ReadAllTextWithRetry(settingsPath);
-                json = MigrateLegacyJson(json);
+                var persistedJson = ReadAllTextWithRetry(settingsPath);
+                var json = MigrateLegacyJson(persistedJson);
 
                 // Schema-mismatch guard: if the file contains a non-empty
                 // JSON object whose keys do not intersect *at all* with the
@@ -659,6 +721,9 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
                     };
                 }
 
+                settings.settingsFileExistedAtLoad = true;
+                settings.persistedRevision = ComputeRevision(persistedJson);
+                settings.AcceptChanges();
                 log.LogInformation("Loaded settings from {Path} ({Bytes} bytes).", settingsPath, json.Length);
                 return settings;
             }
@@ -808,6 +873,27 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         }
     }
 
+    private static FileStream AcquireSaveLock(string path)
+    {
+        const int MaxAttempts = 10;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException) when (attempt < MaxAttempts)
+            {
+                Thread.Sleep(SettingsIoRetryDelayMs * attempt);
+            }
+        }
+    }
+
+    private static string ComputeRevision(string json)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
+    }
+
     /// <summary>
     /// Reads a file's full text, retrying a bounded number of times on
     /// transient sharing violations. A concurrently running instance may be
@@ -883,11 +969,63 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
             : "Ctrl+Oem3";
     }
 
+    private void AcceptChanges()
+    {
+        this.modifiedProperties.Clear();
+    }
+
+    private string BuildJsonForSave(string? persistedJson)
+    {
+        var serialized = JsonSerializer.Serialize(this, AppSettingsJsonContext.Default.AppSettings);
+        if (!this.settingsFileExistedAtLoad || persistedJson is null)
+        {
+            return serialized;
+        }
+
+        if (JsonNode.Parse(MigrateLegacyJson(persistedJson)) is not JsonObject persisted
+            || JsonNode.Parse(serialized) is not JsonObject current)
+        {
+            return serialized;
+        }
+
+        foreach (var propertyName in this.modifiedProperties)
+        {
+            if (current.TryGetPropertyValue(propertyName, out var value))
+            {
+                persisted[propertyName] = value?.DeepClone();
+            }
+        }
+
+        return persisted.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private bool HasPersistedFileChanged(string? persistedJson)
+    {
+        bool exists = persistedJson is not null;
+        if (exists != this.settingsFileExistedAtLoad)
+        {
+            return true;
+        }
+
+        if (!exists)
+        {
+            return false;
+        }
+
+        var currentRevision = ComputeRevision(persistedJson!);
+        return !string.Equals(currentRevision, this.persistedRevision, StringComparison.Ordinal);
+    }
+
     private void SetField<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (!Equals(field, value))
         {
             field = value;
+            if (propertyName is not null)
+            {
+                this.modifiedProperties.Add(propertyName);
+            }
+
             this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }

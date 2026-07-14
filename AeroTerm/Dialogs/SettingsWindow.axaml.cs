@@ -129,7 +129,7 @@ public partial class SettingsWindow : Window
                     }
                 }
 
-                this.settings.Save();
+                this.settings.Save("settings-dialog-ok");
                 break;
             case Result.Cancel:
             case Result.NotClosed:
@@ -139,7 +139,7 @@ public partial class SettingsWindow : Window
                 // the persisted window geometry is not lost on Cancel.
                 this.settings.SettingsWindowWidth = (int)this.Width;
                 this.settings.SettingsWindowHeight = (int)this.Height;
-                this.settings.Save();
+                this.settings.Save($"settings-dialog-{this.CloseReason.ToString().ToLowerInvariant()}");
                 break;
         }
 

@@ -35,10 +35,10 @@ internal sealed class FileLogger : ILogger, IDisposable
     public FileLogger(string logDirectory)
     {
         Directory.CreateDirectory(logDirectory);
-        this.logFilePath = Path.Combine(logDirectory, "aeroterm.log");
-        this.oldLogFilePath = Path.Combine(logDirectory, "aeroterm.old.log");
+        this.logFilePath = Path.Combine(logDirectory, $"aeroterm-{Environment.ProcessId}.log");
+        this.oldLogFilePath = Path.Combine(logDirectory, $"aeroterm-{Environment.ProcessId}.old.log");
         this.LogDirectory = logDirectory;
-        this.OpenWriter();
+        _ = this.OpenWriter();
     }
 
     /// <summary>
@@ -158,7 +158,7 @@ internal sealed class FileLogger : ILogger, IDisposable
         return sb.ToString();
     }
 
-    private void OpenWriter()
+    private bool OpenWriter()
     {
         try
         {
@@ -169,12 +169,14 @@ internal sealed class FileLogger : ILogger, IDisposable
                 FileShare.Read);
             this.currentSize = stream.Length;
             this.writer = new StreamWriter(stream, Encoding.UTF8) { AutoFlush = true };
+            return true;
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // If the file cannot be opened, logging degrades to Trace only.
             this.writer = null;
             this.currentSize = 0;
+            return false;
         }
     }
 
@@ -214,6 +216,6 @@ internal sealed class FileLogger : ILogger, IDisposable
             // Best-effort rotation; if it fails we just keep writing.
         }
 
-        this.OpenWriter();
+        _ = this.OpenWriter();
     }
 }
