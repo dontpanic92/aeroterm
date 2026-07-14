@@ -15,11 +15,12 @@ using System.Text;
 using System.Threading.Tasks;
 
 /// <summary>
-/// Runs Git CLI commands for the Workbench Git view.
+/// Runs Git CLI commands for the per-terminal Git pane.
 /// </summary>
 internal sealed class GitService
 {
-    private readonly TextEditorService textEditorService = new();
+    private const long MaxDiffFileBytes = 1024 * 1024;
+    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
     /// <summary>
     /// Creates process start information for a Git command.
@@ -668,12 +669,12 @@ internal sealed class GitService
 
         if (this.ContainsBinaryData(result.Output))
         {
-            return (null, "Binary files cannot be opened in the Git page.");
+            return (null, "Binary files cannot be opened in the Git pane.");
         }
 
-        if (Encoding.UTF8.GetByteCount(result.Output) > TextEditorService.MaxEditableBytes)
+        if (Encoding.UTF8.GetByteCount(result.Output) > MaxDiffFileBytes)
         {
-            return (null, $"The file is larger than the {TextEditorService.MaxEditableBytes / 1024 / 1024} MiB editor limit.");
+            return (null, $"The file is larger than the {MaxDiffFileBytes / 1024 / 1024} MiB Git pane limit.");
         }
 
         return (new GitFileSideContent(result.Output, sourceLabel, highlights, Array.Empty<int?>()), null);
@@ -685,17 +686,45 @@ internal sealed class GitService
         string sourceLabel,
         IReadOnlyList<GitDiffHighlightRange>? highlights = null)
     {
-        var result = this.textEditorService.Open(this.ToWorkingTreePath(repositoryRoot, repositoryRelativePath));
-        if (result.Document is null)
+        var path = this.ToWorkingTreePath(repositoryRoot, repositoryRelativePath);
+        if (!File.Exists(path))
         {
-            return (null, result.ErrorMessage);
+            return (null, "The selected file no longer exists.");
         }
 
-        return (new GitFileSideContent(
-            result.Document.Text,
-            sourceLabel,
-            highlights ?? Array.Empty<GitDiffHighlightRange>(),
-            Array.Empty<int?>()), null);
+        try
+        {
+            var info = new FileInfo(path);
+            if (info.Length > MaxDiffFileBytes)
+            {
+                return (null, $"The file is larger than the {MaxDiffFileBytes / 1024 / 1024} MiB Git pane limit.");
+            }
+
+            var bytes = File.ReadAllBytes(path);
+            if (bytes.Contains((byte)0))
+            {
+                return (null, "Binary files cannot be opened in the Git pane.");
+            }
+
+            var text = StrictUtf8.GetString(bytes);
+            return (new GitFileSideContent(
+                text,
+                sourceLabel,
+                highlights ?? Array.Empty<GitDiffHighlightRange>(),
+                Array.Empty<int?>()), null);
+        }
+        catch (DecoderFallbackException ex)
+        {
+            return (null, ex.Message);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return (null, ex.Message);
+        }
+        catch (IOException ex)
+        {
+            return (null, ex.Message);
+        }
     }
 
     private int IndexOfNthSpace(string value, int count)

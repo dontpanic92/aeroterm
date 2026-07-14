@@ -6,7 +6,7 @@
 namespace AeroTerm.Services;
 
 /// <summary>
-/// Git status bucket used by the Workbench Git view.
+/// Git status bucket used by the per-terminal Git pane.
 /// </summary>
 internal enum GitStatusBucket
 {

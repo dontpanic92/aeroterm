@@ -6,7 +6,7 @@
 namespace AeroTerm.Services;
 
 /// <summary>
-/// Result of a Git command run by the Workbench Git view.
+/// Result of a Git command run by the per-terminal Git pane.
 /// </summary>
 /// <param name="ExitCode">Git process exit code.</param>
 /// <param name="Output">Standard output text.</param>

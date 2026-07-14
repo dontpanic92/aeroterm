@@ -224,26 +224,20 @@ public class CommandPaletteTests
     }
 
     /// <summary>
-    /// Workbench commands appear when the experimental Workbench is enabled.
+    /// The Git command appears when the experimental Workbench is enabled.
     /// </summary>
     /// <returns>A task representing asynchronous test completion.</returns>
     [Test]
-    public async Task WorkbenchCommands_DelegateWhenExperimentEnabled()
+    public async Task WorkbenchGitCommand_DelegatesWhenExperimentEnabled()
     {
         var host = new FakePaletteHost();
         host.FakeSettings.EnableWorkbench = true;
         var commands = InvokeBuild(host, new List<Profile>(), ColorSchemePresets.All);
 
-        var explorer = commands.First(c => c.Id == "workbench.explorer");
-        var editor = commands.First(c => c.Id == "workbench.editor");
         var git = commands.First(c => c.Id == "workbench.git");
 
-        await explorer.Execute().ConfigureAwait(false);
-        await editor.Execute().ConfigureAwait(false);
         await git.Execute().ConfigureAwait(false);
 
-        Assert.That(host.ShowWorkbenchExplorerCalls, Is.EqualTo(1));
-        Assert.That(host.ShowWorkbenchEditorCalls, Is.EqualTo(1));
         Assert.That(host.ShowWorkbenchGitCalls, Is.EqualTo(1));
     }
 
@@ -269,10 +263,6 @@ public class CommandPaletteTests
         public int JumpToPreviousCommandCalls { get; private set; }
 
         public int JumpToNextCommandCalls { get; private set; }
-
-        public int ShowWorkbenchExplorerCalls { get; private set; }
-
-        public int ShowWorkbenchEditorCalls { get; private set; }
 
         public int ShowWorkbenchGitCalls { get; private set; }
 
@@ -391,16 +381,6 @@ public class CommandPaletteTests
         public void JumpToNextCommand()
         {
             this.JumpToNextCommandCalls++;
-        }
-
-        public void ShowWorkbenchExplorer()
-        {
-            this.ShowWorkbenchExplorerCalls++;
-        }
-
-        public void ShowWorkbenchEditor()
-        {
-            this.ShowWorkbenchEditorCalls++;
         }
 
         public void ShowWorkbenchGit()

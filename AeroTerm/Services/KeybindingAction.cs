@@ -126,12 +126,6 @@ public enum KeybindingAction
     /// </summary>
     JumpToNextCommand,
 
-    /// <summary>Show the experimental Workbench Explorer view.</summary>
-    ShowWorkbenchExplorer,
-
-    /// <summary>Show the experimental Workbench Editor view.</summary>
-    ShowWorkbenchEditor,
-
     /// <summary>Show the experimental Workbench Git view.</summary>
     ShowWorkbenchGit,
 }

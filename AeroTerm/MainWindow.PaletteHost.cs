@@ -175,11 +175,5 @@ public partial class MainWindow : IPaletteHost
     }
 
     /// <inheritdoc />
-    void IPaletteHost.ShowWorkbenchExplorer() => this.ShowWorkbenchExplorer();
-
-    /// <inheritdoc />
-    void IPaletteHost.ShowWorkbenchEditor() => this.ShowWorkbenchEditor();
-
-    /// <inheritdoc />
     void IPaletteHost.ShowWorkbenchGit() => this.ShowWorkbenchGit();
 }

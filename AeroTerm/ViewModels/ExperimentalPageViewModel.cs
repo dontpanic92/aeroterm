@@ -42,7 +42,7 @@ internal sealed class ExperimentalPageViewModel : SettingsPageViewModel, INotify
     };
 
     /// <summary>
-    /// Gets or sets a value indicating whether the experimental Workbench is enabled.
+    /// Gets or sets a value indicating whether the experimental Workbench Git pane is enabled.
     /// </summary>
     public bool EnableWorkbench
     {

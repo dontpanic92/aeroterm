@@ -8,7 +8,7 @@ namespace AeroTerm.Services;
 using System.Collections.Generic;
 
 /// <summary>
-/// Repository status shown by the Workbench Git view.
+/// Repository status shown by the per-terminal Git pane.
 /// </summary>
 /// <param name="WorkingDirectory">Terminal working directory used for detection.</param>
 /// <param name="RepositoryRoot">Repository root, or <see langword="null"/> outside a repository.</param>

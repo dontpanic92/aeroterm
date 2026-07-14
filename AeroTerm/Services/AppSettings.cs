@@ -385,8 +385,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
 
     /// <summary>
     /// Gets or sets a value indicating whether the experimental Workbench
-    /// feature is enabled. The Workbench adds terminal-cwd-aware Explorer,
-    /// editor, and Git views. Defaults to <see langword="false"/>.
+    /// Git pane is enabled. Defaults to <see langword="false"/>.
     /// </summary>
     public bool EnableWorkbench
     {

@@ -454,14 +454,6 @@ internal partial class CommandPaletteWindow : Window
         {
         }
 
-        public void ShowWorkbenchExplorer()
-        {
-        }
-
-        public void ShowWorkbenchEditor()
-        {
-        }
-
         public void ShowWorkbenchGit()
         {
         }

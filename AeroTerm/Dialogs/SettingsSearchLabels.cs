@@ -92,5 +92,5 @@ public static class SettingsSearchLabels
     public const string DefaultProfile = "Default profile";
 
     /// <summary>Search label for the experimental Workbench toggle.</summary>
-    public const string Workbench = "Experimental Workbench workspace explorer editor git";
+    public const string Workbench = "Experimental Workbench git status diff pane";
 }

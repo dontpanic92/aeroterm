@@ -43,7 +43,7 @@ public sealed class CoordinatorTabContentWorkbenchTests
     }
 
     /// <summary>
-    /// Clicking the Git icon swaps to the placeholder pane and highlights the
+    /// Clicking the Git icon swaps to the Git pane and highlights the
     /// Git button; clicking the terminal icon swaps back.
     /// </summary>
     [AvaloniaTest]
@@ -52,23 +52,23 @@ public sealed class CoordinatorTabContentWorkbenchTests
         var settings = new AppSettings { EnableWorkbench = true };
         using var content = CreateContent(settings);
 
-        var placeholder = GetPlaceholder(content);
+        var gitPane = GetGitPane(content);
         var terminalButton = GetButton(content, "Terminal view");
         var gitButton = GetButton(content, "Git view");
 
-        Assert.That(placeholder.IsVisible, Is.False);
+        Assert.That(gitPane.IsVisible, Is.False);
         Assert.That(IsTransparent(gitButton.Background), Is.True);
         Assert.That(IsTransparent(terminalButton.Background), Is.False);
 
         Click(gitButton);
 
-        Assert.That(placeholder.IsVisible, Is.True);
+        Assert.That(gitPane.IsVisible, Is.True);
         Assert.That(IsTransparent(gitButton.Background), Is.False);
         Assert.That(IsTransparent(terminalButton.Background), Is.True);
 
         Click(terminalButton);
 
-        Assert.That(placeholder.IsVisible, Is.False);
+        Assert.That(gitPane.IsVisible, Is.False);
         Assert.That(IsTransparent(gitButton.Background), Is.True);
         Assert.That(IsTransparent(terminalButton.Background), Is.False);
     }
@@ -85,8 +85,8 @@ public sealed class CoordinatorTabContentWorkbenchTests
 
         Click(GetButton(first, "Git view"));
 
-        Assert.That(GetPlaceholder(first).IsVisible, Is.True);
-        Assert.That(GetPlaceholder(second).IsVisible, Is.False);
+        Assert.That(GetGitPane(first).IsVisible, Is.True);
+        Assert.That(GetGitPane(second).IsVisible, Is.False);
     }
 
     /// <summary>
@@ -100,10 +100,10 @@ public sealed class CoordinatorTabContentWorkbenchTests
         using var content = CreateContent(settings);
 
         Click(GetButton(content, "Git view"));
-        Assert.That(GetPlaceholder(content).IsVisible, Is.True);
+        Assert.That(GetGitPane(content).IsVisible, Is.True);
 
         settings.EnableWorkbench = false;
-        Assert.That(GetPlaceholder(content).IsVisible, Is.False);
+        Assert.That(GetGitPane(content).IsVisible, Is.False);
     }
 
     private static CoordinatorTabContent CreateContent(AppSettings settings)
@@ -119,7 +119,7 @@ public sealed class CoordinatorTabContentWorkbenchTests
             .First(b => b.Child is StackPanel);
     }
 
-    private static GitDiffPane GetPlaceholder(CoordinatorTabContent content)
+    private static GitDiffPane GetGitPane(CoordinatorTabContent content)
     {
         return content.Host.GetLogicalDescendants()
             .OfType<GitDiffPane>()

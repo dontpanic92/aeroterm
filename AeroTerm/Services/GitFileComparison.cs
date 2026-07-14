@@ -6,7 +6,7 @@
 namespace AeroTerm.Services;
 
 /// <summary>
-/// Full-file old/new content loaded for the Git page.
+/// Full-file old/new content loaded for the Git pane.
 /// </summary>
 /// <param name="Path">Repository-relative path being compared.</param>
 /// <param name="OldSide">Old-side file content.</param>

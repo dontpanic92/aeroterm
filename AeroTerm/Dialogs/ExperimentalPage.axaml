@@ -11,7 +11,7 @@
                         Spacing="5">
                 <CheckBox IsChecked="{Binding EnableWorkbench, Mode=TwoWay}"
                           Content="Enable experimental Workbench" />
-                <TextBlock Text="Adds terminal-cwd-aware Explorer, editor, and Git views. The feature is experimental and disabled by default."
+                <TextBlock Text="Adds a terminal-cwd-aware Git status and diff pane. The feature is experimental and disabled by default."
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
             </StackPanel>
         </GroupBox>
