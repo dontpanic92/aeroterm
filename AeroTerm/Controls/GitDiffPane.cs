@@ -12,6 +12,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using AeroTerm.Services;
 using AeroTerm.Theme.Controls;
+using AeroTerm.Utilities;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -23,7 +24,6 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
-using AvaloniaEdit.Highlighting;
 using AvaloniaEdit.Rendering;
 
 /// <summary>
@@ -86,7 +86,8 @@ internal sealed class GitDiffPane : UserControl
     /// Initializes a new instance of the <see cref="GitDiffPane"/> class.
     /// </summary>
     /// <param name="workingDirectoryProvider">Provides the current terminal working directory.</param>
-    public GitDiffPane(Func<string?> workingDirectoryProvider)
+    /// <param name="settings">Optional application settings whose terminal typography should be used.</param>
+    public GitDiffPane(Func<string?> workingDirectoryProvider, AppSettings? settings = null)
     {
         this.workingDirectoryProvider = workingDirectoryProvider
             ?? throw new ArgumentNullException(nameof(workingDirectoryProvider));
@@ -308,6 +309,10 @@ internal sealed class GitDiffPane : UserControl
             }
         };
         this.ShowDiffPlaceholder("Select a change to view its diff.");
+        if (settings is not null)
+        {
+            this.ApplyTypography(settings);
+        }
     }
 
     /// <summary>
@@ -358,6 +363,33 @@ internal sealed class GitDiffPane : UserControl
         }
 
         return this.RequestRefreshAsync(manual: false);
+    }
+
+    /// <summary>
+    /// Applies the terminal font family chain and size to the diff editors.
+    /// </summary>
+    /// <param name="settings">The application settings to resolve.</param>
+    internal void ApplyTypography(AppSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var fonts = FontPriorityList.Resolve(
+            settings.FontFamily,
+            settings.FallbackFonts);
+        var fontFamily = fonts.Count == 0
+            ? MonoFont
+            : new FontFamily(string.Join(",", fonts));
+
+        this.oldEditor.FontFamily = fontFamily;
+        this.newEditor.FontFamily = fontFamily;
+        this.oldLineNumberMargin.SetValue(TextBlock.FontFamilyProperty, fontFamily);
+        this.newLineNumberMargin.SetValue(TextBlock.FontFamilyProperty, fontFamily);
+        if (settings.FontSize > 0)
+        {
+            this.oldEditor.FontSize = settings.FontSize;
+            this.newEditor.FontSize = settings.FontSize;
+            this.oldLineNumberMargin.SetValue(TextBlock.FontSizeProperty, settings.FontSize);
+            this.newLineNumberMargin.SetValue(TextBlock.FontSizeProperty, settings.FontSize);
+        }
     }
 
     /// <inheritdoc/>
@@ -440,21 +472,6 @@ internal sealed class GitDiffPane : UserControl
     {
         var countSeparator = node.Title.LastIndexOf(" (", StringComparison.Ordinal);
         return countSeparator < 0 ? node.Title : node.Title[..countSeparator];
-    }
-
-    private static IHighlightingDefinition? GetHighlightingDefinition(string path)
-    {
-        var extension = Path.GetExtension(path);
-        if (extension.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
-            extension.Equals(".markdown", StringComparison.OrdinalIgnoreCase) ||
-            extension.Equals(".mdown", StringComparison.OrdinalIgnoreCase) ||
-            extension.Equals(".mkd", StringComparison.OrdinalIgnoreCase) ||
-            extension.Equals(".mkdn", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        return HighlightingManager.Instance.GetDefinitionByExtension(extension);
     }
 
     private static string NormalizeRepositoryIdentity(string repositoryRoot)
@@ -880,7 +897,7 @@ internal sealed class GitDiffPane : UserControl
     {
         var oldSide = comparison.OldSide!;
         var newSide = comparison.NewSide!;
-        var highlighting = GetHighlightingDefinition(comparison.Path);
+        var highlighting = GitSyntaxHighlightingResolver.Resolve(comparison.Path);
         this.oldEditor.SyntaxHighlighting = highlighting;
         this.newEditor.SyntaxHighlighting = highlighting;
         this.oldHeader.Text = $"Old: {oldSide.SourceLabel}";

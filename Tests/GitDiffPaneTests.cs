@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading.Tasks;
 using AeroTerm.Controls;
 using AeroTerm.Services;
+using AeroTerm.Utilities;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -127,6 +128,45 @@ public sealed class GitDiffPaneTests
         Assert.That(buttons, Does.Not.ContainKey("Previous"));
         Assert.That(buttons, Does.Not.ContainKey("Next"));
         Assert.That(splitterCount, Is.EqualTo(2));
+    }
+
+    /// <summary>
+    /// The diff editors and line-number margins use the terminal font chain and size.
+    /// </summary>
+    [AvaloniaTest]
+    public void Editors_UseConfiguredTerminalTypography()
+    {
+        var settings = new AppSettings
+        {
+            FontFamily = "Legacy Mono",
+            FallbackFonts = new List<string>
+            {
+                "User Fallback",
+                FontPriorityList.SystemMonoSentinel,
+            },
+            FontSize = 15.5,
+        };
+        var expectedFamily = string.Join(
+            ", ",
+            FontPriorityList.Resolve(settings.FontFamily, settings.FallbackFonts));
+        var pane = new GitDiffPane(() => this.tempDir, settings);
+        var editors = pane.GetLogicalDescendants().OfType<TextEditor>().ToArray();
+        var margins = editors
+            .SelectMany(editor => editor.TextArea.LeftMargins)
+            .OfType<GitDiffLineNumberMargin>()
+            .ToArray();
+
+        Assert.That(
+            editors.Select(editor => editor.FontFamily.FamilyNames.ToString()),
+            Is.All.EqualTo(expectedFamily));
+        Assert.That(editors.Select(editor => editor.FontSize), Is.All.EqualTo(15.5));
+        Assert.That(
+            margins.Select(margin =>
+                margin.GetValue(TextBlock.FontFamilyProperty).FamilyNames.ToString()),
+            Is.All.EqualTo(expectedFamily));
+        Assert.That(
+            margins.Select(margin => margin.GetValue(TextBlock.FontSizeProperty)),
+            Is.All.EqualTo(15.5));
     }
 
     /// <summary>

@@ -5,15 +5,18 @@
 
 namespace AeroTerm.Tests;
 
+using System.Collections.Generic;
 using System.Linq;
 using AeroTerm.Controls;
 using AeroTerm.Services;
+using AeroTerm.Utilities;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.NUnit;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
+using AvaloniaEdit;
 using NUnit.Framework;
 
 /// <summary>
@@ -104,6 +107,53 @@ public sealed class CoordinatorTabContentWorkbenchTests
 
         settings.EnableWorkbench = false;
         Assert.That(GetGitPane(content).IsVisible, Is.False);
+    }
+
+    /// <summary>
+    /// Git editor typography follows live terminal font settings.
+    /// </summary>
+    [AvaloniaTest]
+    public void FontSettingsChanged_UpdatesGitEditorsAndMargins()
+    {
+        var settings = new AppSettings
+        {
+            EnableWorkbench = true,
+            FallbackFonts = new List<string>
+            {
+                "Initial Mono",
+                FontPriorityList.SystemMonoSentinel,
+            },
+            FontSize = 12,
+        };
+        using var content = CreateContent(settings);
+        var pane = GetGitPane(content);
+
+        settings.FallbackFonts = new List<string>
+        {
+            "Updated Mono",
+            FontPriorityList.SystemMonoSentinel,
+        };
+        settings.FontSize = 17;
+
+        var expectedFamily = string.Join(
+            ", ",
+            FontPriorityList.Resolve(settings.FontFamily, settings.FallbackFonts));
+        var editors = pane.GetLogicalDescendants().OfType<TextEditor>().ToArray();
+        var margins = editors
+            .SelectMany(editor => editor.TextArea.LeftMargins)
+            .OfType<GitDiffLineNumberMargin>()
+            .ToArray();
+        Assert.That(
+            editors.Select(editor => editor.FontFamily.FamilyNames.ToString()),
+            Is.All.EqualTo(expectedFamily));
+        Assert.That(editors.Select(editor => editor.FontSize), Is.All.EqualTo(17));
+        Assert.That(
+            margins.Select(margin =>
+                margin.GetValue(TextBlock.FontFamilyProperty).FamilyNames.ToString()),
+            Is.All.EqualTo(expectedFamily));
+        Assert.That(
+            margins.Select(margin => margin.GetValue(TextBlock.FontSizeProperty)),
+            Is.All.EqualTo(17));
     }
 
     private static CoordinatorTabContent CreateContent(AppSettings settings)

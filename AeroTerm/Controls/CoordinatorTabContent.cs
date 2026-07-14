@@ -57,7 +57,9 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.coordinator.CurrentWorkingDirectoryChanged += this.OnCoordinatorCurrentWorkingDirectoryChanged;
 
         this.activeButtonBrush = ResolveActiveButtonBrush(this.host);
-        this.gitPaneView = new GitDiffPane(() => this.coordinator.TryGetCurrentWorkingDirectory());
+        this.gitPaneView = new GitDiffPane(
+            () => this.coordinator.TryGetCurrentWorkingDirectory(),
+            settings);
         this.gitPaneView.IsVisible = false;
         this.gitPaneView.ZIndex = 1;
         this.host.Children.Add(this.gitPaneView);
@@ -299,6 +301,14 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
 
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (this.settings is { } settings
+            && e.PropertyName is nameof(AppSettings.FontFamily)
+            or nameof(AppSettings.FallbackFonts)
+            or nameof(AppSettings.FontSize))
+        {
+            this.gitPaneView.ApplyTypography(settings);
+        }
+
         if (e.PropertyName == nameof(AppSettings.EnableWorkbench))
         {
             if (this.settings is { EnableWorkbench: false })

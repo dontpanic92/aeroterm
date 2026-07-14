@@ -104,6 +104,26 @@ public static class FontPriorityList
     }
 
     /// <summary>
+    /// Builds the effective font family list from the legacy primary font and
+    /// the ordered fallback list, including platform system-monospace fonts.
+    /// </summary>
+    /// <param name="primaryFont">The optional legacy primary font family.</param>
+    /// <param name="fallbackFonts">The ordered fallback font list.</param>
+    /// <returns>The normalized, expanded font family list.</returns>
+    public static List<string> Resolve(string? primaryFont, IList<string>? fallbackFonts)
+    {
+        var fonts = fallbackFonts is null
+            ? new List<string>()
+            : new List<string>(fallbackFonts);
+        if (!string.IsNullOrWhiteSpace(primaryFont))
+        {
+            fonts.Insert(0, primaryFont);
+        }
+
+        return Expand(Normalize(fonts));
+    }
+
+    /// <summary>
     /// Returns the platform-specific default monospace font names.
     /// </summary>
     /// <returns>An ordered list of default monospace fonts for the current platform.</returns>

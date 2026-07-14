@@ -518,14 +518,9 @@ internal sealed class TerminalSessionCoordinator : IDisposable
             return;
         }
 
-        var fontList = new List<string>(this.settings.FallbackFonts);
-        if (!string.IsNullOrWhiteSpace(this.settings.FontFamily))
-        {
-            fontList.Insert(0, this.settings.FontFamily);
-        }
-
-        var normalized = FontPriorityList.Normalize(fontList);
-        var expanded = FontPriorityList.Expand(normalized);
+        var expanded = FontPriorityList.Resolve(
+            this.settings.FontFamily,
+            this.settings.FallbackFonts);
         this.terminalControl.ApplyFontChange(expanded, this.settings.FontSize);
     }
 
