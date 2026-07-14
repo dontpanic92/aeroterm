@@ -15,7 +15,8 @@ using AeroTerm.Theme.Controls;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
-using Avalonia.Input;
+using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
@@ -53,31 +54,33 @@ internal sealed class GitDiffPane : UserControl
     private readonly TextBox commitMessageText;
     private readonly Button commitButton;
     private readonly TextBlock diffHeader;
-    private readonly Button previousChangeButton;
-    private readonly Button nextChangeButton;
     private readonly TextBlock oldHeader;
     private readonly TextBlock newHeader;
-    private readonly TextEditor oldLineNumberEditor;
-    private readonly TextEditor newLineNumberEditor;
     private readonly TextEditor oldEditor;
     private readonly TextEditor newEditor;
+    private readonly GitDiffLineNumberMargin oldLineNumberMargin;
+    private readonly GitDiffLineNumberMargin newLineNumberMargin;
     private readonly FullLineHighlightRenderer oldHighlightRenderer;
     private readonly FullLineHighlightRenderer newHighlightRenderer;
-    private readonly FullLineHighlightRenderer oldLineNumberHighlightRenderer;
-    private readonly FullLineHighlightRenderer newLineNumberHighlightRenderer;
     private readonly Panel diffPlaceholder;
     private readonly TextBlock diffPlaceholderText;
     private readonly Grid comparisonGrid;
     private readonly DispatcherTimer watcherRefreshTimer;
+    private readonly HashSet<string> pendingWatcherPaths = new(GetPathComparer());
 
     private GitRepositoryStatus? currentStatus;
     private FileSystemWatcher? repositoryWatcher;
-    private IReadOnlyList<int> currentChangeLines = Array.Empty<int>();
-    private int refreshToken;
-    private int currentChangeIndex = -1;
+    private IReadOnlyList<GitChangeTreeNode> currentChangeTree = Array.Empty<GitChangeTreeNode>();
+    private (string RepositoryRoot, GitStatusBucket Bucket, string Path)? currentComparisonKey;
+    private string? currentChangeFingerprint;
+    private string? currentSummaryFingerprint;
+    private Task refreshLoopTask = Task.CompletedTask;
+    private int diffRequestToken;
     private bool suppressEditorScrollSync;
     private bool suppressChangeSelection;
     private bool gitActionRunning;
+    private bool refreshRequested;
+    private bool manualRefreshRequested;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GitDiffPane"/> class.
@@ -105,7 +108,15 @@ internal sealed class GitDiffPane : UserControl
         var refreshButton = new Button { Content = "Refresh" };
         refreshButton.Click += async (_, _) => await this.RefreshAsync().ConfigureAwait(true);
 
-        this.changesList = new TreeView();
+        this.changesList = new TreeView
+        {
+            DataTemplates =
+            {
+                new FuncTreeDataTemplate<GitChangeTreeNode>(
+                    (node, _) => this.BuildChangeTreeHeader(node),
+                    node => node.Children),
+            },
+        };
         this.changesList.SelectionChanged += async (_, _) =>
         {
             if (!this.suppressChangeSelection)
@@ -218,38 +229,20 @@ internal sealed class GitDiffPane : UserControl
             Margin = new Thickness(10, 10, 10, 6),
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        this.previousChangeButton = new Button
-        {
-            Content = "Previous",
-            IsEnabled = false,
-        };
-        this.previousChangeButton.Click += (_, _) => this.NavigateChange(-1);
-        this.nextChangeButton = new Button
-        {
-            Content = "Next",
-            IsEnabled = false,
-        };
-        this.nextChangeButton.Click += (_, _) => this.NavigateChange(1);
         this.oldHeader = this.BuildSideHeader();
         this.newHeader = this.BuildSideHeader();
         this.oldHighlightRenderer = new FullLineHighlightRenderer(this.oldHeader);
         this.newHighlightRenderer = new FullLineHighlightRenderer(this.newHeader);
-        this.oldLineNumberHighlightRenderer = new FullLineHighlightRenderer(this.oldHeader);
-        this.newLineNumberHighlightRenderer = new FullLineHighlightRenderer(this.newHeader);
-        this.oldLineNumberEditor = this.BuildEditor(this.oldLineNumberHighlightRenderer, isLineNumberGutter: true);
-        this.newLineNumberEditor = this.BuildEditor(this.newLineNumberHighlightRenderer, isLineNumberGutter: true);
-        this.oldEditor = this.BuildEditor(this.oldHighlightRenderer, isLineNumberGutter: false);
-        this.newEditor = this.BuildEditor(this.newHighlightRenderer, isLineNumberGutter: false);
+        this.oldLineNumberMargin = this.BuildLineNumberMargin();
+        this.newLineNumberMargin = this.BuildLineNumberMargin();
+        this.oldEditor = this.BuildEditor(this.oldHighlightRenderer, this.oldLineNumberMargin);
+        this.newEditor = this.BuildEditor(this.newHighlightRenderer, this.newLineNumberMargin);
         this.oldEditor.TextArea.TextView.ScrollOffsetChanged += (_, _) => this.SyncScrollOffset(
             this.oldEditor,
-            this.newEditor,
-            this.oldLineNumberEditor,
-            this.newLineNumberEditor);
+            this.newEditor);
         this.newEditor.TextArea.TextView.ScrollOffsetChanged += (_, _) => this.SyncScrollOffset(
             this.newEditor,
-            this.oldEditor,
-            this.newLineNumberEditor,
-            this.oldLineNumberEditor);
+            this.oldEditor);
         this.comparisonGrid = this.BuildComparisonGrid();
         this.diffPlaceholderText = new TextBlock
         {
@@ -278,22 +271,8 @@ internal sealed class GitDiffPane : UserControl
         var diffToolbar = new Grid
         {
             Margin = new Thickness(0, 0, 8, 0),
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(1, GridUnitType.Star),
-                new ColumnDefinition(GridLength.Auto),
-            },
         };
-        var navigationButtons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 4,
-            Children = { this.previousChangeButton, this.nextChangeButton },
-        };
-        Grid.SetColumn(this.diffHeader, 0);
-        Grid.SetColumn(navigationButtons, 1);
         diffToolbar.Children.Add(this.diffHeader);
-        diffToolbar.Children.Add(navigationButtons);
         Grid.SetRow(diffToolbar, 0);
         Grid.SetRow(diffBody, 1);
         rightPanel.Children.Add(diffToolbar);
@@ -325,10 +304,9 @@ internal sealed class GitDiffPane : UserControl
             this.watcherRefreshTimer.Stop();
             if (this.IsVisible)
             {
-                await this.RefreshAsync().ConfigureAwait(true);
+                await this.RequestRefreshAsync(manual: false).ConfigureAwait(true);
             }
         };
-        this.KeyDown += this.OnKeyDown;
         this.ShowDiffPlaceholder("Select a change to view its diff.");
     }
 
@@ -336,64 +314,9 @@ internal sealed class GitDiffPane : UserControl
     /// Reloads the repository status and refreshes the changes list.
     /// </summary>
     /// <returns>A task that completes when the refresh finishes.</returns>
-    public async Task RefreshAsync()
+    public Task RefreshAsync()
     {
-        var token = ++this.refreshToken;
-        var root = this.workingDirectoryProvider();
-        this.cwdText.Text = string.IsNullOrEmpty(root) ? "(no working directory reported yet)" : root;
-        this.statusText.Text = "Loading Git status...";
-
-        var status = await this.gitService.GetStatusAsync(root).ConfigureAwait(true);
-        if (token != this.refreshToken)
-        {
-            return;
-        }
-
-        this.currentStatus = status;
-        this.ConfigureRepositoryWatcher(status.RepositoryRoot);
-        var items = BuildChangeItems(status);
-        var selectedItem = this.GetSelectedChangeItem();
-        (GitStatusBucket Bucket, string Path)? selectedKey = selectedItem is null
-            ? null
-            : (selectedItem.Status.Bucket, selectedItem.Status.Path);
-        var tree = this.BuildChangeTree(items);
-        this.changesList.ItemsSource = tree.Roots;
-        var itemToSelect = selectedKey is { } key
-            ? tree.Items.FirstOrDefault(entry =>
-                entry.Item.Status.Bucket == key.Bucket &&
-                string.Equals(entry.Item.Status.Path, key.Path, StringComparison.Ordinal)).Container
-            : null;
-        itemToSelect ??= tree.Items.FirstOrDefault().Container;
-        if (itemToSelect is not null)
-        {
-            this.suppressChangeSelection = true;
-            this.changesList.SelectedItem = itemToSelect;
-            this.suppressChangeSelection = false;
-            await this.UpdateDiffAsync().ConfigureAwait(true);
-        }
-        else
-        {
-            this.ShowDiffPlaceholder("Select a change to view its diff.");
-        }
-
-        this.UpdateActionStates();
-
-        if (!status.IsRepository)
-        {
-            this.statusText.Text = status.ErrorMessage ?? "Not a Git repository.";
-            return;
-        }
-
-        var upstream = string.IsNullOrWhiteSpace(status.Upstream) ? string.Empty : $" -> {status.Upstream}";
-        var sync = status.Ahead == 0 && status.Behind == 0
-            ? string.Empty
-            : $" (+{status.Ahead}/-{status.Behind})";
-        this.statusText.Text = $"{status.Branch ?? "(detached)"}{upstream}{sync}";
-
-        if (items.Count == 0)
-        {
-            this.statusText.Text += "\nWorking tree clean.";
-        }
+        return this.RequestRefreshAsync(manual: true);
     }
 
     /// <summary>
@@ -422,6 +345,21 @@ internal sealed class GitDiffPane : UserControl
         return items;
     }
 
+    /// <summary>
+    /// Requests a background refresh for filesystem changes.
+    /// </summary>
+    /// <param name="paths">Changed absolute paths reported by the repository watcher.</param>
+    /// <returns>A task that completes when queued refresh work finishes.</returns>
+    internal Task RefreshForFileSystemChangesAsync(IEnumerable<string> paths)
+    {
+        foreach (var path in paths)
+        {
+            this.pendingWatcherPaths.Add(Path.GetFullPath(path));
+        }
+
+        return this.RequestRefreshAsync(manual: false);
+    }
+
     /// <inheritdoc/>
     protected override void OnAttachedToLogicalTree(LogicalTreeAttachmentEventArgs e)
     {
@@ -438,45 +376,314 @@ internal sealed class GitDiffPane : UserControl
         this.watcherRefreshTimer.Stop();
     }
 
+    private static StringComparer GetPathComparer()
+    {
+        return OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    }
+
+    private static string BuildChangeFingerprint(GitRepositoryStatus status)
+    {
+        var parts = new List<string>();
+        AddFingerprintPart(parts, status.RepositoryRoot);
+        AddFingerprintEntries(parts, status.Staged);
+        AddFingerprintEntries(parts, status.Unstaged);
+        AddFingerprintEntries(parts, status.Untracked);
+        return string.Concat(parts);
+    }
+
+    private static string BuildSummaryFingerprint(GitRepositoryStatus status)
+    {
+        var parts = new List<string>();
+        AddFingerprintPart(parts, status.RepositoryRoot);
+        AddFingerprintPart(parts, status.Branch);
+        AddFingerprintPart(parts, status.Upstream);
+        AddFingerprintPart(parts, status.Ahead.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddFingerprintPart(parts, status.Behind.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddFingerprintPart(parts, status.ErrorMessage);
+        return string.Concat(parts);
+    }
+
+    private static void AddFingerprintEntries(
+        ICollection<string> parts,
+        IReadOnlyList<GitFileStatus> entries)
+    {
+        AddFingerprintPart(
+            parts,
+            entries.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        foreach (var entry in entries)
+        {
+            AddFingerprintPart(parts, entry.Path);
+            AddFingerprintPart(parts, entry.OriginalPath);
+            AddFingerprintPart(parts, entry.IndexStatus.ToString());
+            AddFingerprintPart(parts, entry.WorkTreeStatus.ToString());
+            AddFingerprintPart(
+                parts,
+                ((int)entry.Bucket).ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+    }
+
+    private static void AddFingerprintPart(ICollection<string> parts, string? value)
+    {
+        value ??= string.Empty;
+        parts.Add(value.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        parts.Add(":");
+        parts.Add(value);
+        parts.Add(";");
+    }
+
     private static bool IsConflict(GitFileStatus status)
     {
         return status.IndexStatus == 'U' || status.WorkTreeStatus == 'U';
     }
 
-    private (IReadOnlyList<TreeViewItem> Roots, IReadOnlyList<(GitChangeItem Item, TreeViewItem Container)> Items)
-        BuildChangeTree(IReadOnlyList<GitChangeItem> items)
+    private static string GetChangeGroupKey(GitChangeTreeNode node)
+    {
+        var countSeparator = node.Title.LastIndexOf(" (", StringComparison.Ordinal);
+        return countSeparator < 0 ? node.Title : node.Title[..countSeparator];
+    }
+
+    private static IHighlightingDefinition? GetHighlightingDefinition(string path)
+    {
+        var extension = Path.GetExtension(path);
+        if (extension.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".markdown", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".mdown", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".mkd", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".mkdn", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return HighlightingManager.Instance.GetDefinitionByExtension(extension);
+    }
+
+    private static string NormalizeRepositoryIdentity(string repositoryRoot)
+    {
+        var fullPath = Path.GetFullPath(repositoryRoot);
+        return OperatingSystem.IsWindows() ? fullPath.ToUpperInvariant() : fullPath;
+    }
+
+    private static EditorViewState CaptureEditorViewState(TextEditor editor)
+    {
+        var scroll = (IScrollable)editor.TextArea.TextView;
+        return new EditorViewState(
+            editor.CaretOffset,
+            editor.SelectionStart,
+            editor.SelectionLength,
+            scroll.Offset);
+    }
+
+    private static void RestoreEditorViewState(TextEditor editor, EditorViewState state)
+    {
+        var textLength = editor.Document?.TextLength ?? 0;
+        var selectionStart = Math.Clamp(state.SelectionStart, 0, textLength);
+        var selectionLength = Math.Clamp(state.SelectionLength, 0, textLength - selectionStart);
+        editor.Select(selectionStart, selectionLength);
+        editor.CaretOffset = Math.Clamp(state.CaretOffset, 0, textLength);
+
+        var scroll = (IScrollable)editor.TextArea.TextView;
+        var maximumX = Math.Max(0, scroll.Extent.Width - scroll.Viewport.Width);
+        var maximumY = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
+        scroll.Offset = new Vector(
+            Math.Clamp(state.ScrollOffset.X, 0, maximumX),
+            Math.Clamp(state.ScrollOffset.Y, 0, maximumY));
+    }
+
+    private static IBrush ResolveHighlightBrush(
+        Control resourceHost,
+        GitDiffHighlightKind kind)
+    {
+        var (resourceKey, fallback) = kind switch
+        {
+            GitDiffHighlightKind.Added => ("GitDiffAddedBackgroundBrush", AddedBrush),
+            GitDiffHighlightKind.Removed => ("GitDiffRemovedBackgroundBrush", RemovedBrush),
+            GitDiffHighlightKind.Modified => ("GitDiffModifiedBackgroundBrush", ModifiedBrush),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+        return resourceHost.TryGetResource(
+            resourceKey,
+            resourceHost.ActualThemeVariant,
+            out var value) && value is IBrush brush
+                ? brush
+                : fallback;
+    }
+
+    private Task RequestRefreshAsync(bool manual)
+    {
+        this.refreshRequested = true;
+        this.manualRefreshRequested |= manual;
+        if (this.refreshLoopTask.IsCompleted)
+        {
+            this.refreshLoopTask = this.RunRefreshLoopAsync();
+        }
+
+        return this.refreshLoopTask;
+    }
+
+    private async Task RunRefreshLoopAsync()
+    {
+        while (this.refreshRequested)
+        {
+            var manual = this.manualRefreshRequested;
+            var changedPaths = this.pendingWatcherPaths.ToArray();
+            this.refreshRequested = false;
+            this.manualRefreshRequested = false;
+            this.pendingWatcherPaths.Clear();
+            await this.RefreshCoreAsync(manual, changedPaths).ConfigureAwait(true);
+        }
+    }
+
+    private async Task RefreshCoreAsync(bool manual, IReadOnlyCollection<string> changedPaths)
+    {
+        var root = this.workingDirectoryProvider();
+        this.cwdText.Text = string.IsNullOrEmpty(root) ? "(no working directory reported yet)" : root;
+        if (manual)
+        {
+            this.statusText.Text = "Loading Git status...";
+        }
+
+        var status = await this.gitService.GetStatusAsync(root).ConfigureAwait(true);
+        this.ConfigureRepositoryWatcher(status.RepositoryRoot);
+        var changeFingerprint = BuildChangeFingerprint(status);
+        var summaryFingerprint = BuildSummaryFingerprint(status);
+        var changeTreeChanged = !string.Equals(
+            this.currentChangeFingerprint,
+            changeFingerprint,
+            StringComparison.Ordinal);
+        var summaryChanged = !string.Equals(
+            this.currentSummaryFingerprint,
+            summaryFingerprint,
+            StringComparison.Ordinal);
+        var selectedItem = this.GetSelectedChangeItem();
+        (GitStatusBucket Bucket, string Path)? selectedKey = selectedItem is null
+            ? null
+            : (selectedItem.Status.Bucket, selectedItem.Status.Path);
+        this.currentStatus = status;
+        this.currentChangeFingerprint = changeFingerprint;
+        this.currentSummaryFingerprint = summaryFingerprint;
+        var items = BuildChangeItems(status);
+        if (changeTreeChanged)
+        {
+            this.CaptureChangeGroupExpansion();
+            var expansion = this.currentChangeTree.ToDictionary(
+                GetChangeGroupKey,
+                node => node.IsExpanded,
+                StringComparer.Ordinal);
+            this.currentChangeTree = this.BuildChangeTree(items);
+            foreach (var group in this.currentChangeTree)
+            {
+                if (expansion.TryGetValue(GetChangeGroupKey(group), out var isExpanded))
+                {
+                    group.IsExpanded = isExpanded;
+                }
+            }
+
+            this.changesList.ItemsSource = this.currentChangeTree;
+            this.ApplyChangeGroupExpansion();
+            Dispatcher.UIThread.Post(this.ApplyChangeGroupExpansion);
+            var itemToSelect = selectedKey is { } key
+                ? this.FindChangeNode(key.Bucket, key.Path)
+                : null;
+            itemToSelect ??= this.currentChangeTree
+                .SelectMany(group => group.Children)
+                .FirstOrDefault();
+            this.suppressChangeSelection = true;
+            this.changesList.SelectedItem = itemToSelect;
+            this.suppressChangeSelection = false;
+        }
+
+        var currentItem = this.GetSelectedChangeItem();
+        if (currentItem is not null &&
+            (manual ||
+             changeTreeChanged ||
+             this.IsSelectedPathAffected(currentItem.Status, changedPaths) ||
+             this.IsGitMetadataAffected(changedPaths)))
+        {
+            await this.UpdateDiffAsync(showLoading: manual || !this.comparisonGrid.IsVisible).ConfigureAwait(true);
+        }
+        else if (currentItem is null && (manual || changeTreeChanged))
+        {
+            this.diffRequestToken++;
+            this.ShowDiffPlaceholder("Select a change to view its diff.");
+        }
+
+        this.UpdateActionStates();
+        if (manual || summaryChanged || changeTreeChanged)
+        {
+            this.UpdateStatusText(status, items.Count);
+        }
+    }
+
+    private void CaptureChangeGroupExpansion()
+    {
+        for (var index = 0; index < this.currentChangeTree.Count; index++)
+        {
+            if (this.changesList.ContainerFromIndex(index) is TreeViewItem container)
+            {
+                this.currentChangeTree[index].IsExpanded = container.IsExpanded;
+            }
+        }
+    }
+
+    private void ApplyChangeGroupExpansion()
+    {
+        for (var index = 0; index < this.currentChangeTree.Count; index++)
+        {
+            if (this.changesList.ContainerFromIndex(index) is TreeViewItem container)
+            {
+                container.IsExpanded = this.currentChangeTree[index].IsExpanded;
+            }
+        }
+    }
+
+    private void UpdateStatusText(GitRepositoryStatus status, int itemCount)
+    {
+        if (!status.IsRepository)
+        {
+            this.statusText.Text = status.ErrorMessage ?? "Not a Git repository.";
+            return;
+        }
+
+        var upstream = string.IsNullOrWhiteSpace(status.Upstream) ? string.Empty : $" -> {status.Upstream}";
+        var sync = status.Ahead == 0 && status.Behind == 0
+            ? string.Empty
+            : $" (+{status.Ahead}/-{status.Behind})";
+        this.statusText.Text = $"{status.Branch ?? "(detached)"}{upstream}{sync}";
+
+        if (itemCount == 0)
+        {
+            this.statusText.Text += "\nWorking tree clean.";
+        }
+    }
+
+    private IReadOnlyList<GitChangeTreeNode> BuildChangeTree(IReadOnlyList<GitChangeItem> items)
     {
         var duplicateNames = items
             .GroupBy(item => item.FileName, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var entries = new List<(GitChangeItem Item, TreeViewItem Container)>();
-        var roots = new List<TreeViewItem>();
+        var roots = new List<GitChangeTreeNode>();
         this.AddChangeGroup(
             roots,
-            entries,
             "Merge Changes",
             items.Where(item => IsConflict(item.Status)),
             duplicateNames);
         this.AddChangeGroup(
             roots,
-            entries,
             "Staged Changes",
             items.Where(item => item.Status.Bucket == GitStatusBucket.Staged && !IsConflict(item.Status)),
             duplicateNames);
         this.AddChangeGroup(
             roots,
-            entries,
             "Changes",
             items.Where(item => item.Status.Bucket != GitStatusBucket.Staged && !IsConflict(item.Status)),
             duplicateNames);
-        return (roots, entries);
+        return roots;
     }
 
     private void AddChangeGroup(
-        ICollection<TreeViewItem> roots,
-        ICollection<(GitChangeItem Item, TreeViewItem Container)> entries,
+        ICollection<GitChangeTreeNode> roots,
         string title,
         IEnumerable<GitChangeItem> groupItems,
         IReadOnlySet<string> duplicateNames)
@@ -487,50 +694,66 @@ internal sealed class GitDiffPane : UserControl
             return;
         }
 
-        var children = new List<TreeViewItem>(items.Length);
+        var children = new List<GitChangeTreeNode>(items.Length);
         foreach (var item in items)
         {
-            var container = this.BuildChangeTreeItem(item, duplicateNames.Contains(item.FileName));
-            children.Add(container);
-            entries.Add((item, container));
+            children.Add(new GitChangeTreeNode(
+                string.Empty,
+                item,
+                Array.Empty<GitChangeTreeNode>(),
+                duplicateNames.Contains(item.FileName)));
         }
 
-        roots.Add(new TreeViewItem
-        {
-            Header = $"{title} ({items.Length})",
-            IsExpanded = true,
-            ItemsSource = children,
-        });
+        roots.Add(new GitChangeTreeNode($"{title} ({items.Length})", null, children));
     }
 
-    private TreeViewItem BuildChangeTreeItem(GitChangeItem item, bool showParentPath)
+    private Control BuildChangeTreeHeader(GitChangeTreeNode node)
     {
-        var namePanel = new StackPanel
+        if (node.Item is not { } item)
         {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
+            return new TextBlock
+            {
+                Text = node.Title,
+                FontWeight = FontWeight.Bold,
+            };
+        }
+
+        var namePanel = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(1, GridUnitType.Star),
+                new ColumnDefinition(GridLength.Auto),
+            },
             Children =
             {
                 new TextBlock
                 {
                     Text = item.FileName,
                     TextTrimming = TextTrimming.CharacterEllipsis,
+                    VerticalAlignment = VerticalAlignment.Center,
                 },
             },
         };
-        if (showParentPath && item.ParentPath.Length > 0)
+        if (node.ShowParentPath && item.ParentPath.Length > 0)
         {
-            namePanel.Children.Add(new TextBlock
+            var parentPath = new TextBlock
             {
                 Text = item.ParentPath,
                 FontSize = 10,
                 Foreground = Brushes.Gray,
+                Margin = new Thickness(6, 0, 0, 0),
+                MaxWidth = 100,
                 TextTrimming = TextTrimming.CharacterEllipsis,
-            });
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetColumn(parentPath, 1);
+            namePanel.Children.Add(parentPath);
         }
 
         var header = new Grid
         {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             ColumnDefinitions =
             {
                 new ColumnDefinition(1, GridUnitType.Star),
@@ -548,14 +771,9 @@ internal sealed class GitDiffPane : UserControl
             },
         };
         Grid.SetColumn(header.Children[1], 1);
-        var container = new TreeViewItem
-        {
-            Header = header,
-            Tag = item,
-        };
-        ToolTip.SetTip(container, item.Status.Path);
-        AutomationProperties.SetName(container, item.AccessibleName);
-        return container;
+        ToolTip.SetTip(header, item.Status.Path);
+        AutomationProperties.SetName(header, item.AccessibleName);
+        return header;
     }
 
     private TextBlock BuildSideHeader()
@@ -570,7 +788,20 @@ internal sealed class GitDiffPane : UserControl
         };
     }
 
-    private TextEditor BuildEditor(FullLineHighlightRenderer highlightRenderer, bool isLineNumberGutter)
+    private GitDiffLineNumberMargin BuildLineNumberMargin()
+    {
+        var margin = new GitDiffLineNumberMargin(this.ResolveHighlightBrush);
+        margin.SetValue(TextBlock.FontFamilyProperty, MonoFont);
+        margin.SetValue(TextBlock.FontSizeProperty, 12);
+        margin.Bind(
+            TextBlock.ForegroundProperty,
+            this.GetResourceObservable("TextSecondaryBrush"));
+        return margin;
+    }
+
+    private TextEditor BuildEditor(
+        FullLineHighlightRenderer highlightRenderer,
+        GitDiffLineNumberMargin lineNumberMargin)
     {
         var editor = new TextEditor
         {
@@ -581,32 +812,19 @@ internal sealed class GitDiffPane : UserControl
             FontFamily = MonoFont,
             FontSize = 12,
             Background = Brushes.Transparent,
-            HorizontalScrollBarVisibility = isLineNumberGutter
-                ? Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden
-                : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = isLineNumberGutter
-                ? Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden
-                : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
         };
-        if (isLineNumberGutter)
-        {
-            editor.Width = 52;
-            editor.IsHitTestVisible = false;
-            editor.Padding = new Thickness(4, 0, 6, 0);
-            editor.Bind(ForegroundProperty, this.GetResourceObservable("TextSecondaryBrush"));
-        }
-        else
-        {
-            editor.Bind(ForegroundProperty, this.GetResourceObservable("TextPrimaryBrush"));
-        }
-
+        editor.Bind(ForegroundProperty, this.GetResourceObservable("TextPrimaryBrush"));
         editor.TextArea.Background = Brushes.Transparent;
+        editor.TextArea.LeftMargins.Add(lineNumberMargin);
         editor.TextArea.TextView.BackgroundRenderers.Add(highlightRenderer);
         return editor;
     }
 
-    private async Task UpdateDiffAsync()
+    private async Task UpdateDiffAsync(bool showLoading = true)
     {
+        var token = ++this.diffRequestToken;
         if (this.GetSelectedChangeItem() is not { } item)
         {
             this.ShowDiffPlaceholder("Select a change to view its diff.");
@@ -621,10 +839,18 @@ internal sealed class GitDiffPane : UserControl
             return;
         }
 
-        var token = this.refreshToken;
-        this.ShowDiffPlaceholder("Loading full-file diff...");
+        var comparisonKey = (
+            NormalizeRepositoryIdentity(root),
+            item.Status.Bucket,
+            item.Status.Path);
+        var preserveEditorState = this.currentComparisonKey == comparisonKey;
+        if (showLoading && !this.comparisonGrid.IsVisible)
+        {
+            this.ShowDiffPlaceholder("Loading full-file diff...");
+        }
+
         var comparison = await this.gitService.GetFileComparisonAsync(root, item.Status).ConfigureAwait(true);
-        if (token != this.refreshToken || !ReferenceEquals(this.GetSelectedChangeItem(), item))
+        if (token != this.diffRequestToken)
         {
             return;
         }
@@ -643,65 +869,70 @@ internal sealed class GitDiffPane : UserControl
             return;
         }
 
-        await Dispatcher.UIThread.InvokeAsync(() => this.RenderComparison(comparison));
+        await Dispatcher.UIThread.InvokeAsync(() =>
+            this.RenderComparison(comparison, comparisonKey, preserveEditorState));
     }
 
-    private void RenderComparison(GitFileComparison comparison)
+    private void RenderComparison(
+        GitFileComparison comparison,
+        (string RepositoryRoot, GitStatusBucket Bucket, string Path) comparisonKey,
+        bool preserveEditorState)
     {
         var oldSide = comparison.OldSide!;
         var newSide = comparison.NewSide!;
-        var highlighting = HighlightingManager.Instance.GetDefinitionByExtension(Path.GetExtension(comparison.Path));
+        var highlighting = GetHighlightingDefinition(comparison.Path);
         this.oldEditor.SyntaxHighlighting = highlighting;
         this.newEditor.SyntaxHighlighting = highlighting;
         this.oldHeader.Text = $"Old: {oldSide.SourceLabel}";
         this.newHeader.Text = $"New: {newSide.SourceLabel}";
         this.SetEditorContent(
             this.oldEditor,
-            this.oldLineNumberEditor,
             this.oldHighlightRenderer,
-            this.oldLineNumberHighlightRenderer,
-            oldSide);
+            this.oldLineNumberMargin,
+            oldSide,
+            preserveEditorState);
         this.SetEditorContent(
             this.newEditor,
-            this.newLineNumberEditor,
             this.newHighlightRenderer,
-            this.newLineNumberHighlightRenderer,
-            newSide);
-        this.currentChangeLines = oldSide.Highlights
-            .Select(range => range.StartLine)
-            .Concat(newSide.Highlights.Select(range => range.StartLine))
-            .Distinct()
-            .OrderBy(line => line)
-            .ToArray();
-        this.currentChangeIndex = -1;
-        this.previousChangeButton.IsEnabled = this.currentChangeLines.Count > 0;
-        this.nextChangeButton.IsEnabled = this.currentChangeLines.Count > 0;
+            this.newLineNumberMargin,
+            newSide,
+            preserveEditorState);
+        this.currentComparisonKey = comparisonKey;
         this.diffPlaceholder.IsVisible = false;
         this.comparisonGrid.IsVisible = true;
     }
 
     private void SetEditorContent(
         TextEditor editor,
-        TextEditor lineNumberEditor,
         FullLineHighlightRenderer highlightRenderer,
-        FullLineHighlightRenderer lineNumberHighlightRenderer,
-        GitFileSideContent side)
+        GitDiffLineNumberMargin lineNumberMargin,
+        GitFileSideContent side,
+        bool preserveEditorState)
     {
-        editor.Text = side.Text;
-        lineNumberEditor.Text = string.Join(
-            "\n",
-            side.LineNumbers.Select(lineNumber => lineNumber?.ToString() ?? string.Empty));
+        EditorViewState? viewState = preserveEditorState
+            ? CaptureEditorViewState(editor)
+            : null;
+        if (!string.Equals(editor.Text, side.Text, StringComparison.Ordinal))
+        {
+            editor.Text = side.Text;
+        }
+
         highlightRenderer.SetHighlights(side.Highlights);
-        lineNumberHighlightRenderer.SetHighlights(side.Highlights);
+        lineNumberMargin.SetContent(side.LineNumbers, side.Highlights);
         editor.TextArea.TextView.Redraw();
-        lineNumberEditor.TextArea.TextView.Redraw();
+        if (viewState is { } state)
+        {
+            RestoreEditorViewState(editor, state);
+        }
+        else
+        {
+            editor.Select(0, 0);
+            editor.CaretOffset = 0;
+            ((IScrollable)editor.TextArea.TextView).Offset = default;
+        }
     }
 
-    private void SyncScrollOffset(
-        TextEditor source,
-        TextEditor target,
-        TextEditor sourceLineNumbers,
-        TextEditor targetLineNumbers)
+    private void SyncScrollOffset(TextEditor source, TextEditor target)
     {
         if (this.suppressEditorScrollSync)
         {
@@ -709,21 +940,24 @@ internal sealed class GitDiffPane : UserControl
         }
 
         this.suppressEditorScrollSync = true;
-        var offset = source.TextArea.TextView.ScrollOffset;
-        target.ScrollToHorizontalOffset(offset.X);
-        target.ScrollToVerticalOffset(offset.Y);
-        sourceLineNumbers.ScrollToVerticalOffset(offset.Y);
-        targetLineNumbers.ScrollToVerticalOffset(offset.Y);
-        this.suppressEditorScrollSync = false;
+        try
+        {
+            var sourceScroll = (IScrollable)source.TextArea.TextView;
+            var targetScroll = (IScrollable)target.TextArea.TextView;
+            var maximumOffset = Math.Max(0, targetScroll.Extent.Height - targetScroll.Viewport.Height);
+            var targetOffset = Math.Clamp(sourceScroll.Offset.Y, 0, maximumOffset);
+            targetScroll.Offset = new Vector(targetScroll.Offset.X, targetOffset);
+        }
+        finally
+        {
+            this.suppressEditorScrollSync = false;
+        }
     }
 
     private void ShowDiffPlaceholder(string message)
     {
         this.ClearEditors();
-        this.currentChangeLines = Array.Empty<int>();
-        this.currentChangeIndex = -1;
-        this.previousChangeButton.IsEnabled = false;
-        this.nextChangeButton.IsEnabled = false;
+        this.currentComparisonKey = null;
         this.diffPlaceholderText.Text = message;
         this.diffPlaceholder.IsVisible = true;
         this.comparisonGrid.IsVisible = false;
@@ -735,16 +969,16 @@ internal sealed class GitDiffPane : UserControl
         this.newHeader.Text = string.Empty;
         this.SetEditorContent(
             this.oldEditor,
-            this.oldLineNumberEditor,
             this.oldHighlightRenderer,
-            this.oldLineNumberHighlightRenderer,
-            this.EmptySide());
+            this.oldLineNumberMargin,
+            this.EmptySide(),
+            preserveEditorState: false);
         this.SetEditorContent(
             this.newEditor,
-            this.newLineNumberEditor,
             this.newHighlightRenderer,
-            this.newLineNumberHighlightRenderer,
-            this.EmptySide());
+            this.newLineNumberMargin,
+            this.EmptySide(),
+            preserveEditorState: false);
     }
 
     private Grid BuildComparisonGrid()
@@ -774,34 +1008,15 @@ internal sealed class GitDiffPane : UserControl
         Grid.SetColumn(this.oldHeader, 0);
         Grid.SetColumn(divider, 1);
         Grid.SetColumn(this.newHeader, 2);
-        var oldSide = this.BuildEditorSide(this.oldLineNumberEditor, this.oldEditor);
-        var newSide = this.BuildEditorSide(this.newLineNumberEditor, this.newEditor);
-        Grid.SetRow(oldSide, 1);
-        Grid.SetColumn(oldSide, 0);
-        Grid.SetRow(newSide, 1);
-        Grid.SetColumn(newSide, 2);
+        Grid.SetRow(this.oldEditor, 1);
+        Grid.SetColumn(this.oldEditor, 0);
+        Grid.SetRow(this.newEditor, 1);
+        Grid.SetColumn(this.newEditor, 2);
         grid.Children.Add(this.oldHeader);
         grid.Children.Add(divider);
         grid.Children.Add(this.newHeader);
-        grid.Children.Add(oldSide);
-        grid.Children.Add(newSide);
-        return grid;
-    }
-
-    private Grid BuildEditorSide(TextEditor lineNumbers, TextEditor editor)
-    {
-        var grid = new Grid
-        {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(1, GridUnitType.Star),
-            },
-        };
-        Grid.SetColumn(lineNumbers, 0);
-        Grid.SetColumn(editor, 1);
-        grid.Children.Add(lineNumbers);
-        grid.Children.Add(editor);
+        grid.Children.Add(this.oldEditor);
+        grid.Children.Add(this.newEditor);
         return grid;
     }
 
@@ -816,22 +1031,81 @@ internal sealed class GitDiffPane : UserControl
 
     private GitChangeItem? GetSelectedChangeItem()
     {
-        return (this.changesList.SelectedItem as TreeViewItem)?.Tag as GitChangeItem;
+        return (this.changesList.SelectedItem as GitChangeTreeNode)?.Item;
     }
 
-    private void NavigateChange(int direction)
+    private GitChangeTreeNode? FindChangeNode(GitStatusBucket bucket, string path)
     {
-        if (this.currentChangeLines.Count == 0)
+        return this.currentChangeTree
+            .SelectMany(group => group.Children)
+            .FirstOrDefault(node =>
+                node.Item?.Status.Bucket == bucket &&
+                string.Equals(node.Item.Status.Path, path, StringComparison.Ordinal));
+    }
+
+    private bool IsSelectedPathAffected(
+        GitFileStatus status,
+        IReadOnlyCollection<string> changedPaths)
+    {
+        if (changedPaths.Count == 0 || this.currentStatus?.RepositoryRoot is not { } root)
         {
-            return;
+            return false;
         }
 
-        this.currentChangeIndex = this.currentChangeIndex < 0
-            ? direction > 0 ? 0 : this.currentChangeLines.Count - 1
-            : (this.currentChangeIndex + direction + this.currentChangeLines.Count) % this.currentChangeLines.Count;
-        var line = this.currentChangeLines[this.currentChangeIndex];
-        this.oldEditor.ScrollToLine(line);
-        this.newEditor.ScrollToLine(line);
+        var comparer = GetPathComparer();
+        var selectedPaths = status.OriginalPath is null
+            ? new[] { status.Path }
+            : new[] { status.Path, status.OriginalPath };
+        foreach (var selectedPath in selectedPaths)
+        {
+            var absolutePath = Path.GetFullPath(Path.Combine(root, selectedPath));
+            if (changedPaths.Any(path => comparer.Equals(path, absolutePath)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsGitMetadataAffected(IReadOnlyCollection<string> changedPaths)
+    {
+        if (changedPaths.Count == 0 || this.currentStatus?.RepositoryRoot is not { } root)
+        {
+            return false;
+        }
+
+        var comparer = GetPathComparer();
+        var gitPath = Path.GetFullPath(Path.Combine(root, ".git"));
+        foreach (var path in changedPaths)
+        {
+            if (comparer.Equals(path, gitPath))
+            {
+                return true;
+            }
+
+            var relativePath = Path.GetRelativePath(gitPath, path);
+            if (relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
+                string.Equals(relativePath, "..", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var normalizedPath = relativePath.Replace(Path.DirectorySeparatorChar, '/');
+            if (normalizedPath is "HEAD" or "index" or "index.lock" or "packed-refs" or
+                "MERGE_HEAD" or "REBASE_HEAD" or "CHERRY_PICK_HEAD" or "BISECT_HEAD" ||
+                normalizedPath.StartsWith("refs/", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private IBrush ResolveHighlightBrush(GitDiffHighlightKind kind)
+    {
+        return ResolveHighlightBrush(this, kind);
     }
 
     private void ConfigureRepositoryWatcher(string? repositoryRoot)
@@ -841,10 +1115,13 @@ internal sealed class GitDiffPane : UserControl
             return;
         }
 
+        var pathComparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
         if (string.Equals(
             this.repositoryWatcher?.Path,
             repositoryRoot,
-            StringComparison.OrdinalIgnoreCase))
+            pathComparison))
         {
             return;
         }
@@ -888,20 +1165,15 @@ internal sealed class GitDiffPane : UserControl
     {
         Dispatcher.UIThread.Post(() =>
         {
+            if (!this.IsVisible)
+            {
+                return;
+            }
+
+            this.pendingWatcherPaths.Add(Path.GetFullPath(e.FullPath));
             this.watcherRefreshTimer.Stop();
             this.watcherRefreshTimer.Start();
         });
-    }
-
-    private void OnKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.F7)
-        {
-            return;
-        }
-
-        this.NavigateChange(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
-        e.Handled = true;
     }
 
     private async Task StageSelectedAsync()
@@ -1110,6 +1382,12 @@ internal sealed class GitDiffPane : UserControl
             !string.IsNullOrWhiteSpace(this.commitMessageText.Text);
     }
 
+    private readonly record struct EditorViewState(
+        int CaretOffset,
+        int SelectionStart,
+        int SelectionLength,
+        Vector ScrollOffset);
+
     private sealed class FullLineHighlightRenderer : IBackgroundRenderer
     {
         private readonly Control resourceHost;
@@ -1159,27 +1437,11 @@ internal sealed class GitDiffPane : UserControl
             {
                 if (lineNumber >= range.StartLine && lineNumber < range.StartLine + range.LineCount)
                 {
-                    return range.Kind switch
-                    {
-                        GitDiffHighlightKind.Added => this.ResolveBrush("GitDiffAddedBackgroundBrush", AddedBrush),
-                        GitDiffHighlightKind.Removed => this.ResolveBrush("GitDiffRemovedBackgroundBrush", RemovedBrush),
-                        GitDiffHighlightKind.Modified => this.ResolveBrush("GitDiffModifiedBackgroundBrush", ModifiedBrush),
-                        _ => null,
-                    };
+                    return ResolveHighlightBrush(this.resourceHost, range.Kind);
                 }
             }
 
             return null;
-        }
-
-        private IBrush ResolveBrush(string resourceKey, IBrush fallback)
-        {
-            return this.resourceHost.TryGetResource(
-                resourceKey,
-                this.resourceHost.ActualThemeVariant,
-                out var value) && value is IBrush brush
-                    ? brush
-                    : fallback;
         }
     }
 }

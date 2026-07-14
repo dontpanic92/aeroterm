@@ -35,19 +35,28 @@
                       TargetType="edit:TextEditor">
             <Setter Property="Template">
                 <ControlTemplate>
-                    <ScrollViewer Name="PART_ScrollViewer"
-                                  HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
-                                  VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}">
-                        <ContentPresenter Name="PART_ContentPresenter" />
-                    </ScrollViewer>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer Name="PART_ScrollViewer"
+                                      Focusable="False"
+                                      HorizontalContentAlignment="Left"
+                                      HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                                      Padding="{TemplateBinding Padding}"
+                                      VerticalContentAlignment="Top"
+                                      VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}" />
+                    </Border>
                 </ControlTemplate>
             </Setter>
         </ControlTheme>
         <ControlTheme x:Key="{x:Type editing:TextArea}"
                       TargetType="editing:TextArea">
+            <Setter Property="SelectionBrush" Value="{DynamicResource SelectionFillBrush}" />
+            <Setter Property="SelectionForeground" Value="{DynamicResource SelectionForegroundBrush}" />
             <Setter Property="Template">
                 <ControlTemplate>
-                    <DockPanel Focusable="False">
+                    <DockPanel Background="{TemplateBinding Background}"
+                               Focusable="False">
                         <ItemsControl DockPanel.Dock="Left"
                                       Focusable="False"
                                       ItemsSource="{TemplateBinding LeftMargins}">
@@ -57,7 +66,12 @@
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                         </ItemsControl>
-                        <ContentPresenter Name="PART_CP" Focusable="False" />
+                        <Panel>
+                            <ContentPresenter Name="PART_CP"
+                                              Background="{TemplateBinding Background}"
+                                              Cursor="IBeam"
+                                              Focusable="False" />
+                        </Panel>
                     </DockPanel>
                 </ControlTemplate>
             </Setter>
