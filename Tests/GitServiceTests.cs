@@ -20,6 +20,7 @@ using NUnit.Framework;
 public sealed class GitServiceTests
 {
     private string tempDir = string.Empty;
+    private string remoteDir = string.Empty;
 
     /// <summary>
     /// Creates a temporary directory for each test.
@@ -30,6 +31,7 @@ public sealed class GitServiceTests
         this.tempDir = Path.Combine(
             Path.GetTempPath(),
             "git-test-" + Guid.NewGuid().ToString("N"));
+        this.remoteDir = this.tempDir + "-remote.git";
         Directory.CreateDirectory(this.tempDir);
     }
 
@@ -43,6 +45,12 @@ public sealed class GitServiceTests
         {
             ClearReadOnlyAttributes(this.tempDir);
             Directory.Delete(this.tempDir, recursive: true);
+        }
+
+        if (Directory.Exists(this.remoteDir))
+        {
+            ClearReadOnlyAttributes(this.remoteDir);
+            Directory.Delete(this.remoteDir, recursive: true);
         }
     }
 
@@ -85,6 +93,35 @@ public sealed class GitServiceTests
         Assert.That(status.Staged.Select(entry => entry.Path), Contains.Item("staged.txt"));
         Assert.That(status.Unstaged.Select(entry => entry.Path), Contains.Item("tracked.txt"));
         Assert.That(status.Untracked.Select(entry => entry.Path), Contains.Item("untracked.txt"));
+    }
+
+    /// <summary>
+    /// Null-delimited porcelain status preserves spaces, Unicode, and rename source paths.
+    /// </summary>
+    /// <returns>A task that completes when status parsing has finished.</returns>
+    [Test]
+    public async Task GetStatusAsync_PreservesSpecialPathsAndRenames()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        var oldPath = Path.Combine(this.tempDir, "tracked.txt");
+        var newPath = Path.Combine(this.tempDir, "renamed name.txt");
+        File.Move(oldPath, newPath);
+        var renameResult = await service.RunGitAsync(
+            this.tempDir,
+            "add",
+            "-A",
+            "--",
+            "tracked.txt",
+            "renamed name.txt").ConfigureAwait(false);
+        Assert.That(renameResult.Succeeded, Is.True, renameResult.ErrorMessage);
+        File.WriteAllText(Path.Combine(this.tempDir, "new 名.txt"), "new", new UTF8Encoding(false));
+
+        var status = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+
+        var renamed = status.Staged.Single(entry => entry.Path == "renamed name.txt");
+        Assert.That(renamed.OriginalPath, Is.EqualTo("tracked.txt"));
+        Assert.That(status.Untracked.Select(entry => entry.Path), Contains.Item("new 名.txt"));
     }
 
     /// <summary>
@@ -150,9 +187,134 @@ public sealed class GitServiceTests
         var comparison = await service.GetFileComparisonAsync(status.RepositoryRoot!, entry).ConfigureAwait(false);
 
         Assert.That(comparison.Succeeded, Is.True, comparison.ErrorMessage);
-        Assert.That(comparison.OldSide!.Text, Is.Empty);
+        Assert.That(comparison.OldSide!.Text, Is.EqualTo("\n"));
+        Assert.That(comparison.OldSide.LineNumbers, Is.EqualTo(new int?[] { null, null }));
         Assert.That(comparison.NewSide!.Text, Is.EqualTo("first\nsecond"));
+        Assert.That(comparison.NewSide.LineNumbers, Is.EqualTo(new int?[] { 1, 2 }));
         Assert.That(comparison.NewSide.Highlights, Is.EqualTo(new[] { new GitDiffHighlightRange(1, 2, GitDiffHighlightKind.Added) }));
+    }
+
+    /// <summary>
+    /// File-level and bulk operations update staged, unstaged, and untracked state.
+    /// </summary>
+    /// <returns>A task that completes when all Git operations finish.</returns>
+    [Test]
+    public async Task GitActions_StageUnstageAndDeleteUntrackedPaths()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        File.WriteAllText(Path.Combine(this.tempDir, "tracked.txt"), "changed", new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(this.tempDir, "untracked.txt"), "new", new UTF8Encoding(false));
+
+        var stageAll = await service.StageAllAsync(this.tempDir).ConfigureAwait(false);
+        Assert.That(stageAll.Succeeded, Is.True, stageAll.ErrorMessage);
+        var stagedStatus = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        Assert.That(stagedStatus.Staged.Select(entry => entry.Path), Does.Contain("tracked.txt"));
+        Assert.That(stagedStatus.Staged.Select(entry => entry.Path), Does.Contain("untracked.txt"));
+
+        var unstageAll = await service.UnstageAllAsync(this.tempDir).ConfigureAwait(false);
+        Assert.That(unstageAll.Succeeded, Is.True, unstageAll.ErrorMessage);
+        var unstagedStatus = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        Assert.That(unstagedStatus.Unstaged.Select(entry => entry.Path), Does.Contain("tracked.txt"));
+        Assert.That(unstagedStatus.Untracked.Select(entry => entry.Path), Does.Contain("untracked.txt"));
+
+        var deleteUntracked = await service.DeleteUntrackedAsync(this.tempDir, "untracked.txt").ConfigureAwait(false);
+        Assert.That(deleteUntracked.Succeeded, Is.True, deleteUntracked.ErrorMessage);
+        Assert.That(File.Exists(Path.Combine(this.tempDir, "untracked.txt")), Is.False);
+    }
+
+    /// <summary>
+    /// Sync pulls the configured upstream and pushes local commits to it.
+    /// </summary>
+    /// <returns>A task that completes when the local and bare repositories synchronize.</returns>
+    [Test]
+    public async Task SyncAsync_WithUpstreamPushesLocalCommit()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        var bareInit = await service.RunGitAsync(this.tempDir, "init", "--bare", this.remoteDir).ConfigureAwait(false);
+        Assert.That(bareInit.Succeeded, Is.True, bareInit.ErrorMessage);
+        var addRemote = await service.RunGitAsync(
+            this.tempDir,
+            "remote",
+            "add",
+            "origin",
+            this.remoteDir).ConfigureAwait(false);
+        Assert.That(addRemote.Succeeded, Is.True, addRemote.ErrorMessage);
+        var initialPush = await service.RunGitAsync(
+            this.tempDir,
+            "push",
+            "-u",
+            "origin",
+            "HEAD").ConfigureAwait(false);
+        Assert.That(initialPush.Succeeded, Is.True, initialPush.ErrorMessage);
+        File.WriteAllText(Path.Combine(this.tempDir, "tracked.txt"), "synced", new UTF8Encoding(false));
+        var commit = await service.RunGitAsync(
+            this.tempDir,
+            "commit",
+            "-am",
+            "sync change").ConfigureAwait(false);
+        Assert.That(commit.Succeeded, Is.True, commit.ErrorMessage);
+
+        var sync = await service.SyncAsync(this.tempDir).ConfigureAwait(false);
+
+        Assert.That(sync.Succeeded, Is.True, sync.ErrorMessage);
+        var remoteContent = await service.RunGitAsync(
+            this.tempDir,
+            $"--git-dir={this.remoteDir}",
+            "show",
+            "HEAD:tracked.txt").ConfigureAwait(false);
+        Assert.That(remoteContent.Succeeded, Is.True, remoteContent.ErrorMessage);
+        Assert.That(remoteContent.Output, Is.EqualTo("synced"));
+    }
+
+    /// <summary>
+    /// Unstaging a rename clears both destination and original index entries.
+    /// </summary>
+    /// <returns>A task that completes when the rename is unstaged.</returns>
+    [Test]
+    public async Task UnstageAsync_StagedRenameUnstagesBothPaths()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        File.Move(
+            Path.Combine(this.tempDir, "tracked.txt"),
+            Path.Combine(this.tempDir, "renamed.txt"));
+        var stage = await service.StageAllAsync(this.tempDir).ConfigureAwait(false);
+        Assert.That(stage.Succeeded, Is.True, stage.ErrorMessage);
+        var stagedStatus = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        var rename = stagedStatus.Staged.Single(entry => entry.Path == "renamed.txt");
+
+        var unstage = await service.UnstageAsync(this.tempDir, rename).ConfigureAwait(false);
+
+        Assert.That(unstage.Succeeded, Is.True, unstage.ErrorMessage);
+        var status = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        Assert.That(status.Staged, Is.Empty);
+        Assert.That(status.Unstaged.Select(entry => entry.Path), Does.Contain("tracked.txt"));
+        Assert.That(status.Untracked.Select(entry => entry.Path), Does.Contain("renamed.txt"));
+    }
+
+    /// <summary>
+    /// Unstage operations work in a repository before its first commit.
+    /// </summary>
+    /// <returns>A task that completes when the unborn index is cleared.</returns>
+    [Test]
+    public async Task UnstageAllAsync_UnbornRepositoryClearsIndex()
+    {
+        var service = new GitService();
+        await this.IgnoreIfGitIsUnavailableAsync(service).ConfigureAwait(false);
+        var init = await service.RunGitAsync(this.tempDir, "init").ConfigureAwait(false);
+        Assert.That(init.Succeeded, Is.True, init.ErrorMessage);
+        File.WriteAllText(Path.Combine(this.tempDir, "new.txt"), "new", new UTF8Encoding(false));
+        var stage = await service.StageAllAsync(this.tempDir).ConfigureAwait(false);
+        Assert.That(stage.Succeeded, Is.True, stage.ErrorMessage);
+
+        var unstage = await service.UnstageAllAsync(this.tempDir).ConfigureAwait(false);
+
+        Assert.That(unstage.Succeeded, Is.True, unstage.ErrorMessage);
+        var status = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        Assert.That(status.Staged, Is.Empty);
+        Assert.That(status.Untracked.Select(entry => entry.Path), Does.Contain("new.txt"));
     }
 
     /// <summary>

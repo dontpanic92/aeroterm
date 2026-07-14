@@ -61,6 +61,9 @@
   <SolidColorBrush x:Key="DangerForegroundBrush" Color="{DynamicResource DangerForegroundColor}" />
   <SolidColorBrush x:Key="InfoFillBrush" Color="{DynamicResource InfoFillColor}" />
   <SolidColorBrush x:Key="InfoForegroundBrush" Color="{DynamicResource InfoForegroundColor}" />
+  <SolidColorBrush x:Key="GitDiffAddedBackgroundBrush" Color="{DynamicResource GitDiffAddedBackgroundColor}" />
+  <SolidColorBrush x:Key="GitDiffRemovedBackgroundBrush" Color="{DynamicResource GitDiffRemovedBackgroundColor}" />
+  <SolidColorBrush x:Key="GitDiffModifiedBackgroundBrush" Color="{DynamicResource GitDiffModifiedBackgroundColor}" />
 
   <!-- Selection -->
   <SolidColorBrush x:Key="SelectionFillBrush" Color="{DynamicResource SelectionFillColor}" />

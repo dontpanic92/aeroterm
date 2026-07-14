@@ -16,6 +16,11 @@ internal enum GitDiffRowKind
     Context,
 
     /// <summary>
+    /// A replacement row present on both sides with different text.
+    /// </summary>
+    Modified,
+
+    /// <summary>
     /// A line removed from the old version (left side only).
     /// </summary>
     Removed,

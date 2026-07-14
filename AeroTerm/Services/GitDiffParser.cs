@@ -35,13 +35,40 @@ internal static class GitDiffParser
         var hasFile = false;
         var oldLine = 0;
         var newLine = 0;
+        var removedRows = new List<(int LineNumber, string Text)>();
+        var addedRows = new List<(int LineNumber, string Text)>();
 
         void FlushFile()
         {
             if (hasFile)
             {
+                FlushChangeBlock();
                 files.Add(new GitDiffFile(path, rows.ToArray(), isBinary));
             }
+        }
+
+        void FlushChangeBlock()
+        {
+            var rowCount = Math.Max(removedRows.Count, addedRows.Count);
+            for (var index = 0; index < rowCount; index++)
+            {
+                var hasOld = index < removedRows.Count;
+                var hasNew = index < addedRows.Count;
+                var kind = hasOld && hasNew
+                    ? GitDiffRowKind.Modified
+                    : hasOld
+                        ? GitDiffRowKind.Removed
+                        : GitDiffRowKind.Added;
+                rows.Add(new GitDiffRow(
+                    hasOld ? removedRows[index].LineNumber : null,
+                    hasOld ? removedRows[index].Text : null,
+                    hasNew ? addedRows[index].LineNumber : null,
+                    hasNew ? addedRows[index].Text : null,
+                    kind));
+            }
+
+            removedRows.Clear();
+            addedRows.Clear();
         }
 
         foreach (var line in lines)
@@ -55,6 +82,8 @@ internal static class GitDiffParser
                 rows = new List<GitDiffRow>();
                 oldLine = 0;
                 newLine = 0;
+                removedRows = new List<(int LineNumber, string Text)>();
+                addedRows = new List<(int LineNumber, string Text)>();
                 continue;
             }
 
@@ -96,6 +125,7 @@ internal static class GitDiffParser
 
             if (line.StartsWith("@@", StringComparison.Ordinal))
             {
+                FlushChangeBlock();
                 ParseHunkHeader(line, ref oldLine, ref newLine);
                 continue;
             }
@@ -116,16 +146,17 @@ internal static class GitDiffParser
             switch (marker)
             {
                 case ' ':
+                    FlushChangeBlock();
                     rows.Add(new GitDiffRow(oldLine, content, newLine, content, GitDiffRowKind.Context));
                     oldLine++;
                     newLine++;
                     break;
                 case '-':
-                    rows.Add(new GitDiffRow(oldLine, content, null, null, GitDiffRowKind.Removed));
+                    removedRows.Add((oldLine, content));
                     oldLine++;
                     break;
                 case '+':
-                    rows.Add(new GitDiffRow(null, null, newLine, content, GitDiffRowKind.Added));
+                    addedRows.Add((newLine, content));
                     newLine++;
                     break;
                 default:

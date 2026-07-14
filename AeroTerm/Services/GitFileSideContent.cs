@@ -13,7 +13,9 @@ using System.Collections.Generic;
 /// <param name="Text">Displayed file text.</param>
 /// <param name="SourceLabel">User-visible label describing where the text came from.</param>
 /// <param name="Highlights">Line highlights for this side.</param>
+/// <param name="LineNumbers">Original source line number for each displayed row, or <see langword="null"/> for placeholders.</param>
 internal sealed record GitFileSideContent(
     string Text,
     string SourceLabel,
-    IReadOnlyList<GitDiffHighlightRange> Highlights);
+    IReadOnlyList<GitDiffHighlightRange> Highlights,
+    IReadOnlyList<int?> LineNumbers);

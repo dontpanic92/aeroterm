@@ -65,6 +65,9 @@
       <Color x:Key="DangerForegroundColor">#FFFFFFFF</Color>
       <Color x:Key="InfoFillColor">#FF3574F0</Color>
       <Color x:Key="InfoForegroundColor">#FFFFFFFF</Color>
+      <Color x:Key="GitDiffAddedBackgroundColor">#2434A853</Color>
+      <Color x:Key="GitDiffRemovedBackgroundColor">#24EA4335</Color>
+      <Color x:Key="GitDiffModifiedBackgroundColor">#243574F0</Color>
 
       <!-- Selection (IDE-style: accent at low alpha for surface tint) -->
       <Color x:Key="SelectionFillColor">#FFD4E2FF</Color>
@@ -179,6 +182,9 @@
       <Color x:Key="DangerForegroundColor">#FF1E1F22</Color>
       <Color x:Key="InfoFillColor">#FF548AF7</Color>
       <Color x:Key="InfoForegroundColor">#FF1E1F22</Color>
+      <Color x:Key="GitDiffAddedBackgroundColor">#3049B266</Color>
+      <Color x:Key="GitDiffRemovedBackgroundColor">#30E55765</Color>
+      <Color x:Key="GitDiffModifiedBackgroundColor">#30548AF7</Color>
 
       <!-- Selection (IDE style: accent at low alpha) -->
       <Color x:Key="SelectionFillColor">#FF2E436E</Color>

@@ -69,7 +69,13 @@ internal sealed class GitService
         }
 
         var root = rootResult.Output.Trim();
-        var statusResult = await this.RunGitAsync(root, "status", "--porcelain=v2", "--branch").ConfigureAwait(true);
+        var statusResult = await this.RunGitAsync(
+            root,
+            "status",
+            "--porcelain=v2",
+            "--branch",
+            "--untracked-files=all",
+            "-z").ConfigureAwait(true);
         if (!statusResult.Succeeded)
         {
             return EmptyStatus(workingDirectory, statusResult.ErrorMessage);
@@ -90,14 +96,51 @@ internal sealed class GitService
     }
 
     /// <summary>
+    /// Stages all repository changes.
+    /// </summary>
+    /// <param name="repositoryRoot">Repository root.</param>
+    /// <returns>The Git command result.</returns>
+    internal Task<GitCommandResult> StageAllAsync(string repositoryRoot)
+    {
+        return this.RunGitAsync(repositoryRoot, "add", "-A");
+    }
+
+    /// <summary>
     /// Unstages a path.
     /// </summary>
     /// <param name="repositoryRoot">Repository root.</param>
     /// <param name="path">Repository-relative path.</param>
     /// <returns>The Git command result.</returns>
-    internal Task<GitCommandResult> UnstageAsync(string repositoryRoot, string path)
+    internal async Task<GitCommandResult> UnstageAsync(string repositoryRoot, string path)
     {
-        return this.RunGitAsync(repositoryRoot, "restore", "--staged", "--", path);
+        return await this.UnstagePathsAsync(repositoryRoot, new[] { path }).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Unstages a status entry, including both sides of a rename or copy.
+    /// </summary>
+    /// <param name="repositoryRoot">Repository root.</param>
+    /// <param name="status">Status entry to unstage.</param>
+    /// <returns>The Git command result.</returns>
+    internal async Task<GitCommandResult> UnstageAsync(string repositoryRoot, GitFileStatus status)
+    {
+        var paths = status.OriginalPath is null
+            ? new[] { status.Path }
+            : new[] { status.Path, status.OriginalPath };
+        return await this.UnstagePathsAsync(repositoryRoot, paths).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Unstages all staged repository changes.
+    /// </summary>
+    /// <param name="repositoryRoot">Repository root.</param>
+    /// <returns>The Git command result.</returns>
+    internal async Task<GitCommandResult> UnstageAllAsync(string repositoryRoot)
+    {
+        var headResult = await this.RunGitAsync(repositoryRoot, "rev-parse", "--verify", "HEAD").ConfigureAwait(true);
+        return headResult.Succeeded
+            ? await this.RunGitAsync(repositoryRoot, "restore", "--staged", ":/").ConfigureAwait(true)
+            : await this.RunGitAsync(repositoryRoot, "rm", "--cached", "-r", "--", ".").ConfigureAwait(true);
     }
 
     /// <summary>
@@ -109,6 +152,17 @@ internal sealed class GitService
     internal Task<GitCommandResult> DiscardAsync(string repositoryRoot, string path)
     {
         return this.RunGitAsync(repositoryRoot, "restore", "--", path);
+    }
+
+    /// <summary>
+    /// Deletes an untracked path from the working tree.
+    /// </summary>
+    /// <param name="repositoryRoot">Repository root.</param>
+    /// <param name="path">Repository-relative path.</param>
+    /// <returns>The Git command result.</returns>
+    internal Task<GitCommandResult> DeleteUntrackedAsync(string repositoryRoot, string path)
+    {
+        return this.RunGitAsync(repositoryRoot, "clean", "-f", "-d", "--", path);
     }
 
     /// <summary>
@@ -150,6 +204,19 @@ internal sealed class GitService
     internal Task<GitCommandResult> PushAsync(string repositoryRoot)
     {
         return this.RunGitAsync(repositoryRoot, "push");
+    }
+
+    /// <summary>
+    /// Pulls from the configured upstream and then pushes local commits.
+    /// </summary>
+    /// <param name="repositoryRoot">Repository root.</param>
+    /// <returns>The first failed command result, or the successful push result.</returns>
+    internal async Task<GitCommandResult> SyncAsync(string repositoryRoot)
+    {
+        var pullResult = await this.PullAsync(repositoryRoot).ConfigureAwait(true);
+        return pullResult.Succeeded
+            ? await this.PushAsync(repositoryRoot).ConfigureAwait(true)
+            : pullResult;
     }
 
     /// <summary>
@@ -204,10 +271,11 @@ internal sealed class GitService
                 return this.ErrorComparison(status.Path, workingTreeSide.ErrorMessage);
             }
 
+            var rows = this.BuildAddedRows(workingTreeSide.Side.Text);
             return new GitFileComparison(
                 status.Path,
-                this.EmptySide("Empty"),
-                workingTreeSide.Side with { Highlights = this.FullFileHighlights(workingTreeSide.Side.Text, GitDiffHighlightKind.Added) },
+                this.CreateAlignedSide(rows, oldSide: true, "Empty"),
+                this.CreateAlignedSide(rows, oldSide: false, workingTreeSide.Side.SourceLabel),
                 false,
                 null);
         }
@@ -218,25 +286,38 @@ internal sealed class GitService
             return this.ErrorComparison(status.Path, diff.ErrorMessage);
         }
 
-        if (GitDiffParser.Parse(diff.Output).Any(file => file.IsBinary))
+        var parsedDiff = GitDiffParser.Parse(diff.Output);
+        if (parsedDiff.Any(file => file.IsBinary))
         {
             return new GitFileComparison(status.Path, null, null, true, null);
         }
 
-        var highlights = GitDiffHighlightParser.Parse(diff.Output);
-        var oldSide = await this.LoadOldSideAsync(repositoryRoot, status, highlights.OldRanges).ConfigureAwait(true);
+        var oldSide = await this.LoadOldSideAsync(
+            repositoryRoot,
+            status,
+            Array.Empty<GitDiffHighlightRange>()).ConfigureAwait(true);
         if (oldSide.Side is null)
         {
             return this.ErrorComparison(status.Path, oldSide.ErrorMessage);
         }
 
-        var newSide = await this.LoadNewSideAsync(repositoryRoot, status, highlights.NewRanges).ConfigureAwait(true);
+        var newSide = await this.LoadNewSideAsync(
+            repositoryRoot,
+            status,
+            Array.Empty<GitDiffHighlightRange>()).ConfigureAwait(true);
         if (newSide.Side is null)
         {
             return this.ErrorComparison(status.Path, newSide.ErrorMessage);
         }
 
-        return new GitFileComparison(status.Path, oldSide.Side, newSide.Side, false, null);
+        var changedRows = parsedDiff.FirstOrDefault()?.Rows ?? Array.Empty<GitDiffRow>();
+        var alignedRows = GitAlignedDiffBuilder.Build(oldSide.Side.Text, newSide.Side.Text, changedRows);
+        return new GitFileComparison(
+            status.Path,
+            this.CreateAlignedSide(alignedRows, oldSide: true, oldSide.Side.SourceLabel),
+            this.CreateAlignedSide(alignedRows, oldSide: false, newSide.Side.SourceLabel),
+            false,
+            null);
     }
 
     /// <summary>
@@ -299,17 +380,19 @@ internal sealed class GitService
         var unstaged = new List<GitFileStatus>();
         var untracked = new List<GitFileStatus>();
 
-        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        var records = output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        for (var recordIndex = 0; recordIndex < records.Length; recordIndex++)
         {
+            var line = records[recordIndex];
             if (line.StartsWith("# branch.head ", StringComparison.Ordinal))
             {
-                branch = line["# branch.head ".Length..];
+                branch = line["# branch.head ".Length..].Trim();
                 continue;
             }
 
             if (line.StartsWith("# branch.upstream ", StringComparison.Ordinal))
             {
-                upstream = line["# branch.upstream ".Length..];
+                upstream = line["# branch.upstream ".Length..].Trim();
                 continue;
             }
 
@@ -344,8 +427,15 @@ internal sealed class GitService
             {
                 var indexStatus = line[2];
                 var workTreeStatus = line[3];
-                var (path, originalPath) = this.GetRenamedPorcelainPath(line);
-                staged.Add(new GitFileStatus(path, indexStatus, workTreeStatus, GitStatusBucket.Staged, originalPath));
+                var path = this.GetPorcelainPath(line, 9);
+                var originalPath = recordIndex + 1 < records.Length
+                    ? records[++recordIndex]
+                    : null;
+                if (indexStatus != '.')
+                {
+                    staged.Add(new GitFileStatus(path, indexStatus, workTreeStatus, GitStatusBucket.Staged, originalPath));
+                }
+
                 if (workTreeStatus != '.')
                 {
                     unstaged.Add(new GitFileStatus(path, indexStatus, workTreeStatus, GitStatusBucket.Unstaged, originalPath));
@@ -353,7 +443,7 @@ internal sealed class GitService
             }
             else if (line.StartsWith("u ", StringComparison.Ordinal) && line.Length > 10)
             {
-                var path = this.GetPorcelainPath(line);
+                var path = this.GetPorcelainPath(line, 10);
                 unstaged.Add(new GitFileStatus(path, 'U', 'U', GitStatusBucket.Unstaged));
             }
         }
@@ -397,7 +487,12 @@ internal sealed class GitService
 
     private string GetPorcelainPath(string line)
     {
-        var index = this.IndexOfNthSpace(line, 8);
+        return this.GetPorcelainPath(line, 8);
+    }
+
+    private string GetPorcelainPath(string line, int fieldCount)
+    {
+        var index = this.IndexOfNthSpace(line, fieldCount);
         if (index < 0 || index + 1 >= line.Length)
         {
             return line;
@@ -413,15 +508,62 @@ internal sealed class GitService
 
     private GitFileSideContent EmptySide(string sourceLabel)
     {
-        return new GitFileSideContent(string.Empty, sourceLabel, Array.Empty<GitDiffHighlightRange>());
+        return new GitFileSideContent(
+            string.Empty,
+            sourceLabel,
+            Array.Empty<GitDiffHighlightRange>(),
+            Array.Empty<int?>());
     }
 
-    private IReadOnlyList<GitDiffHighlightRange> FullFileHighlights(string text, GitDiffHighlightKind kind)
+    private IReadOnlyList<GitDiffRow> BuildAddedRows(string text)
     {
         var lineCount = this.CountTextLines(text);
-        return lineCount == 0
-            ? Array.Empty<GitDiffHighlightRange>()
-            : new[] { new GitDiffHighlightRange(1, lineCount, kind) };
+        var rows = new List<GitDiffRow>(lineCount);
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
+        for (var index = 0; index < lineCount; index++)
+        {
+            rows.Add(new GitDiffRow(null, null, index + 1, lines[index], GitDiffRowKind.Added));
+        }
+
+        return rows;
+    }
+
+    private GitFileSideContent CreateAlignedSide(
+        IReadOnlyList<GitDiffRow> rows,
+        bool oldSide,
+        string sourceLabel)
+    {
+        var text = string.Join(
+            "\n",
+            rows.Select(row => oldSide ? row.OldText ?? string.Empty : row.NewText ?? string.Empty));
+        var lineNumbers = rows
+            .Select(row => oldSide ? row.OldLineNumber : row.NewLineNumber)
+            .ToArray();
+        var highlights = new List<GitDiffHighlightRange>();
+        GitDiffHighlightKind? pendingKind = null;
+        var pendingStart = 0;
+
+        for (var index = 0; index <= rows.Count; index++)
+        {
+            var kind = index < rows.Count ? this.ToHighlightKind(rows[index].Kind) : null;
+            if (kind == pendingKind)
+            {
+                continue;
+            }
+
+            if (pendingKind is not null)
+            {
+                highlights.Add(new GitDiffHighlightRange(
+                    pendingStart + 1,
+                    index - pendingStart,
+                    pendingKind.Value));
+            }
+
+            pendingKind = kind;
+            pendingStart = index;
+        }
+
+        return new GitFileSideContent(text, sourceLabel, highlights, lineNumbers);
     }
 
     private int CountTextLines(string text)
@@ -484,7 +626,7 @@ internal sealed class GitService
 
         return await this.LoadGitBlobSideAsync(
             repositoryRoot,
-            $":{status.Path}",
+            $":{status.OriginalPath ?? status.Path}",
             "Index",
             highlights).ConfigureAwait(true);
     }
@@ -534,7 +676,7 @@ internal sealed class GitService
             return (null, $"The file is larger than the {TextEditorService.MaxEditableBytes / 1024 / 1024} MiB editor limit.");
         }
 
-        return (new GitFileSideContent(result.Output, sourceLabel, highlights), null);
+        return (new GitFileSideContent(result.Output, sourceLabel, highlights, Array.Empty<int?>()), null);
     }
 
     private (GitFileSideContent? Side, string? ErrorMessage) LoadWorkingTreeSide(
@@ -552,20 +694,8 @@ internal sealed class GitService
         return (new GitFileSideContent(
             result.Document.Text,
             sourceLabel,
-            highlights ?? Array.Empty<GitDiffHighlightRange>()), null);
-    }
-
-    private (string Path, string? OriginalPath) GetRenamedPorcelainPath(string line)
-    {
-        var index = this.IndexOfNthSpace(line, 9);
-        if (index < 0 || index + 1 >= line.Length)
-        {
-            return (line, null);
-        }
-
-        var paths = line[(index + 1)..];
-        var separator = paths.IndexOf('\t', StringComparison.Ordinal);
-        return separator >= 0 ? (paths[..separator], paths[(separator + 1)..]) : (paths, null);
+            highlights ?? Array.Empty<GitDiffHighlightRange>(),
+            Array.Empty<int?>()), null);
     }
 
     private int IndexOfNthSpace(string value, int count)
@@ -584,5 +714,28 @@ internal sealed class GitService
         }
 
         return -1;
+    }
+
+    private async Task<GitCommandResult> UnstagePathsAsync(
+        string repositoryRoot,
+        IReadOnlyList<string> paths)
+    {
+        var headResult = await this.RunGitAsync(repositoryRoot, "rev-parse", "--verify", "HEAD").ConfigureAwait(true);
+        var arguments = headResult.Succeeded
+            ? new List<string> { "restore", "--staged", "--" }
+            : new List<string> { "rm", "--cached", "-r", "--" };
+        arguments.AddRange(paths);
+        return await this.RunGitAsync(repositoryRoot, arguments.ToArray()).ConfigureAwait(true);
+    }
+
+    private GitDiffHighlightKind? ToHighlightKind(GitDiffRowKind kind)
+    {
+        return kind switch
+        {
+            GitDiffRowKind.Added => GitDiffHighlightKind.Added,
+            GitDiffRowKind.Removed => GitDiffHighlightKind.Removed,
+            GitDiffRowKind.Modified => GitDiffHighlightKind.Modified,
+            _ => null,
+        };
     }
 }

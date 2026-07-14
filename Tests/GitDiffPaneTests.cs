@@ -78,7 +78,7 @@ public sealed class GitDiffPaneTests
     }
 
     /// <summary>
-    /// Refreshing a repository with changes selects the first change and renders the AvaloniaEdit old/new editors.
+    /// Refreshing a repository with changes selects the first change and renders aligned content and gutter editors.
     /// </summary>
     /// <returns>A task that completes when the pane updates.</returns>
     [AvaloniaTest]
@@ -98,10 +98,71 @@ public sealed class GitDiffPaneTests
             .ToArray());
         var editorTexts = await Dispatcher.UIThread.InvokeAsync(() => editors.Select(GetEditorText).ToArray());
         var editorsVisible = await Dispatcher.UIThread.InvokeAsync(() => editors.All(editor => editor.IsVisible));
-        Assert.That(editors, Has.Length.EqualTo(2));
+        var buttons = await Dispatcher.UIThread.InvokeAsync(() => pane.GetLogicalDescendants()
+            .OfType<Button>()
+            .Where(button => button.Content is string)
+            .ToDictionary(button => (string)button.Content!, button => button.IsEnabled));
+        var splitterCount = await Dispatcher.UIThread.InvokeAsync(() => pane.GetLogicalDescendants()
+            .OfType<GridSplitter>()
+            .Count());
+        Assert.That(editors, Has.Length.EqualTo(4));
         Assert.That(editorsVisible, Is.True);
         Assert.That(editorTexts, Does.Contain("initial"));
         Assert.That(editorTexts, Does.Contain("changed"));
+        Assert.That(buttons["Stage"], Is.True);
+        Assert.That(buttons["Unstage"], Is.False);
+        Assert.That(buttons["Fetch"], Is.True);
+        Assert.That(buttons["Pull"], Is.False);
+        Assert.That(buttons["Previous"], Is.True);
+        Assert.That(buttons["Next"], Is.True);
+        Assert.That(splitterCount, Is.EqualTo(2));
+    }
+
+    /// <summary>
+    /// The compact changes tree shows filenames while retaining the full path in its item model.
+    /// </summary>
+    /// <returns>A task that completes when the pane updates.</returns>
+    [AvaloniaTest]
+    public async Task RefreshAsync_WithNestedChange_ShowsCompactFilename()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        Directory.CreateDirectory(Path.Combine(this.tempDir, "folder"));
+        File.WriteAllText(Path.Combine(this.tempDir, "folder", "nested.txt"), "new", new UTF8Encoding(false));
+        var pane = await Dispatcher.UIThread.InvokeAsync(() => new GitDiffPane(() => this.tempDir));
+
+        await Dispatcher.UIThread.InvokeAsync(async () => await pane.RefreshAsync().ConfigureAwait(true));
+        var status = await service.GetStatusAsync(this.tempDir).ConfigureAwait(false);
+        var items = GitDiffPane.BuildChangeItems(status);
+
+        Assert.That(items.Select(item => item.ToString()), Does.Contain("nested.txt"));
+        Assert.That(items.Single(item => item.FileName == "nested.txt").Status.Path, Is.EqualTo("folder/nested.txt"));
+    }
+
+    /// <summary>
+    /// Inserted lines produce a blank old-side placeholder so both content documents have equal row counts.
+    /// </summary>
+    /// <returns>A task that completes when the pane updates.</returns>
+    [AvaloniaTest]
+    public async Task RefreshAsync_WithInsertedLine_RendersAlignedPlaceholder()
+    {
+        var service = new GitService();
+        await this.InitializeRepositoryAsync(service).ConfigureAwait(false);
+        File.WriteAllText(
+            Path.Combine(this.tempDir, "tracked.txt"),
+            "initial\ninserted",
+            new UTF8Encoding(false));
+        var pane = await Dispatcher.UIThread.InvokeAsync(() => new GitDiffPane(() => this.tempDir));
+
+        await Dispatcher.UIThread.InvokeAsync(async () => await pane.RefreshAsync().ConfigureAwait(true));
+
+        var contentTexts = await Dispatcher.UIThread.InvokeAsync(() => pane.GetLogicalDescendants()
+            .OfType<Control>()
+            .Where(control => control.GetType().FullName == "AvaloniaEdit.TextEditor" && control.Width != 52)
+            .Select(GetEditorText)
+            .ToArray());
+
+        Assert.That(contentTexts, Is.EquivalentTo(new[] { "initial\n", "initial\ninserted" }));
     }
 
     private static string? GetEditorText(Control editor)

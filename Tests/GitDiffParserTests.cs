@@ -51,27 +51,22 @@ public sealed class GitDiffParserTests
         Assert.That(file.IsBinary, Is.False);
 
         var rows = file.Rows;
-        Assert.That(rows, Has.Count.EqualTo(4));
+        Assert.That(rows, Has.Count.EqualTo(3));
 
         Assert.That(rows[0].Kind, Is.EqualTo(GitDiffRowKind.Context));
         Assert.That(rows[0].OldLineNumber, Is.EqualTo(1));
         Assert.That(rows[0].NewLineNumber, Is.EqualTo(1));
         Assert.That(rows[0].OldText, Is.EqualTo("context one"));
 
-        Assert.That(rows[1].Kind, Is.EqualTo(GitDiffRowKind.Removed));
+        Assert.That(rows[1].Kind, Is.EqualTo(GitDiffRowKind.Modified));
         Assert.That(rows[1].OldLineNumber, Is.EqualTo(2));
         Assert.That(rows[1].OldText, Is.EqualTo("old line"));
-        Assert.That(rows[1].NewLineNumber, Is.Null);
-        Assert.That(rows[1].NewText, Is.Null);
+        Assert.That(rows[1].NewLineNumber, Is.EqualTo(2));
+        Assert.That(rows[1].NewText, Is.EqualTo("new line"));
 
-        Assert.That(rows[2].Kind, Is.EqualTo(GitDiffRowKind.Added));
-        Assert.That(rows[2].NewLineNumber, Is.EqualTo(2));
-        Assert.That(rows[2].NewText, Is.EqualTo("new line"));
-        Assert.That(rows[2].OldLineNumber, Is.Null);
-
-        Assert.That(rows[3].Kind, Is.EqualTo(GitDiffRowKind.Context));
-        Assert.That(rows[3].OldLineNumber, Is.EqualTo(3));
-        Assert.That(rows[3].NewLineNumber, Is.EqualTo(3));
+        Assert.That(rows[2].Kind, Is.EqualTo(GitDiffRowKind.Context));
+        Assert.That(rows[2].OldLineNumber, Is.EqualTo(3));
+        Assert.That(rows[2].NewLineNumber, Is.EqualTo(3));
     }
 
     /// <summary>
@@ -142,10 +137,10 @@ public sealed class GitDiffParserTests
 
         var rows = GitDiffParser.Parse(diff).Single().Rows;
 
-        Assert.That(rows, Has.Count.EqualTo(4));
+        Assert.That(rows, Has.Count.EqualTo(2));
         Assert.That(rows[0].OldLineNumber, Is.EqualTo(1));
-        Assert.That(rows[2].OldLineNumber, Is.EqualTo(10));
-        Assert.That(rows[3].NewLineNumber, Is.EqualTo(10));
+        Assert.That(rows[1].OldLineNumber, Is.EqualTo(10));
+        Assert.That(rows[1].NewLineNumber, Is.EqualTo(10));
     }
 
     /// <summary>
@@ -172,8 +167,8 @@ public sealed class GitDiffParserTests
         var files = GitDiffParser.Parse(diff);
 
         Assert.That(files.Select(f => f.Path), Is.EqualTo(new[] { "one.txt", "two.txt" }));
-        Assert.That(files[0].Rows, Has.Count.EqualTo(2));
-        Assert.That(files[1].Rows, Has.Count.EqualTo(2));
+        Assert.That(files[0].Rows, Has.Count.EqualTo(1));
+        Assert.That(files[1].Rows, Has.Count.EqualTo(1));
     }
 
     /// <summary>
@@ -213,9 +208,8 @@ public sealed class GitDiffParserTests
 
         var rows = GitDiffParser.Parse(diff).Single().Rows;
 
-        Assert.That(rows, Has.Count.EqualTo(2));
-        Assert.That(rows[0].Kind, Is.EqualTo(GitDiffRowKind.Removed));
-        Assert.That(rows[1].Kind, Is.EqualTo(GitDiffRowKind.Added));
+        Assert.That(rows, Has.Count.EqualTo(1));
+        Assert.That(rows[0].Kind, Is.EqualTo(GitDiffRowKind.Modified));
     }
 
     /// <summary>
@@ -236,6 +230,66 @@ public sealed class GitDiffParserTests
         var rows = GitDiffParser.Parse(diff).Single().Rows;
 
         Assert.That(rows[0].OldText, Is.EqualTo("old"));
-        Assert.That(rows[1].NewText, Is.EqualTo("new"));
+        Assert.That(rows[0].NewText, Is.EqualTo("new"));
+    }
+
+    /// <summary>
+    /// Unequal replacement blocks pair matching rows and leave explicit one-sided additions.
+    /// </summary>
+    [Test]
+    public void Parse_UnequalReplacementBlock_PairsRowsAndKeepsRemainder()
+    {
+        var diff = string.Join(
+            "\n",
+            "diff --git a/file.txt b/file.txt",
+            "--- a/file.txt",
+            "+++ b/file.txt",
+            "@@ -2,1 +2,2 @@",
+            "-old",
+            "+new one",
+            "+new two");
+
+        var rows = GitDiffParser.Parse(diff).Single().Rows;
+
+        Assert.That(rows, Has.Count.EqualTo(2));
+        Assert.That(rows[0].Kind, Is.EqualTo(GitDiffRowKind.Modified));
+        Assert.That(rows[0].OldLineNumber, Is.EqualTo(2));
+        Assert.That(rows[0].NewLineNumber, Is.EqualTo(2));
+        Assert.That(rows[1].Kind, Is.EqualTo(GitDiffRowKind.Added));
+        Assert.That(rows[1].OldLineNumber, Is.Null);
+        Assert.That(rows[1].NewLineNumber, Is.EqualTo(3));
+    }
+
+    /// <summary>
+    /// Zero-context change rows expand into complete full-file rows with blank-side placeholders.
+    /// </summary>
+    [Test]
+    public void Build_ZeroContextRows_AlignsCompleteFiles()
+    {
+        var diff = string.Join(
+            "\n",
+            "diff --git a/file.txt b/file.txt",
+            "--- a/file.txt",
+            "+++ b/file.txt",
+            "@@ -2,1 +2,2 @@",
+            "-old",
+            "+new one",
+            "+new two");
+        var changes = GitDiffParser.Parse(diff).Single().Rows;
+
+        var rows = GitAlignedDiffBuilder.Build(
+            "before\nold\nafter",
+            "before\nnew one\nnew two\nafter",
+            changes);
+
+        Assert.That(rows, Has.Count.EqualTo(4));
+        Assert.That(rows[0].Kind, Is.EqualTo(GitDiffRowKind.Context));
+        Assert.That(rows[1].Kind, Is.EqualTo(GitDiffRowKind.Modified));
+        Assert.That(rows[2].Kind, Is.EqualTo(GitDiffRowKind.Added));
+        Assert.That(rows[2].OldLineNumber, Is.Null);
+        Assert.That(rows[2].OldText, Is.Null);
+        Assert.That(rows[2].NewLineNumber, Is.EqualTo(3));
+        Assert.That(rows[3].OldText, Is.EqualTo("after"));
+        Assert.That(rows[3].NewText, Is.EqualTo("after"));
     }
 }
