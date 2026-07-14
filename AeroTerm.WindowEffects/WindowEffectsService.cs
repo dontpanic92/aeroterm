@@ -151,10 +151,13 @@ public sealed class WindowEffectsService
     }
 
     /// <summary>
-    /// Handles macOS window activation by reapplying transparent titlebar
-    /// settings after Avalonia finishes any internal NSWindow style resets.
-    /// Skipped during full screen since macOS manages the titlebar.
-    /// A no-op on non-macOS platforms.
+    /// Handles macOS window activation by reapplying transparent titlebar,
+    /// Liquid Glass, and material-tone settings after Avalonia or AppKit
+    /// finishes any internal NSWindow resets. This also restores the selected
+    /// tonal variant after the system resumes from sleep, when AppKit can
+    /// temporarily revert the window's effective appearance to Aqua.
+    /// Skipped during full screen since macOS manages the titlebar. A no-op
+    /// on non-macOS platforms.
     /// </summary>
     public async void HandleMacOSActivation()
     {
@@ -177,6 +180,7 @@ public sealed class WindowEffectsService
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
             this.UpdateLiquidGlassBackdrop(nsWindow);
+            this.ApplyMaterialTone(nsWindow);
         }
         catch (Exception ex)
         {
@@ -256,6 +260,7 @@ public sealed class WindowEffectsService
         this.UpdateTransparencyLevelHint();
         this.UpdateLiquidGlassBackdrop(nsWindow);
         this.UpdateBackgroundOpacity();
+        this.ApplyMaterialTone(nsWindow);
 
         // Schedule a second wave of re-applies *after* AppKit's animated
         // zoom completes. `[NSWindow performZoom:]` is animated; the
@@ -633,6 +638,7 @@ public sealed class WindowEffectsService
         // continue to cover the contentView after the zoom resizes it.
         MacOSInterop.RefitWindowEffectViews(nsWindow, this.ShouldHideBehindWindowBlur());
         this.UpdateLiquidGlassBackdrop(nsWindow);
+        this.ApplyMaterialTone(nsWindow);
     }
 
     private async Task ReapplyAfterAnimationAsync(WindowState targetState)
@@ -664,6 +670,7 @@ public sealed class WindowEffectsService
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
             MacOSInterop.RefitWindowEffectViews(nsWindow, this.ShouldHideBehindWindowBlur());
             this.UpdateLiquidGlassBackdrop(nsWindow);
+            this.ApplyMaterialTone(nsWindow);
         }
     }
 
