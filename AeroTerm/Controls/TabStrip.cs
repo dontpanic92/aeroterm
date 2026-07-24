@@ -236,7 +236,7 @@ public sealed class TabStrip : UserControl
         this.scrollRightButton.Click += (_, _) => this.ScrollTabList(ScrollButtonStep);
 
         // DockPanel keeps the SplitButton pinned to the trailing edge
-        // (right in horizontal, top in vertical) so the "+" / profile
+        // (right in horizontal, bottom in vertical) so the "+" / profile
         // menu can never overflow outside the strip's allocated column.
         this.rootDock = new DockPanel
         {
@@ -412,6 +412,11 @@ public sealed class TabStrip : UserControl
             }
 
             this.tabView = value;
+            foreach (var header in this.headers.Values)
+            {
+                header.Detach();
+            }
+
             this.headers.Clear();
             this.tabsPanel.Children.Clear();
 
@@ -435,7 +440,7 @@ public sealed class TabStrip : UserControl
     /// strip renders as a classic left-to-right band; when set to
     /// <see cref="Avalonia.Layout.Orientation.Vertical"/> it becomes a
     /// narrow rail with tabs stacked top-to-bottom, the new-tab button at
-    /// the top, and the active-tab accent moved to the leading edge.
+    /// the bottom, and the active-tab accent moved to the leading edge.
     /// Setting this rebuilds the internal layout and all tab headers in
     /// place (the <see cref="TabView"/> binding is preserved).
     /// </summary>
@@ -937,9 +942,9 @@ public sealed class TabStrip : UserControl
             this.newTabButton.Height = 28;
             this.newTabButton.HorizontalAlignment = HorizontalAlignment.Stretch;
 
-            // The new-tab button sits above the tab list in vertical mode;
+            // The new-tab button sits below the tab list in vertical mode;
             // the scroller fills the remainder so a tall list scrolls.
-            DockPanel.SetDock(this.newTabButton, Dock.Top);
+            DockPanel.SetDock(this.newTabButton, Dock.Bottom);
             this.tabsScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             this.tabsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
 
@@ -1015,6 +1020,7 @@ public sealed class TabStrip : UserControl
         {
             foreach (var h in this.headers.Values)
             {
+                h.Detach();
                 this.tabsPanel.Children.Remove(h);
             }
 
@@ -1999,6 +2005,7 @@ public sealed class TabStrip : UserControl
         private readonly TabSession tab;
         private readonly TabStrip owner;
         private readonly TabTitlePresenter titleBlock;
+        private readonly TextBlock workingDirectoryBlock;
         private readonly Button closeButton;
         private readonly Rectangle divider;
         private readonly Rectangle groupPill;
@@ -2060,15 +2067,34 @@ public sealed class TabStrip : UserControl
             this.titleBlock = new TabTitlePresenter
             {
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(10, 0, 6, 0),
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 ForegroundBrush = owner.tabForegroundBrush,
                 TitleFontSize = 12,
                 Text = tab.Title,
             };
-            Grid.SetRow(this.titleBlock, 1);
-            Grid.SetColumn(this.titleBlock, 1);
-            this.layoutGrid.Children.Add(this.titleBlock);
+
+            this.workingDirectoryBlock = new TextBlock
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                TextWrapping = TextWrapping.NoWrap,
+                Foreground = owner.mutedForegroundBrush,
+                FontSize = 10,
+                IsVisible = false,
+            };
+            this.workingDirectoryBlock.Classes.Add("tab-working-directory");
+
+            var textStack = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(10, 0, 6, 0),
+            };
+            textStack.Children.Add(this.titleBlock);
+            textStack.Children.Add(this.workingDirectoryBlock);
+            Grid.SetRow(textStack, 1);
+            Grid.SetColumn(textStack, 1);
+            this.layoutGrid.Children.Add(textStack);
 
             this.closeButton = new Button
             {
@@ -2128,6 +2154,8 @@ public sealed class TabStrip : UserControl
             this.AttachContextMenu();
             this.RefreshGroup();
             tab.PropertyChanged += this.OnTabPropertyChanged;
+            tab.CurrentWorkingDirectoryChanged += this.OnCurrentWorkingDirectoryChanged;
+            this.OnCurrentWorkingDirectoryChanged(tab.CurrentWorkingDirectory);
         }
 
         public event Action<TabSession>? ActivateRequested;
@@ -2151,6 +2179,7 @@ public sealed class TabStrip : UserControl
         public void Detach()
         {
             this.tab.PropertyChanged -= this.OnTabPropertyChanged;
+            this.tab.CurrentWorkingDirectoryChanged -= this.OnCurrentWorkingDirectoryChanged;
         }
 
         public void SetState(bool active)
@@ -2177,7 +2206,7 @@ public sealed class TabStrip : UserControl
                 this.Width = double.NaN;
                 this.MinWidth = 0;
                 this.MaxWidth = double.PositiveInfinity;
-                this.Height = 40;
+                this.Height = 54;
                 this.HorizontalAlignment = HorizontalAlignment.Stretch;
                 this.CornerRadius = new CornerRadius(0, 6, 6, 0);
                 this.Margin = new Thickness(0, 1, 0, 1);
@@ -2197,6 +2226,7 @@ public sealed class TabStrip : UserControl
                 this.activeIndicator.Width = 3;
                 this.activeIndicator.Height = double.NaN;
                 this.activeIndicator.Margin = new Thickness(0, 4, 0, 4);
+                this.UpdateWorkingDirectoryVisibility();
             }
             else
             {
@@ -2227,6 +2257,7 @@ public sealed class TabStrip : UserControl
                 this.activeIndicator.Width = double.NaN;
                 this.activeIndicator.Height = 2;
                 this.activeIndicator.Margin = new Thickness(6, 0, 6, 0);
+                this.workingDirectoryBlock.IsVisible = false;
             }
         }
 
@@ -2319,6 +2350,19 @@ public sealed class TabStrip : UserControl
             {
                 this.RefreshGroup();
             }
+        }
+
+        private void OnCurrentWorkingDirectoryChanged(string? workingDirectory)
+        {
+            this.workingDirectoryBlock.Text = workingDirectory ?? string.Empty;
+            this.UpdateWorkingDirectoryVisibility();
+        }
+
+        private void UpdateWorkingDirectoryVisibility()
+        {
+            this.workingDirectoryBlock.IsVisible =
+                this.owner.orientation == Orientation.Vertical
+                && !string.IsNullOrEmpty(this.workingDirectoryBlock.Text);
         }
 
         private void AttachContextMenu()

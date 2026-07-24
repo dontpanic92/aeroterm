@@ -140,6 +140,76 @@ public class TabStripHeadlessTests
     }
 
     /// <summary>
+    /// Vertical headers show the live working directory as a dimmed second
+    /// line, hide it until known, and suppress it again in horizontal mode.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_VerticalHeader_ShowsDimmedWorkingDirectory()
+    {
+        var (window, strip, view) = BuildHostedStrip();
+        try
+        {
+            var fake = new FakeTabContent("shell title");
+            view.AddTab(new TabSession(fake));
+            strip.Orientation = Avalonia.Layout.Orientation.Vertical;
+            Dispatcher.UIThread.RunJobs();
+
+            var cwdBlock = strip.GetLogicalDescendants()
+                .OfType<TextBlock>()
+                .Single(t => t.Classes.Contains("tab-working-directory"));
+            Assert.That(cwdBlock.IsVisible, Is.False);
+
+            fake.RaiseCurrentWorkingDirectory("/work/aeroterm");
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.That(cwdBlock.Text, Is.EqualTo("/work/aeroterm"));
+            Assert.That(cwdBlock.IsVisible, Is.True);
+            Assert.That(cwdBlock.Foreground, Is.InstanceOf<SolidColorBrush>());
+            Assert.That(((SolidColorBrush)cwdBlock.Foreground!).Color.A, Is.LessThan(0xF0));
+
+            strip.Orientation = Avalonia.Layout.Orientation.Horizontal;
+            Dispatcher.UIThread.RunJobs();
+            Assert.That(cwdBlock.IsVisible, Is.False);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Removing all tabs detaches the header's live working-directory
+    /// subscription so discarded visuals are not retained or updated.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_RemovedHeader_UnsubscribesWorkingDirectory()
+    {
+        var (window, strip, view) = BuildHostedStrip();
+        try
+        {
+            var fake = new FakeTabContent("shell title");
+            view.AddTab(new TabSession(fake));
+            strip.Orientation = Avalonia.Layout.Orientation.Vertical;
+            Dispatcher.UIThread.RunJobs();
+
+            var cwdBlock = strip.GetLogicalDescendants()
+                .OfType<TextBlock>()
+                .Single(t => t.Classes.Contains("tab-working-directory"));
+
+            view.Tabs.Clear();
+            Dispatcher.UIThread.RunJobs();
+            fake.RaiseCurrentWorkingDirectory("/stale");
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.That(cwdBlock.Text, Is.Empty);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
     /// Middle-click on a tab header closes that tab.
     /// <para>
     /// TODO (headless-ui-tests, Session 14): re-enable once

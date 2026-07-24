@@ -7,11 +7,13 @@ namespace AeroTerm.Tests.UI;
 
 using System.Linq;
 using AeroTerm.Controls;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.NUnit;
 using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using NUnit.Framework;
 
 /// <summary>
@@ -110,6 +112,65 @@ public class TabStripOrientationHeadlessTests
             var headers = FindTabHeaderBorders(strip).ToList();
             Assert.That(headers.Count, Is.EqualTo(2));
             Assert.That(headers[1].Bounds.Y, Is.GreaterThan(headers[0].Bounds.Y));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Vertical mode pins the new-tab split button below the scrolling tab
+    /// list, including when enough tabs are present to overflow the rail.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_Vertical_NewTabButtonStaysBelowScroller()
+    {
+        var view = new TabView();
+        var strip = new TabStrip
+        {
+            View = view,
+            Orientation = Orientation.Vertical,
+        };
+
+        var root = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+        };
+        Grid.SetColumn(strip, 0);
+        Grid.SetColumn(view, 1);
+        root.Children.Add(strip);
+        root.Children.Add(view);
+
+        var window = new Window
+        {
+            Width = 800,
+            Height = 300,
+            Content = root,
+        };
+        window.Show();
+
+        try
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                view.AddTab(new TabSession(new FakeTabContent($"t{i}")));
+            }
+
+            Dispatcher.UIThread.RunJobs();
+
+            var scroller = strip.GetLogicalDescendants().OfType<ScrollViewer>().Single();
+            var newTabButton = strip.GetLogicalDescendants().OfType<SplitButton>().Single();
+            var scrollerOrigin = scroller.TranslatePoint(default, strip) ?? default;
+            var buttonOrigin = newTabButton.TranslatePoint(default, strip) ?? default;
+
+            Assert.That(scroller.Extent.Height, Is.GreaterThan(scroller.Viewport.Height));
+            Assert.That(
+                buttonOrigin.Y,
+                Is.GreaterThanOrEqualTo(scrollerOrigin.Y + scroller.Bounds.Height - 0.5));
+            Assert.That(
+                buttonOrigin.Y + newTabButton.Bounds.Height,
+                Is.LessThanOrEqualTo(strip.Bounds.Height + 0.5));
         }
         finally
         {

@@ -78,15 +78,38 @@
             through to the terminal background.
         -->
         <DockPanel Name="ContentDock" LastChildFill="True">
-            <!-- Side tab host (used when TabBarOrientation == Vertical).
-                 Hidden in Horizontal mode; the strip is re-parented into
-                 TitleBarTabHost instead. -->
-            <Border Name="SideTabHost" DockPanel.Dock="Left"
-                    Background="Transparent" IsVisible="False" />
+            <!-- Vertical rail. Its title bar is confined to the rail so the
+                 terminal can occupy the full height of the right-hand area. -->
+            <Grid Name="SideRail" DockPanel.Dock="Left"
+                  Background="Transparent" IsVisible="False">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="38" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Name="VerticalTitleBar" Grid.Row="0"
+                      Background="Transparent" IsHitTestVisible="True">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Name="VerticalMacChromeHost"
+                            Background="Transparent" />
+                    <Border Grid.Column="1" Name="VerticalTitleBarDragHandle"
+                            Background="Transparent" Focusable="False" />
+                    <Border Grid.Column="2" Name="VerticalWindowControlsHost"
+                            Background="Transparent" />
+                </Grid>
+
+                <Border Grid.Row="1" Name="SideTabHost"
+                        Background="Transparent" />
+            </Grid>
             <Border Name="TerminalBorder" Background="Transparent" />
         </DockPanel>
 
-        <!-- Custom Title Bar — floats on top of the content area. -->
+        <!-- Horizontal-mode title bar — floats on top of the content area. -->
         <Grid Name="TitleBar" VerticalAlignment="Top" IsHitTestVisible="True">
             <Grid.ColumnDefinitions>
                 <!-- Reservation for the macOS native traffic-light cluster.
@@ -98,10 +121,6 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- macOS traffic-light reservation (see column comment).
@@ -109,9 +128,12 @@
                  background area surrounding the native traffic lights
                  still drags / maximizes the window — the AppKit-drawn
                  buttons themselves intercept clicks before Avalonia. -->
-            <Border Grid.Column="0" Name="MacChromeReservation"
-                    Width="0" Background="Transparent"
-                    IsHitTestVisible="False" />
+            <Border Grid.Column="0" Name="HorizontalMacChromeHost"
+                    Background="Transparent">
+                <Border Name="MacChromeReservation"
+                        Width="0" Background="Transparent"
+                        IsHitTestVisible="False" />
+            </Border>
 
             <!-- Logo -->
             <Border Grid.Column="1" Name="LogoDragHandle"
@@ -137,61 +159,60 @@
                     VerticalAlignment="Stretch"
                     ClipToBounds="True" />
 
-            <!-- Title (shown when TabBarOrientation == Vertical; the
-                 horizontal tab strip occupies the same visual slot). -->
-            <TextBlock Grid.Column="3" Name="TitleText" Text=""
-                       VerticalAlignment="Center" HorizontalAlignment="Right"
-                       Margin="8,0" TextTrimming="CharacterEllipsis"
-                       Foreground="{DynamicResource TitleBarForegroundBrush}"
-                       FontSize="12" />
+            <Border Grid.Column="3" Name="HorizontalWindowControlsHost"
+                    Background="Transparent">
+                <StackPanel Name="WindowControlsPanel"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Stretch">
+                    <!-- Settings Button -->
+                    <Button Name="SettingsButton" Content="⚙"
+                            AutomationProperties.Name="Settings"
+                            ToolTip.Tip="Settings"
+                            Classes="titlebar-btn"
+                            Width="46" VerticalAlignment="Stretch" FontSize="14"
+                            CornerRadius="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Focusable="False"
+                            Click="SettingsButton_Click" />
 
-            <!-- Settings Button -->
-            <Button Grid.Column="4" Name="SettingsButton" Content="⚙"
-                    AutomationProperties.Name="Settings"
-                    ToolTip.Tip="Settings"
-                    Classes="titlebar-btn"
-                    Width="46" VerticalAlignment="Stretch" FontSize="14"
-                    CornerRadius="0"
-                    HorizontalContentAlignment="Center"
-                    VerticalContentAlignment="Center"
-                    Focusable="False"
-                    Click="SettingsButton_Click" />
+                    <!-- Minimize Button -->
+                    <Button Name="MinimizeButton" Content="&#x1F5D5;"
+                            AutomationProperties.Name="Minimize"
+                            ToolTip.Tip="Minimize"
+                            Classes="titlebar-btn"
+                            Width="46" VerticalAlignment="Stretch" FontSize="14"
+                            CornerRadius="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Focusable="False"
+                            Click="MinimizeButton_Click" />
 
-            <!-- Minimize Button -->
-            <Button Grid.Column="5" Name="MinimizeButton" Content="&#x1F5D5;"
-                    AutomationProperties.Name="Minimize"
-                    ToolTip.Tip="Minimize"
-                    Classes="titlebar-btn"
-                    Width="46" VerticalAlignment="Stretch" FontSize="14"
-                    CornerRadius="0"
-                    HorizontalContentAlignment="Center"
-                    VerticalContentAlignment="Center"
-                    Focusable="False"
-                    Click="MinimizeButton_Click" />
+                    <!-- Maximize Button -->
+                    <Button Name="MaximizeButton" Content="&#x1F5D6;"
+                            AutomationProperties.Name="Maximize"
+                            ToolTip.Tip="Maximize"
+                            Classes="titlebar-btn"
+                            Width="46" VerticalAlignment="Stretch" FontSize="14"
+                            CornerRadius="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Focusable="False"
+                            Click="MaximizeButton_Click" />
 
-            <!-- Maximize Button -->
-            <Button Grid.Column="6" Name="MaximizeButton" Content="&#x1F5D6;"
-                    AutomationProperties.Name="Maximize"
-                    ToolTip.Tip="Maximize"
-                    Classes="titlebar-btn"
-                    Width="46" VerticalAlignment="Stretch" FontSize="14"
-                    CornerRadius="0"
-                    HorizontalContentAlignment="Center"
-                    VerticalContentAlignment="Center"
-                    Focusable="False"
-                    Click="MaximizeButton_Click" />
-
-            <!-- Close Button -->
-            <Button Grid.Column="7" Name="CloseButton" Content="&#x2715;"
-                    AutomationProperties.Name="Close"
-                    ToolTip.Tip="Close"
-                    Classes="titlebar-btn titlebar-close"
-                    Width="46" VerticalAlignment="Stretch" FontSize="14"
-                    CornerRadius="0"
-                    HorizontalContentAlignment="Center"
-                    VerticalContentAlignment="Center"
-                    Focusable="False"
-                    Click="CloseButton_Click" />
+                    <!-- Close Button -->
+                    <Button Name="CloseButton" Content="&#x2715;"
+                            AutomationProperties.Name="Close"
+                            ToolTip.Tip="Close"
+                            Classes="titlebar-btn titlebar-close"
+                            Width="46" VerticalAlignment="Stretch" FontSize="14"
+                            CornerRadius="0"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
+                            Focusable="False"
+                            Click="CloseButton_Click" />
+                </StackPanel>
+            </Border>
         </Grid>
     </Panel>
 </Window>

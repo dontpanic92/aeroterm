@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using AeroTerm;
 using AeroTerm.Controls;
 using AeroTerm.Services;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.NUnit;
@@ -18,6 +19,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using NUnit.Framework;
 
 /// <summary>
@@ -82,6 +84,48 @@ public class MainWindowHeadlessTests
 
         Assert.That(logoDragHandle.Bounds.Height, Is.EqualTo(titleBar.Bounds.Height).Within(0.5));
         Assert.That(logoDragHandle.Bounds.Width, Is.GreaterThan(logoText.Bounds.Width));
+    }
+
+    /// <summary>
+    /// Vertical-tab mode confines draggable chrome and compact window
+    /// controls to the left rail instead of overlaying the terminal.
+    /// </summary>
+    [AvaloniaTest]
+    public void VerticalTabs_ConfineTitleBarToSideRail()
+    {
+        var settings = new AppSettings { TabBarOrientation = TabBarOrientation.Vertical };
+        var window = new MainWindow(settings);
+        window.Show();
+        PumpJobs();
+
+        try
+        {
+            var horizontalTitleBar = window.FindControl<Grid>("TitleBar")!;
+            var sideRail = window.FindControl<Grid>("SideRail")!;
+            var verticalTitleBar = window.FindControl<Grid>("VerticalTitleBar")!;
+            var dragHandle = window.FindControl<Border>("VerticalTitleBarDragHandle")!;
+            var controls = window.FindControl<StackPanel>("WindowControlsPanel")!;
+            var terminal = window.FindControl<Border>("TerminalBorder")!;
+
+            Assert.That(horizontalTitleBar.IsVisible, Is.False);
+            Assert.That(sideRail.IsVisible, Is.True);
+            Assert.That(sideRail.Bounds.Width, Is.EqualTo(180).Within(0.5));
+            Assert.That(verticalTitleBar.Bounds.Width, Is.EqualTo(sideRail.Bounds.Width).Within(0.5));
+            Assert.That(dragHandle.Bounds.Width, Is.GreaterThan(0));
+
+            var controlsOrigin = controls.TranslatePoint(default, sideRail) ?? default;
+            Assert.That(
+                controlsOrigin.X + controls.Bounds.Width,
+                Is.LessThanOrEqualTo(sideRail.Bounds.Width + 0.5));
+
+            var terminalOrigin = terminal.TranslatePoint(default, window) ?? default;
+            Assert.That(terminalOrigin.X, Is.EqualTo(sideRail.Bounds.Width).Within(0.5));
+            Assert.That(terminalOrigin.Y, Is.EqualTo(0).Within(0.5));
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     /// <summary>

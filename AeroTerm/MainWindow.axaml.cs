@@ -55,19 +55,34 @@ public partial class MainWindow : Window
     /// </summary>
     private const double TitleBarHeight = 38.0;
 
+    private const double HorizontalTitleBarButtonWidth = 46.0;
+
+    private const double VerticalTitleBarButtonWidth = 28.0;
+
     private readonly AppSettings settings;
     private readonly WindowEffectsService effectsService;
     private readonly ILogger log;
     private readonly IUpdateService updateService;
     private readonly Grid titleBar;
-    private readonly TextBlock titleText;
+    private readonly Grid verticalTitleBar;
+    private readonly Grid sideRail;
     private readonly Border terminalBorder;
     private readonly Border titleBarTabHost;
     private readonly Border sideTabHost;
+    private readonly Border horizontalMacChromeHost;
+    private readonly Border verticalMacChromeHost;
+    private readonly Border horizontalWindowControlsHost;
+    private readonly Border verticalWindowControlsHost;
     private readonly Border macChromeReservation;
     private readonly Border titleBarDragHandle;
     private readonly Border titleBarTrailingDragReservation;
+    private readonly Border verticalTitleBarDragHandle;
     private readonly DockPanel titleBarTabDock;
+    private readonly StackPanel windowControlsPanel;
+    private readonly Button settingsButton;
+    private readonly Button minimizeButton;
+    private readonly Button maximizeButton;
+    private readonly Button closeButton;
     private readonly BellService bellService;
     private readonly TabView tabView;
     private readonly TabStrip tabStrip;
@@ -102,11 +117,22 @@ public partial class MainWindow : Window
         this.InitializeComponent();
 
         this.titleBar = this.FindControl<Grid>("TitleBar")!;
-        this.titleText = this.FindControl<TextBlock>("TitleText")!;
+        this.verticalTitleBar = this.FindControl<Grid>("VerticalTitleBar")!;
+        this.sideRail = this.FindControl<Grid>("SideRail")!;
         this.terminalBorder = this.FindControl<Border>("TerminalBorder")!;
         this.titleBarTabHost = this.FindControl<Border>("TitleBarTabHost")!;
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
+        this.horizontalMacChromeHost = this.FindControl<Border>("HorizontalMacChromeHost")!;
+        this.verticalMacChromeHost = this.FindControl<Border>("VerticalMacChromeHost")!;
+        this.horizontalWindowControlsHost = this.FindControl<Border>("HorizontalWindowControlsHost")!;
+        this.verticalWindowControlsHost = this.FindControl<Border>("VerticalWindowControlsHost")!;
         this.macChromeReservation = this.FindControl<Border>("MacChromeReservation")!;
+        this.verticalTitleBarDragHandle = this.FindControl<Border>("VerticalTitleBarDragHandle")!;
+        this.windowControlsPanel = this.FindControl<StackPanel>("WindowControlsPanel")!;
+        this.settingsButton = this.FindControl<Button>("SettingsButton")!;
+        this.minimizeButton = this.FindControl<Button>("MinimizeButton")!;
+        this.maximizeButton = this.FindControl<Button>("MaximizeButton")!;
+        this.closeButton = this.FindControl<Button>("CloseButton")!;
 
         // Wire the full logo cell into the same drag / double-click-to-zoom
         // gesture as the rest of the title bar so users can grab its blank
@@ -134,6 +160,8 @@ public partial class MainWindow : Window
         };
         this.titleBarDragHandle.PointerPressed += this.TitleBar_PointerPressed;
         this.titleBarDragHandle.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
+        this.verticalTitleBarDragHandle.PointerPressed += this.TitleBar_PointerPressed;
+        this.verticalTitleBarDragHandle.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
 
         // Fixed-width trailing reservation that guarantees a draggable
         // area on the right edge of the horizontal tab strip even when
@@ -1029,21 +1057,13 @@ public partial class MainWindow : Window
     {
         var title = this.tabView.ActiveTab?.Title;
         this.Title = string.IsNullOrEmpty(title) ? "AeroTerm" : title;
-        this.titleText.Text = this.Title;
     }
 
     private void UpdateTabStripVisibility()
     {
-        // The tab strip is always visible (even with a single tab). When
-        // horizontal it lives in the titlebar; when vertical it lives in
-        // the side rail. ApplyTabBarOrientation owns which host is shown
-        // and parents the strip; here we only sync the title-text label.
         bool horizontal = this.settings.TabBarOrientation != TabBarOrientation.Vertical;
-
-        // Horizontal: tabs in the titlebar already convey the active title,
-        // so collapse the redundant TitleText. Vertical: titlebar has no
-        // tabs, so show the title.
-        this.titleText.IsVisible = !horizontal;
+        this.titleBar.IsVisible = horizontal;
+        this.sideRail.IsVisible = !horizontal;
     }
 
     private void OnTabsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -1142,29 +1162,10 @@ public partial class MainWindow : Window
     private void SetupMacOSTitleBar()
     {
         // Hide custom titlebar buttons on macOS (uses native traffic lights)
-        var settingsBtn = this.FindControl<Button>("SettingsButton");
-        var minimizeBtn = this.FindControl<Button>("MinimizeButton");
-        var maximizeBtn = this.FindControl<Button>("MaximizeButton");
-        var closeBtn = this.FindControl<Button>("CloseButton");
-        if (settingsBtn != null)
-        {
-            settingsBtn.IsVisible = false;
-        }
-
-        if (minimizeBtn != null)
-        {
-            minimizeBtn.IsVisible = false;
-        }
-
-        if (maximizeBtn != null)
-        {
-            maximizeBtn.IsVisible = false;
-        }
-
-        if (closeBtn != null)
-        {
-            closeBtn.IsVisible = false;
-        }
+        this.settingsButton.IsVisible = false;
+        this.minimizeButton.IsVisible = false;
+        this.maximizeButton.IsVisible = false;
+        this.closeButton.IsVisible = false;
 
         // Hide logo on macOS (native title bar shows app name)
         var logoDragHandle = this.FindControl<Border>("LogoDragHandle");
@@ -1246,31 +1247,29 @@ public partial class MainWindow : Window
         bool vertical = this.settings.TabBarOrientation == TabBarOrientation.Vertical;
         this.tabStrip.Orientation = vertical ? Avalonia.Layout.Orientation.Vertical : Avalonia.Layout.Orientation.Horizontal;
 
-        // Single titlebar height for both orientations so the macOS native
-        // traffic-light cluster (centered by AppKit inside the unified
-        // titlebar region) lines up with our tab strip / title text on
-        // every platform.
         this.titleBar.Height = TitleBarHeight;
+        this.verticalTitleBar.Height = TitleBarHeight;
 
         // Re-parent the single TabStrip into the orientation-appropriate
-        // host. Horizontal => inside the custom titlebar (alongside a
-        // transparent drag handle that fills the trailing space);
-        // Vertical => docked Left in the content area, with the drag
-        // handle alone occupying the title-bar slot so the user can still
-        // grab the title bar to move the window.
+        // host, together with the shared native-chrome reservation and
+        // custom window-control panel.
         this.titleBarTabDock.Children.Clear();
         if (vertical)
         {
             this.sideTabHost.Child = this.tabStrip;
-            DockPanel.SetDock(this.titleBarDragHandle, Dock.Left);
-            this.titleBarTabDock.Children.Add(this.titleBarDragHandle);
-            this.titleBarTabHost.Child = this.titleBarTabDock;
-            this.titleBarTabHost.IsVisible = true;
-            this.sideTabHost.IsVisible = true;
+            this.titleBarTabHost.Child = null;
+            this.MoveTitleBarChrome(
+                this.verticalMacChromeHost,
+                this.verticalWindowControlsHost,
+                VerticalTitleBarButtonWidth);
         }
         else
         {
             this.sideTabHost.Child = null;
+            this.MoveTitleBarChrome(
+                this.horizontalMacChromeHost,
+                this.horizontalWindowControlsHost,
+                HorizontalTitleBarButtonWidth);
 
             // Order matters: DockPanel measures children in declaration
             // order. Adding the trailing reservation FIRST (Dock.Right)
@@ -1286,9 +1285,7 @@ public partial class MainWindow : Window
             // LastChildFill: the empty area between the tab strip's
             // trailing edge and the fixed reservation also drags / zooms.
             this.titleBarTabDock.Children.Add(this.titleBarDragHandle);
-
             this.titleBarTabHost.Child = this.titleBarTabDock;
-            this.sideTabHost.IsVisible = false;
             this.titleBarTabHost.IsVisible = true;
         }
 
@@ -1302,6 +1299,22 @@ public partial class MainWindow : Window
         }
 
         this.UpdateTabStripVisibility();
+    }
+
+    private void MoveTitleBarChrome(Border macHost, Border controlsHost, double buttonWidth)
+    {
+        this.horizontalMacChromeHost.Child = null;
+        this.verticalMacChromeHost.Child = null;
+        macHost.Child = this.macChromeReservation;
+
+        this.horizontalWindowControlsHost.Child = null;
+        this.verticalWindowControlsHost.Child = null;
+        controlsHost.Child = this.windowControlsPanel;
+
+        this.settingsButton.Width = buttonWidth;
+        this.minimizeButton.Width = buttonWidth;
+        this.maximizeButton.Width = buttonWidth;
+        this.closeButton.Width = buttonWidth;
     }
 
     /// <summary>
