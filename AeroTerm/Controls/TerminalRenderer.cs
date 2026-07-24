@@ -79,6 +79,8 @@ internal sealed class TerminalRenderer : IDisposable
     /// <param name="searchMatches">Optional visible search-overlay matches
     /// to highlight (projected into <see cref="Pty.Screen"/> row coords).
     /// Only on-screen matches should be passed.</param>
+    /// <param name="drawDynamicOverlays">Whether cursor and IME overlays
+    /// should be drawn as part of this frame.</param>
     public void Render(
         SKCanvas canvas,
         Screen screen,
@@ -92,7 +94,8 @@ internal sealed class TerminalRenderer : IDisposable
         SKColor selectionColor = default,
         int selectionRowOffset = 0,
         HyperlinkRun? hyperlinkRun = null,
-        IReadOnlyList<VisibleMatch>? searchMatches = null)
+        IReadOnlyList<VisibleMatch>? searchMatches = null,
+        bool drawDynamicOverlays = true)
     {
         canvas.Clear(GetSkColor(screen.BackgroundColor, backgroundAlpha));
 
@@ -250,15 +253,47 @@ internal sealed class TerminalRenderer : IDisposable
             }
         }
 
-        // Draw cursor
-        if (shouldDrawCursor)
+        if (drawDynamicOverlays)
         {
-            this.DrawCursor(canvas, cells, screen, modeInfo, textParam);
+            // Draw cursor
+            if (shouldDrawCursor)
+            {
+                this.DrawCursor(canvas, cells, screen, modeInfo, textParam);
+            }
+
+            // Draw preedit (IME composition) overlay
+            this.DrawPreedit(canvas, screen, textParam);
         }
 
-        // Draw preedit (IME composition) overlay
-        this.DrawPreedit(canvas, screen, textParam);
+        canvas.Restore();
+    }
 
+    /// <summary>
+    /// Draws cursor and IME overlays over a previously-rendered static frame.
+    /// </summary>
+    /// <param name="canvas">The target canvas.</param>
+    /// <param name="screen">The current screen snapshot.</param>
+    /// <param name="textParam">The current text layout parameters.</param>
+    /// <param name="modeInfo">The current cursor mode.</param>
+    /// <param name="shouldDrawCursor">Whether the cursor should be visible.</param>
+    /// <param name="topInset">Vertical terminal grid offset.</param>
+    public void RenderDynamicOverlays(
+        SKCanvas canvas,
+        Screen screen,
+        TextLayoutParameters textParam,
+        ModeInfo? modeInfo,
+        bool shouldDrawCursor,
+        float topInset)
+    {
+        this.textFont.Size = textParam.SkiaFontSize;
+        canvas.Save();
+        canvas.Translate(0, topInset);
+        if (shouldDrawCursor)
+        {
+            this.DrawCursor(canvas, screen.Cells, screen, modeInfo, textParam);
+        }
+
+        this.DrawPreedit(canvas, screen, textParam);
         canvas.Restore();
     }
 

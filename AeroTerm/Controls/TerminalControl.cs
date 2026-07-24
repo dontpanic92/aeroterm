@@ -54,6 +54,7 @@ public class TerminalControl : Control, IDisposable
     private readonly SynchronizedUpdateCoordinator syncUpdateCoordinator;
     private readonly TerminalPointerHandler pointerHandler;
     private readonly TerminalVisualHost visualHost;
+    private readonly TerminalFrameCache terminalFrameCache = new();
     private readonly TitleBarInsetCache titleBarInsetCache = new(TitleBarInsetBlurSigma);
 
     private TextLayoutParameters textParam;
@@ -70,6 +71,11 @@ public class TerminalControl : Control, IDisposable
     private int searchSnapshotScrollbackCount;
     private int searchSnapshotRows;
     private int lastEvictedDelta;
+    private int fontChainGeneration;
+    private long terminalContentGeneration;
+    private long lastStaticFrameContentGeneration;
+    private TerminalFrameCacheKey lastStaticFrameKey;
+    private bool hasLastStaticFrame;
     private string? currentDirectory;
     private volatile bool isRenderingActive = true;
 
@@ -609,6 +615,12 @@ public class TerminalControl : Control, IDisposable
             this.ApplyTerminalUiState();
             this.ScheduleSearchRecompute();
             this.InvalidateVisual();
+        }
+        else
+        {
+            this.hasLastStaticFrame = false;
+            this.terminalFrameCache.Clear();
+            this.titleBarInsetCache.Clear();
         }
     }
 
@@ -1265,20 +1277,107 @@ public class TerminalControl : Control, IDisposable
                 this.searchUsingAltBufferSnapshot)
             : null;
 
-        this.renderer.Render(
-            canvas,
-            renderScreen,
-            this.textParam,
-            this.currentModeInfo,
-            this.EnableLigature,
-            this.BackgroundAlpha,
-            drawCursor,
+        SKMatrix matrix = canvas.TotalMatrix;
+        float scaleX = Math.Max(Math.Abs(matrix.ScaleX), 0.01f);
+        float scaleY = Math.Max(Math.Abs(matrix.ScaleY), 0.01f);
+        int rows = renderScreen.Cells.GetLength(0);
+        int columns = renderScreen.Cells.GetLength(1);
+        int selectionHash = HashCode.Combine(
+            selectionForRender?.Mode ?? TerminalSelectionMode.None,
+            selectionForRender?.Anchor ?? default,
+            selectionForRender?.Active ?? default);
+        int searchMatchesIdentity = this.searchOverlayOpen
+            ? RuntimeHelpers.GetHashCode(this.searchMatches)
+            : 0;
+        int hyperlinkHash = hyperlinkForRender?.GetHashCode() ?? 0;
+        var frameKey = new TerminalFrameCacheKey(
+            Math.Max(1, (int)Math.Ceiling(this.Bounds.Width * scaleX)),
+            Math.Max(1, (int)Math.Ceiling(this.Bounds.Height * scaleY)),
+            scaleX,
+            scaleY,
+            rows,
+            columns,
             this.topInset,
-            selectionForRender,
-            this.selectionColor,
+            this.BackgroundAlpha,
+            this.EnableLigature,
+            this.fontChainGeneration,
+            this.textParam.SkiaFontSize,
+            this.textParam.CharWidth,
+            this.textParam.LineHeight,
+            this.viewportOffset,
+            selectionHash,
             selectionRowOffset,
-            hyperlinkForRender,
-            visibleMatches);
+            this.selectionColor.GetHashCode(),
+            searchMatchesIdentity,
+            this.activeMatchIndex,
+            hyperlinkHash,
+            renderScreen.BackgroundColor,
+            renderScreen.ForegroundColor,
+            renderScreen.Palette.DefaultForeground,
+            renderScreen.Palette.DefaultBackground,
+            RuntimeHelpers.GetHashCode(renderScreen.Palette.Palette));
+
+        long contentGeneration = Volatile.Read(ref this.terminalContentGeneration);
+        bool staticFrameChanged = !this.hasLastStaticFrame
+            || this.lastStaticFrameKey != frameKey
+            || this.lastStaticFrameContentGeneration != contentGeneration;
+        var frameBounds = new SKRect(0, 0, (float)this.Bounds.Width, (float)this.Bounds.Height);
+
+        if (staticFrameChanged)
+        {
+            this.terminalFrameCache.Clear();
+            this.renderer.Render(
+                canvas,
+                renderScreen,
+                this.textParam,
+                this.currentModeInfo,
+                this.EnableLigature,
+                this.BackgroundAlpha,
+                drawCursor,
+                this.topInset,
+                selectionForRender,
+                this.selectionColor,
+                selectionRowOffset,
+                hyperlinkForRender,
+                visibleMatches);
+            this.lastStaticFrameKey = frameKey;
+            this.lastStaticFrameContentGeneration = contentGeneration;
+            this.hasLastStaticFrame = true;
+        }
+        else
+        {
+            canvas.Clear(SKColors.Transparent);
+            if (!this.terminalFrameCache.TryDraw(canvas, frameBounds, frameKey))
+            {
+                this.terminalFrameCache.RebuildAndDraw(
+                    canvas,
+                    frameBounds,
+                    frameKey,
+                    frameCanvas => this.renderer.Render(
+                        frameCanvas,
+                        renderScreen,
+                        this.textParam,
+                        this.currentModeInfo,
+                        this.EnableLigature,
+                        this.BackgroundAlpha,
+                        shouldDrawCursor: false,
+                        this.topInset,
+                        selectionForRender,
+                        this.selectionColor,
+                        selectionRowOffset,
+                        hyperlinkForRender,
+                        visibleMatches,
+                        drawDynamicOverlays: false));
+            }
+
+            this.renderer.RenderDynamicOverlays(
+                canvas,
+                renderScreen,
+                this.textParam,
+                this.currentModeInfo,
+                drawCursor,
+                this.topInset);
+        }
 
         // Render the title-bar inset overlay. When scrolled, show a blurred
         // preview of scrollback rows; otherwise just a tinted background so
@@ -1294,6 +1393,7 @@ public class TerminalControl : Control, IDisposable
         this.ligatureTextShaper.ClearCache();
         this.renderer.DiscardBackbuffer();
         this.fontChain.Rebuild(fontNames);
+        this.fontChainGeneration++;
     }
 
     /// <summary>
@@ -1397,6 +1497,7 @@ public class TerminalControl : Control, IDisposable
         int before = this.buffer.ScrollbackCount;
         long evictedBefore = this.buffer.ScrollbackEvictedTotal;
         this.parser.Process(bytes);
+        Interlocked.Increment(ref this.terminalContentGeneration);
         int after = this.buffer.ScrollbackCount;
         this.lastEvictedDelta = (int)Math.Min(int.MaxValue, this.buffer.ScrollbackEvictedTotal - evictedBefore);
         return after - before;
@@ -1528,6 +1629,7 @@ public class TerminalControl : Control, IDisposable
         this.renderer.Dispose();
         this.ligatureTextShaper.Dispose();
         this.fontChain.Dispose();
+        this.terminalFrameCache.Dispose();
         this.titleBarInsetCache.Dispose();
     }
 
