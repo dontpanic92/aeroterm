@@ -52,4 +52,11 @@ public sealed class Screen
     /// every row as dirty.
     /// </summary>
     public bool[]? DirtyRows { get; set; }
+
+    /// <summary>
+    /// Gets or sets non-consumptive per-row visual generations. A row's value
+    /// changes whenever its rendered cell content changes and remains stable
+    /// across repeated snapshots until the row changes again.
+    /// </summary>
+    public long[] RowGenerations { get; set; } = Array.Empty<long>();
 }

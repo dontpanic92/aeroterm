@@ -195,6 +195,36 @@ public class TerminalBufferTests
     }
 
     /// <summary>
+    /// Row generations remain stable across repeated snapshots and advance
+    /// only for rows whose visual content changes.
+    /// </summary>
+    [Test]
+    public void GetScreen_RowGenerations_AreNonConsumptive()
+    {
+        var buffer = new TerminalBuffer(3, 3);
+        FillRow(buffer, 0, 'A');
+        FillRow(buffer, 1, 'B');
+        FillRow(buffer, 2, 'C');
+
+        var first = buffer.GetScreen();
+        Assert.That(first, Is.Not.Null);
+        long[] initialGenerations = (long[])first!.RowGenerations.Clone();
+
+        var unchanged = buffer.GetScreen();
+        Assert.That(unchanged, Is.Not.Null);
+        Assert.That(unchanged!.RowGenerations, Is.EqualTo(initialGenerations));
+
+        buffer.SetCursorPosition(1, 0);
+        buffer.PutChar('Z');
+        var changed = buffer.GetScreen();
+
+        Assert.That(changed, Is.Not.Null);
+        Assert.That(changed!.RowGenerations[0], Is.EqualTo(initialGenerations[0]));
+        Assert.That(changed.RowGenerations[1], Is.GreaterThan(initialGenerations[1]));
+        Assert.That(changed.RowGenerations[2], Is.EqualTo(initialGenerations[2]));
+    }
+
+    /// <summary>
     /// Resize should report AllDirty in the subsequent snapshot.
     /// </summary>
     [Test]

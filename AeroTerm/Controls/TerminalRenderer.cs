@@ -298,6 +298,248 @@ internal sealed class TerminalRenderer : IDisposable
     }
 
     /// <summary>
+    /// Renders one row's non-default cell backgrounds in row-local coordinates.
+    /// </summary>
+    /// <param name="canvas">The row-local target canvas.</param>
+    /// <param name="screen">The current screen snapshot.</param>
+    /// <param name="row">The screen row to render.</param>
+    /// <param name="textParam">The current text layout parameters.</param>
+    public void RenderStaticBackgroundRow(
+        SKCanvas canvas,
+        Screen screen,
+        int row,
+        TextLayoutParameters textParam)
+    {
+        var cells = screen.Cells;
+        int rows = cells.GetLength(0);
+        int cols = cells.GetLength(1);
+        if (row < 0 || row >= rows)
+        {
+            throw new ArgumentOutOfRangeException(nameof(row));
+        }
+
+        var palette = screen.Palette;
+        for (int j = 0; j < cols; j++)
+        {
+            int cellBg = cells[row, j].ResolveBackground(palette);
+            if (cellBg != screen.BackgroundColor || cells[row, j].Reverse)
+            {
+                float x = j * textParam.CharWidth;
+                int color = cells[row, j].Reverse
+                    ? cells[row, j].ResolveForeground(palette)
+                    : cellBg;
+                this.backgroundPaint.Color = GetSkColor(color);
+                canvas.DrawRect(x, 0, textParam.CharWidth, textParam.LineHeight, this.backgroundPaint);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Renders one row's text and cell decorations in row-local coordinates.
+    /// </summary>
+    /// <param name="canvas">The row-local target canvas.</param>
+    /// <param name="screen">The current screen snapshot.</param>
+    /// <param name="row">The screen row to render.</param>
+    /// <param name="textParam">The current text layout parameters.</param>
+    /// <param name="enableLigature">Whether ligature shaping is enabled.</param>
+    public void RenderStaticForegroundRow(
+        SKCanvas canvas,
+        Screen screen,
+        int row,
+        TextLayoutParameters textParam,
+        bool enableLigature)
+    {
+        var cells = screen.Cells;
+        int rows = cells.GetLength(0);
+        int cols = cells.GetLength(1);
+        if (row < 0 || row >= rows)
+        {
+            throw new ArgumentOutOfRangeException(nameof(row));
+        }
+
+        this.textFont.Size = textParam.SkiaFontSize;
+        canvas.Save();
+        canvas.Translate(0, -(row * textParam.LineHeight));
+        var palette = screen.Palette;
+        int col = 0;
+        while (col < cols)
+        {
+            int cellRangeStart = col;
+            int cellRangeEnd = col;
+            Cell startCell = cells[row, cellRangeStart];
+            while (cellRangeEnd < cols)
+            {
+                Cell cell = cells[row, cellRangeEnd];
+                if (cell.Character is not null
+                    && (cell.ForegroundColor != startCell.ForegroundColor
+                        || cell.BackgroundColor != startCell.BackgroundColor
+                        || cell.SpecialColor != startCell.SpecialColor
+                        || cell.Italic != startCell.Italic
+                        || cell.Bold != startCell.Bold
+                        || cell.Reverse != startCell.Reverse
+                        || cell.Undercurl != startCell.Undercurl
+                        || cell.Underline != startCell.Underline
+                        || cell.DoubleUnderline != startCell.DoubleUnderline
+                        || cell.Strikethrough != startCell.Strikethrough))
+                {
+                    break;
+                }
+
+                cellRangeEnd++;
+            }
+
+            col = cellRangeEnd;
+            this.DrawCellRange(
+                canvas,
+                cells,
+                palette,
+                row,
+                cellRangeStart,
+                cellRangeEnd,
+                textParam,
+                enableLigature);
+        }
+
+        canvas.Restore();
+    }
+
+    /// <summary>
+    /// Draws selection and search overlays between cached background and
+    /// foreground row layers.
+    /// </summary>
+    /// <param name="canvas">The target canvas.</param>
+    /// <param name="screen">The current screen snapshot.</param>
+    /// <param name="textParam">The current text layout parameters.</param>
+    /// <param name="topInset">Vertical terminal grid offset.</param>
+    /// <param name="selection">Optional active text selection.</param>
+    /// <param name="selectionColor">Selection overlay color.</param>
+    /// <param name="selectionRowOffset">Absolute row mapped to screen row zero.</param>
+    /// <param name="searchMatches">Optional visible search matches.</param>
+    public void RenderMiddleOverlays(
+        SKCanvas canvas,
+        Screen screen,
+        TextLayoutParameters textParam,
+        float topInset,
+        TerminalSelection? selection,
+        SKColor selectionColor,
+        int selectionRowOffset,
+        IReadOnlyList<VisibleMatch>? searchMatches)
+    {
+        canvas.Save();
+        canvas.Translate(0, topInset);
+        int rows = screen.Cells.GetLength(0);
+        int cols = screen.Cells.GetLength(1);
+
+        if (selection is not null && !selection.IsEmpty)
+        {
+            this.selectionPaint.Color = selectionColor;
+            var (sr, sc, er, ec) = selection.GetNormalizedRange();
+            int srScreen = sr - selectionRowOffset;
+            int erScreen = er - selectionRowOffset;
+            int firstScreen = Math.Max(0, srScreen);
+            int lastScreen = Math.Min(rows - 1, erScreen);
+            for (int row = firstScreen; row <= lastScreen; row++)
+            {
+                int startCol = row == srScreen ? Math.Clamp(sc, 0, cols - 1) : 0;
+                int endCol = row == erScreen ? Math.Clamp(ec, 0, cols - 1) : cols - 1;
+                if (endCol < startCol)
+                {
+                    continue;
+                }
+
+                float x = startCol * textParam.CharWidth;
+                float y = row * textParam.LineHeight;
+                float width = (endCol - startCol + 1) * textParam.CharWidth;
+                canvas.DrawRect(x, y, width, textParam.LineHeight, this.selectionPaint);
+            }
+        }
+
+        if (searchMatches is not null && searchMatches.Count > 0)
+        {
+            SKColor baseTint = selectionColor.Alpha > 0
+                ? selectionColor
+                : new SKColor(0x39, 0x66, 0xCC, 0x50);
+            var inactiveFill = new SKColor(baseTint.Red, baseTint.Green, baseTint.Blue, 60);
+            var activeFill = new SKColor(baseTint.Red, baseTint.Green, baseTint.Blue, 130);
+            var borderColor = GetSkColor(screen.ForegroundColor);
+
+            foreach (VisibleMatch match in searchMatches)
+            {
+                if (match.ScreenRow < 0 || match.ScreenRow >= rows || match.CellLength <= 0)
+                {
+                    continue;
+                }
+
+                int startCol = Math.Clamp(match.StartCol, 0, cols - 1);
+                int endCol = Math.Clamp(match.StartCol + match.CellLength - 1, startCol, cols - 1);
+                float x = startCol * textParam.CharWidth;
+                float y = match.ScreenRow * textParam.LineHeight;
+                float width = (endCol - startCol + 1) * textParam.CharWidth;
+                this.searchMatchPaint.Color = match.IsActive ? activeFill : inactiveFill;
+                canvas.DrawRect(x, y, width, textParam.LineHeight, this.searchMatchPaint);
+                if (match.IsActive)
+                {
+                    this.searchActiveBorderPaint.Color = borderColor;
+                    canvas.DrawRect(
+                        x + 0.5f,
+                        y + 0.5f,
+                        width - 1,
+                        textParam.LineHeight - 1,
+                        this.searchActiveBorderPaint);
+                }
+            }
+        }
+
+        canvas.Restore();
+    }
+
+    /// <summary>
+    /// Draws the hyperlink hover underline over cached foreground rows.
+    /// </summary>
+    /// <param name="canvas">The target canvas.</param>
+    /// <param name="screen">The current screen snapshot.</param>
+    /// <param name="textParam">The current text layout parameters.</param>
+    /// <param name="topInset">Vertical terminal grid offset.</param>
+    /// <param name="hyperlinkRun">Optional hyperlink hover run.</param>
+    public void RenderHyperlinkOverlay(
+        SKCanvas canvas,
+        Screen screen,
+        TextLayoutParameters textParam,
+        float topInset,
+        HyperlinkRun? hyperlinkRun)
+    {
+        if (hyperlinkRun is not { } run)
+        {
+            return;
+        }
+
+        var cells = screen.Cells;
+        int rows = cells.GetLength(0);
+        int cols = cells.GetLength(1);
+        if (run.Row < 0 || run.Row >= rows || run.EndCol < run.StartCol)
+        {
+            return;
+        }
+
+        int startCol = Math.Clamp(run.StartCol, 0, cols - 1);
+        int endCol = Math.Clamp(run.EndCol, 0, cols - 1);
+        if (endCol < startCol)
+        {
+            return;
+        }
+
+        var palette = screen.Palette;
+        int foreground = cells[run.Row, startCol].Reverse
+            ? cells[run.Row, startCol].ResolveBackground(palette)
+            : cells[run.Row, startCol].ResolveForeground(palette);
+        this.underlinePaint.Color = GetSkColor(foreground);
+        float y = topInset + ((run.Row + 1) * textParam.LineHeight) - 1;
+        float startX = startCol * textParam.CharWidth;
+        float endX = (endCol + 1) * textParam.CharWidth;
+        canvas.DrawLine(startX, y, endX, y, this.underlinePaint);
+    }
+
+    /// <summary>
     /// Discards any cached rendering state. Currently a no-op since the
     /// renderer paints directly on the canvas, but retained for API
     /// compatibility.

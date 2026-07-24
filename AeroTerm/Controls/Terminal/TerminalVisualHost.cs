@@ -102,6 +102,7 @@ internal sealed class TerminalVisualHost
             Palette = live.Palette,
             AllDirty = true,
             DirtyRows = null,
+            RowGenerations = new long[rows],
         };
     }
 

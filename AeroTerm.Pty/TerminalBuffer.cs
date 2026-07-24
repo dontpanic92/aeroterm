@@ -79,6 +79,8 @@ public class TerminalBuffer
     private bool overline;
 
     private bool[] dirtyRows;
+    private long[] rowGenerations;
+    private long rowGenerationCounter;
     private bool allDirty;
 
     private int defaultFg = 0x000000;
@@ -152,6 +154,7 @@ public class TerminalBuffer
         this.Cols = cols;
         this.cells = new Cell[rows, cols];
         this.dirtyRows = new bool[rows];
+        this.rowGenerations = new long[rows];
         this.rowWrapped = new bool[rows];
         this.tabStops = CreateDefaultTabStops(cols);
         this.scrollBottom = rows - 1;
@@ -1772,6 +1775,14 @@ public class TerminalBuffer
 
         // Propagate dirty metadata to the screen before clearing.
         this.screen.AllDirty = sizeChanged || this.allDirty;
+        if (this.screen.AllDirty)
+        {
+            for (int i = 0; i < this.rowGenerations.Length; i++)
+            {
+                this.rowGenerations[i] = ++this.rowGenerationCounter;
+            }
+        }
+
         if (this.dirtyRows is not null && !this.screen.AllDirty)
         {
             if (this.screen.DirtyRows is null || this.screen.DirtyRows.Length != this.Rows)
@@ -1785,6 +1796,13 @@ public class TerminalBuffer
         {
             this.screen.DirtyRows = null;
         }
+
+        if (this.screen.RowGenerations.Length != this.Rows)
+        {
+            this.screen.RowGenerations = new long[this.Rows];
+        }
+
+        Array.Copy(this.rowGenerations, this.screen.RowGenerations, this.Rows);
 
         this.allDirty = false;
         if (this.dirtyRows is not null)
@@ -2146,6 +2164,7 @@ public class TerminalBuffer
         if (this.dirtyRows is not null && row >= 0 && row < this.dirtyRows.Length)
         {
             this.dirtyRows[row] = true;
+            this.rowGenerations[row] = ++this.rowGenerationCounter;
         }
     }
 
@@ -2408,6 +2427,7 @@ public class TerminalBuffer
         this.Rows = rows;
         this.Cols = cols;
         this.dirtyRows = new bool[rows];
+        this.rowGenerations = new long[rows];
         this.rowWrapped = newRowWrapped;
         var newTabStops = CreateDefaultTabStops(cols);
         Array.Copy(this.tabStops, newTabStops, Math.Min(this.tabStops.Length, newTabStops.Length));
@@ -2733,6 +2753,7 @@ public class TerminalBuffer
         this.Rows = newRows;
         this.Cols = newCols;
         this.dirtyRows = new bool[newRows];
+        this.rowGenerations = new long[newRows];
         var newTabStops = CreateDefaultTabStops(newCols);
         Array.Copy(this.tabStops, newTabStops, Math.Min(this.tabStops.Length, newTabStops.Length));
         this.tabStops = newTabStops;
