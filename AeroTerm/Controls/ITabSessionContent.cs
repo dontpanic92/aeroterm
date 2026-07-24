@@ -74,6 +74,13 @@ internal interface ITabSessionContent : IDisposable
     void ShowGitView();
 
     /// <summary>
+    /// Enables or suppresses rendering work while preserving the underlying
+    /// session and buffer state.
+    /// </summary>
+    /// <param name="active">Whether this content is currently visible to the user.</param>
+    void SetRenderingActive(bool active);
+
+    /// <summary>
     /// Creates a new, independent <see cref="ITabSessionContent"/> configured
     /// to launch a sibling session based on this one — typically reusing the
     /// same shell / args / env snapshot and a best-effort live working

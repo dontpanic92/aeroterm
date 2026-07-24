@@ -35,6 +35,7 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
     private bool disposed;
     private bool started;
     private bool showingGitPane;
+    private bool tabRenderingActive = true;
     private float lastTopInset;
 
     /// <summary>
@@ -130,6 +131,13 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         this.ApplyActiveViewVisibility();
         this.UpdateActiveViewVisuals();
         _ = this.gitPaneView.RefreshAsync();
+    }
+
+    /// <inheritdoc />
+    public void SetRenderingActive(bool active)
+    {
+        this.tabRenderingActive = active;
+        this.ApplyActiveViewVisibility();
     }
 
     /// <inheritdoc />
@@ -344,6 +352,7 @@ internal sealed class CoordinatorTabContent : ITabSessionContent
         if (this.terminal is not null)
         {
             this.terminal.IsVisible = !this.showingGitPane;
+            this.terminal.SetRenderingActive(this.tabRenderingActive && !this.showingGitPane);
 
             // Only force the find overlay closed while the Git pane is shown.
             // When the terminal is visible we leave the overlay's own

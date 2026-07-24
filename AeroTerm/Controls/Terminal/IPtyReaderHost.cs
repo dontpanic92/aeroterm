@@ -13,6 +13,12 @@ namespace AeroTerm.Controls.Terminal;
 internal interface IPtyReaderHost
 {
     /// <summary>
+    /// Gets a value indicating whether redraws should currently be scheduled.
+    /// Buffer parsing continues while this is false.
+    /// </summary>
+    bool CanRender { get; }
+
+    /// <summary>
     /// Gets a value indicating whether DECSET 2026 synchronized-output
     /// mode is currently enabled on the buffer.
     /// </summary>

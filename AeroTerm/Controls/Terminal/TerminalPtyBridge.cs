@@ -17,14 +17,16 @@ using Avalonia.Threading;
 /// </summary>
 internal sealed class TerminalPtyBridge : IDisposable
 {
+    private static readonly TimeSpan MinimumRedrawInterval = TimeSpan.FromSeconds(1d / 60d);
+
     private readonly IPtyConnectionFactory ptyFactory;
     private readonly IPtyReaderHost host;
+    private readonly TerminalRedrawScheduler redrawScheduler;
 
     private IPtyConnection? ptyConnection;
     private Thread? readerThread;
     private int lastPtyCols;
     private int lastPtyRows;
-    private int redrawQueued;
     private volatile bool isDisposed;
 
     /// <summary>
@@ -36,6 +38,17 @@ internal sealed class TerminalPtyBridge : IDisposable
     {
         this.ptyFactory = ptyFactory ?? throw new ArgumentNullException(nameof(ptyFactory));
         this.host = host ?? throw new ArgumentNullException(nameof(host));
+        this.redrawScheduler = new TerminalRedrawScheduler(
+            action => Dispatcher.UIThread.Post(action),
+            (action, delay) => DispatcherTimer.RunOnce(action, delay),
+            () =>
+            {
+                if (!this.isDisposed && this.host.CanRender)
+                {
+                    this.host.OnRedrawTick();
+                }
+            },
+            MinimumRedrawInterval);
     }
 
     /// <summary>
@@ -153,6 +166,7 @@ internal sealed class TerminalPtyBridge : IDisposable
         }
 
         this.isDisposed = true;
+        this.redrawScheduler.Dispose();
 
         if (this.ptyConnection is not null)
         {
@@ -166,38 +180,17 @@ internal sealed class TerminalPtyBridge : IDisposable
     }
 
     /// <summary>
-    /// Clears the redraw-coalescing latch from the render path so the next
-    /// reader-thread post enqueues a fresh UI-thread tick.
-    /// </summary>
-    public void ResetRedrawLatch()
-    {
-        Interlocked.Exchange(ref this.redrawQueued, 0);
-    }
-
-    /// <summary>
-    /// Schedules a coalesced redraw on the UI thread. Safe to call from any
-    /// thread; concurrent callers collapse onto a single posted tick via the
-    /// same latch used by the reader loop.
+    /// Schedules a coalesced, frame-paced redraw on the UI thread. Safe to call
+    /// from any thread.
     /// </summary>
     public void RequestRedraw()
     {
-        if (this.isDisposed)
+        if (this.isDisposed || !this.host.CanRender)
         {
             return;
         }
 
-        if (Interlocked.Exchange(ref this.redrawQueued, 1) == 0)
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (!this.isDisposed)
-                {
-                    this.host.OnRedrawTick();
-                }
-
-                Interlocked.Exchange(ref this.redrawQueued, 0);
-            });
-        }
+        this.redrawScheduler.Request();
     }
 
     private void OnProcessExited(object? sender, EventArgs e)

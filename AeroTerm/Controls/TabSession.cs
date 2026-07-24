@@ -32,6 +32,7 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
     private readonly HashSet<ITabSessionContent> startedContents = new(ReferenceEqualityComparer.Instance);
     private string title;
     private string? groupId;
+    private bool renderingActive = true;
     private bool disposed;
 
     /// <summary>
@@ -375,6 +376,20 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
         this.tree.Dispose();
     }
 
+    /// <summary>
+    /// Enables or suppresses rendering for every pane in the tab while
+    /// preserving their PTY sessions and buffer state.
+    /// </summary>
+    /// <param name="active">Whether the tab is currently visible.</param>
+    internal void SetRenderingActive(bool active)
+    {
+        this.renderingActive = active;
+        foreach (var content in this.AllContents)
+        {
+            content.SetRenderingActive(active);
+        }
+    }
+
     private static ITabSessionContent BuildProfileContent(AppSettings settings, Profile profile, LaunchSpec? fallback)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -406,6 +421,7 @@ public sealed class TabSession : INotifyPropertyChanged, IDisposable
         content.ProcessExitedNormally += exitHandler;
         content.CurrentWorkingDirectoryChanged += cwdHandler;
         this.perPane[content] = new PaneHandlers(titleHandler, exitHandler, cwdHandler);
+        content.SetRenderingActive(this.renderingActive);
     }
 
     private void UnwirePaneContent(ITabSessionContent content)

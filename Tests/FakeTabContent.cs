@@ -62,6 +62,11 @@ internal sealed class FakeTabContent : ITabSessionContent
     public int ShowGitViewCount { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether rendering is currently active.
+    /// </summary>
+    public bool RenderingActive { get; private set; } = true;
+
+    /// <summary>
     /// Raises the <see cref="TitleChanged"/> event.
     /// </summary>
     /// <param name="t">The new title.</param>
@@ -103,6 +108,12 @@ internal sealed class FakeTabContent : ITabSessionContent
     public void ShowGitView()
     {
         this.ShowGitViewCount++;
+    }
+
+    /// <inheritdoc />
+    public void SetRenderingActive(bool active)
+    {
+        this.RenderingActive = active;
     }
 
     /// <inheritdoc />

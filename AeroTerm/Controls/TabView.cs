@@ -389,6 +389,7 @@ public sealed class TabView : UserControl, INotifyPropertyChanged
                 if (!this.contentArea.Children.Contains(tab.Control))
                 {
                     tab.Control.IsVisible = false;
+                    tab.SetRenderingActive(active: false);
                     this.contentArea.Children.Add(tab.Control);
                 }
             }
@@ -414,7 +415,9 @@ public sealed class TabView : UserControl, INotifyPropertyChanged
     {
         foreach (var tab in this.Tabs)
         {
-            tab.Control.IsVisible = ReferenceEquals(tab, this.activeTab);
+            bool active = ReferenceEquals(tab, this.activeTab);
+            tab.Control.IsVisible = active;
+            tab.SetRenderingActive(active);
         }
     }
 

@@ -38,11 +38,35 @@ public class TabViewTests
     public void AddTab_SecondTab_DoesNotReactivate()
     {
         var view = new TabView();
-        var a = new TabSession(new FakeTabContent("a"));
-        var b = new TabSession(new FakeTabContent("b"));
+        var firstContent = new FakeTabContent("a");
+        var secondContent = new FakeTabContent("b");
+        var a = new TabSession(firstContent);
+        var b = new TabSession(secondContent);
         view.AddTab(a);
         view.AddTab(b);
         Assert.That(view.ActiveTab, Is.SameAs(a));
+        Assert.That(firstContent.RenderingActive, Is.True);
+        Assert.That(secondContent.RenderingActive, Is.False);
+    }
+
+    /// <summary>
+    /// Activating a tab transfers rendering activity to that tab only.
+    /// </summary>
+    [AvaloniaTest]
+    public void ActivateTab_TransfersRenderingActivity()
+    {
+        var view = new TabView();
+        var firstContent = new FakeTabContent("a");
+        var secondContent = new FakeTabContent("b");
+        var first = new TabSession(firstContent);
+        var second = new TabSession(secondContent);
+        view.AddTab(first);
+        view.AddTab(second);
+
+        view.ActivateTab(second);
+
+        Assert.That(firstContent.RenderingActive, Is.False);
+        Assert.That(secondContent.RenderingActive, Is.True);
     }
 
     /// <summary>

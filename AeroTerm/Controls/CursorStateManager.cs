@@ -24,6 +24,7 @@ internal sealed class CursorStateManager : IDisposable
     private StandardCursorType? resolvedPointerCursorType;
     private bool cursorBlinkVisible = true;
     private bool cursorBlinkStarted;
+    private bool isActive = true;
     private bool isDisposed;
 
     /// <summary>
@@ -55,6 +56,28 @@ internal sealed class CursorStateManager : IDisposable
         }
 
         return !ShouldBlinkCursor(modeInfo) || this.cursorBlinkVisible;
+    }
+
+    /// <summary>
+    /// Enables or pauses cursor blinking.
+    /// </summary>
+    /// <param name="active">Whether cursor animation should run.</param>
+    public void SetActive(bool active)
+    {
+        if (this.isActive == active)
+        {
+            return;
+        }
+
+        this.isActive = active;
+        if (active)
+        {
+            this.UpdateCursorBlink(this.getModeInfo(), resetCursorBlink: true);
+        }
+        else
+        {
+            this.StopCursorBlink();
+        }
     }
 
     /// <summary>
@@ -103,7 +126,7 @@ internal sealed class CursorStateManager : IDisposable
     /// <param name="resetCursorBlink">Whether to restart the blink cycle.</param>
     public void UpdateCursorBlink(ModeInfo? modeInfo, bool resetCursorBlink)
     {
-        if (!ShouldBlinkCursor(modeInfo))
+        if (!this.isActive || !ShouldBlinkCursor(modeInfo))
         {
             this.StopCursorBlink();
             return;
@@ -220,7 +243,7 @@ internal sealed class CursorStateManager : IDisposable
     private void OnCursorBlinkTick(object? sender, EventArgs e)
     {
         var modeInfo = this.getModeInfo();
-        if (!ShouldBlinkCursor(modeInfo))
+        if (!this.isActive || !ShouldBlinkCursor(modeInfo))
         {
             bool wasHidden = !this.cursorBlinkVisible;
             this.StopCursorBlink();

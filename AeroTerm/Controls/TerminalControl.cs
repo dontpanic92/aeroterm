@@ -5,6 +5,7 @@
 
 namespace AeroTerm.Controls;
 
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using AeroTerm.Controls.Terminal;
@@ -53,6 +54,7 @@ public class TerminalControl : Control, IDisposable
     private readonly SynchronizedUpdateCoordinator syncUpdateCoordinator;
     private readonly TerminalPointerHandler pointerHandler;
     private readonly TerminalVisualHost visualHost;
+    private readonly TitleBarInsetCache titleBarInsetCache = new(TitleBarInsetBlurSigma);
 
     private TextLayoutParameters textParam;
     private ModeInfo currentModeInfo;
@@ -69,6 +71,7 @@ public class TerminalControl : Control, IDisposable
     private int searchSnapshotRows;
     private int lastEvictedDelta;
     private string? currentDirectory;
+    private volatile bool isRenderingActive = true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TerminalControl"/> class.
@@ -587,6 +590,29 @@ public class TerminalControl : Control, IDisposable
     }
 
     /// <summary>
+    /// Enables or suppresses rendering work while PTY parsing and buffer
+    /// updates continue in the background.
+    /// </summary>
+    /// <param name="active">Whether this terminal is currently visible.</param>
+    internal void SetRenderingActive(bool active)
+    {
+        if (this.isRenderingActive == active)
+        {
+            return;
+        }
+
+        this.isRenderingActive = active;
+        this.cursorState.SetActive(active && this.IsFocused);
+        if (active)
+        {
+            this.UpdateModeInfoFromBuffer();
+            this.ApplyTerminalUiState();
+            this.ScheduleSearchRecompute();
+            this.InvalidateVisual();
+        }
+    }
+
+    /// <summary>
     /// Renders the control directly to a supplied Skia canvas for tests.
     /// </summary>
     /// <param name="canvas">The target Skia canvas.</param>
@@ -792,6 +818,7 @@ public class TerminalControl : Control, IDisposable
             this.ptyBridge.WriteToPty(Encoding.ASCII.GetBytes("\x1B[I"));
         }
 
+        this.cursorState.SetActive(this.isRenderingActive);
         this.cursorState.UpdateCursorBlink(this.currentModeInfo, resetCursorBlink: true);
     }
 
@@ -806,6 +833,11 @@ public class TerminalControl : Control, IDisposable
 
         this.inputHandler.ClearPressedButton();
         this.pointerHandler.OnFocusLost();
+        this.cursorState.SetActive(active: false);
+        if (this.isRenderingActive)
+        {
+            this.InvalidateVisual();
+        }
     }
 
     /// <summary>
@@ -1179,8 +1211,6 @@ public class TerminalControl : Control, IDisposable
             return;
         }
 
-        this.ptyBridge.ResetRedrawLatch();
-
         // Update IME cursor position.
         var cursorPos = screen.CursorPosition;
         var tp = this.textParam;
@@ -1286,59 +1316,75 @@ public class TerminalControl : Control, IDisposable
         int ghostStart = Math.Max(0, viewportTop - insetRowCount);
         int actualGhostRows = viewportTop - ghostStart;
 
-        if (actualGhostRows > 0)
+        if (actualGhostRows <= 0)
         {
-            // Draw only ghost-row text into a blurred layer. The inset
-            // background is already the same as the main terminal canvas, so
-            // painting or blurring cell backgrounds would create a visible
-            // titlebar-only shadow/tint.
-            using var blurFilter = SKImageFilter.CreateBlur(TitleBarInsetBlurSigma, TitleBarInsetBlurSigma);
-            using var layerPaint = new SKPaint { ImageFilter = blurFilter };
+            this.titleBarInsetCache.Clear();
+            return;
+        }
 
-            canvas.Save();
-            canvas.ClipRect(insetRect);
-            canvas.SaveLayer(layerPaint);
+        SKMatrix matrix = canvas.TotalMatrix;
+        float scaleX = Math.Max(Math.Abs(matrix.ScaleX), 0.01f);
+        float scaleY = Math.Max(Math.Abs(matrix.ScaleY), 0.01f);
+        var key = new TitleBarInsetCacheKey(
+            Math.Max(1, (int)Math.Ceiling(canvasWidth * scaleX)),
+            Math.Max(1, (int)Math.Ceiling(insetHeight * scaleY)),
+            scaleX,
+            scaleY,
+            scrollbackCount,
+            this.buffer.ScrollbackEvictedTotal,
+            this.viewportOffset,
+            this.textParam.SkiaFontSize,
+            this.fontChain.PrimaryTypeface?.Handle ?? 0,
+            screen.Palette.DefaultForeground,
+            screen.Palette.DefaultBackground,
+            RuntimeHelpers.GetHashCode(screen.Palette.Palette));
 
-            using var fgPaint = new SKPaint { IsAntialias = true };
-            using var ghostFont = new SKFont { Size = this.textParam.SkiaFontSize, Subpixel = true };
-            if (this.fontChain.PrimaryTypeface is { } primaryTf)
+        this.titleBarInsetCache.Draw(
+            canvas,
+            insetRect,
+            key,
+            insetCanvas =>
             {
-                ghostFont.Typeface = primaryTf;
-            }
-
-            // Align the bottom ghost row with the top of the main grid.
-            float baseY = insetHeight - (actualGhostRows * this.textParam.LineHeight);
-
-            for (int gi = 0; gi < actualGhostRows; gi++)
-            {
-                int sbIndex = ghostStart + gi;
-                if (sbIndex < 0 || sbIndex >= scrollbackCount)
+                // Draw only ghost-row text. The inset background already
+                // matches the terminal canvas, so blurring cell backgrounds
+                // would create a titlebar-only shadow.
+                using var fgPaint = new SKPaint { IsAntialias = true };
+                using var ghostFont = new SKFont { Size = this.textParam.SkiaFontSize, Subpixel = true };
+                if (this.fontChain.PrimaryTypeface is { } primaryTf)
                 {
-                    continue;
+                    ghostFont.Typeface = primaryTf;
                 }
 
-                var sbRow = this.buffer.GetScrollbackLine(sbIndex);
-                float rowY = baseY + (gi * this.textParam.LineHeight);
-                int copyCols = Math.Min(cols, sbRow.Length);
+                // Align the bottom ghost row with the top of the main grid.
+                float baseY = insetHeight - (actualGhostRows * this.textParam.LineHeight);
 
-                for (int j = 0; j < copyCols; j++)
+                for (int gi = 0; gi < actualGhostRows; gi++)
                 {
-                    ref readonly var cell = ref sbRow[j];
-
-                    float x = j * this.textParam.CharWidth;
-                    string? ch = cell.Character;
-                    if (!string.IsNullOrEmpty(ch) && ch != " ")
+                    int sbIndex = ghostStart + gi;
+                    if (sbIndex < 0 || sbIndex >= scrollbackCount)
                     {
-                        fgPaint.Color = TerminalRenderer.GetSkColor(cell.ResolveForeground(screen.Palette));
-                        float baselineY = rowY + (this.textParam.LineHeight * 0.8f);
-                        canvas.DrawText(ch, x, baselineY, ghostFont, fgPaint);
+                        continue;
+                    }
+
+                    var sbRow = this.buffer.GetScrollbackLine(sbIndex);
+                    float rowY = baseY + (gi * this.textParam.LineHeight);
+                    int copyCols = Math.Min(cols, sbRow.Length);
+
+                    for (int j = 0; j < copyCols; j++)
+                    {
+                        ref readonly var cell = ref sbRow[j];
+
+                        float x = j * this.textParam.CharWidth;
+                        string? ch = cell.Character;
+                        if (!string.IsNullOrEmpty(ch) && ch != " ")
+                        {
+                            fgPaint.Color = TerminalRenderer.GetSkColor(cell.ResolveForeground(screen.Palette));
+                            float baselineY = rowY + (this.textParam.LineHeight * 0.8f);
+                            insetCanvas.DrawText(ch, x, baselineY, ghostFont, fgPaint);
+                        }
                     }
                 }
-            }
-
-            canvas.Restore(); // SaveLayer — blur is applied.
-            canvas.Restore(); // ClipRect.
-        }
+            });
     }
 
     private void OnTitleChanged(string title)
@@ -1463,6 +1509,11 @@ public class TerminalControl : Control, IDisposable
 
     private void ReaderOnRedrawTick()
     {
+        if (!this.isRenderingActive)
+        {
+            return;
+        }
+
         this.UpdateModeInfoFromBuffer();
         this.ApplyTerminalUiState();
         this.ScheduleSearchRecompute();
@@ -1477,6 +1528,7 @@ public class TerminalControl : Control, IDisposable
         this.renderer.Dispose();
         this.ligatureTextShaper.Dispose();
         this.fontChain.Dispose();
+        this.titleBarInsetCache.Dispose();
     }
 
     private sealed class ReaderHost : IPtyReaderHost
@@ -1487,6 +1539,8 @@ public class TerminalControl : Control, IDisposable
         {
             this.owner = owner;
         }
+
+        public bool CanRender => this.owner.isRenderingActive;
 
         public bool SynchronizedOutput => this.owner.buffer.SynchronizedOutput;
 
