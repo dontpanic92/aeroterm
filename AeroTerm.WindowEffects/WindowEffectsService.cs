@@ -24,6 +24,7 @@ public sealed class WindowEffectsService
     private bool isMacFullScreen;
     private bool isDialogOpen;
     private bool liquidGlassFallbackLogged;
+    private bool isWindowMaximized;
     private byte resolvedBackgroundAlpha;
     private Color resolvedBackgroundColor;
 
@@ -104,13 +105,17 @@ public sealed class WindowEffectsService
     /// preserved unchanged and re-honoured on exit from full screen.
     /// </summary>
     private bool EffectiveBlurEnabled =>
-        this.settings.EnableBlurBehind && !this.isMacFullScreen;
+        this.settings.EnableBlurBehind
+        && !this.isMacFullScreen
+        && !(this.settings.DisableEffectsWhenMaximized && this.isWindowMaximized);
 
     /// <summary>
     /// Configures initial blur and transparency settings on the window.
     /// </summary>
     public void SetupBlurBehind()
     {
+        this.isMacFullScreen = this.window.WindowState == WindowState.FullScreen;
+        this.isWindowMaximized = this.window.WindowState == WindowState.Maximized;
         this.window.TransparencyBackgroundFallback = Brushes.Transparent;
         this.window.Background = Brushes.Transparent;
         this.UpdateTransparencyLevelHint();
@@ -222,16 +227,30 @@ public sealed class WindowEffectsService
     /// <param name="state">The new <see cref="WindowState"/>.</param>
     public void HandleMacOSWindowStateChanged(WindowState state)
     {
+        // Track window state before anything can bail out. EffectiveBlurEnabled
+        // is derived from these flags, so they must stay correct even when the
+        // native handle is not available yet — otherwise the managed side keeps
+        // painting a translucent background for a window whose effects should
+        // have collapsed.
+        bool isFullScreen = state == WindowState.FullScreen;
+        bool wasFullScreen = this.isMacFullScreen;
+        this.isMacFullScreen = isFullScreen;
+        this.isWindowMaximized = state == WindowState.Maximized;
+
         var nsWindow = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (nsWindow == IntPtr.Zero)
         {
             this.logger.LogInformation("macOS platform handle unavailable during WindowState change.");
+            this.UpdateTransparencyLevelHint();
+            this.UpdateBackgroundOpacity();
+
+            if (isFullScreen != wasFullScreen)
+            {
+                this.MacOSFullScreenChanged?.Invoke(isFullScreen);
+            }
+
             return;
         }
-
-        bool isFullScreen = state == WindowState.FullScreen;
-        bool wasFullScreen = this.isMacFullScreen;
-        this.isMacFullScreen = isFullScreen;
 
         if (isFullScreen)
         {
@@ -730,6 +749,7 @@ public sealed class WindowEffectsService
         {
             case nameof(IWindowEffectsSettings.EnableBlurBehind):
             case nameof(IWindowEffectsSettings.BlurType):
+            case nameof(IWindowEffectsSettings.DisableEffectsWhenMaximized):
                 Dispatcher.UIThread.Post(() =>
                 {
                     this.UpdateBlurPreservationForCurrentSettings();

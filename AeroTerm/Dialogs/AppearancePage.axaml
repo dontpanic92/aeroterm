@@ -22,6 +22,12 @@
                                                   Width="220" HorizontalAlignment="Left" />
                 </StackPanel>
 
+                <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.DisableEffectsWhenMaximized}"
+                          Content="Disable transparency while maximized (saves GPU)"
+                          IsChecked="{Binding DisableEffectsWhenMaximized, Mode=TwoWay}"
+                          IsEnabled="{Binding IsOpacityEnabled}"
+                          Margin="20,0,0,5" />
+
                 <StackPanel dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.TintOpacity}"
                             Orientation="Horizontal" Margin="20,0,0,0">
                     <TextBlock Name="TintOpacityLabel" Text="Tint Opacity" VerticalAlignment="Center" Width="110" />

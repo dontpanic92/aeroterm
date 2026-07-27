@@ -41,6 +41,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
 
     private bool enableBlurBehind = true;
     private BlurType blurType = BlurType.Acrylic;
+    private bool disableEffectsWhenMaximized = true;
     private MaterialTone materialTone = MaterialTone.Light;
     private double backgroundTintOpacity = 0.85;
     private double backgroundMaterialOpacity = 0.75;
@@ -114,6 +115,19 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     {
         get => this.blurType;
         set => this.SetField(ref this.blurType, value);
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether transparency effects collapse
+    /// while the window is maximized. Defaults to <see langword="true"/>
+    /// because a translucent maximized window keeps the compositor blending
+    /// every window behind it across the whole screen on each refresh, which
+    /// is the single largest GPU cost the application can incur.
+    /// </summary>
+    public bool DisableEffectsWhenMaximized
+    {
+        get => this.disableEffectsWhenMaximized;
+        set => this.SetField(ref this.disableEffectsWhenMaximized, value);
     }
 
     /// <summary>
@@ -530,6 +544,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         var fresh = Load();
         this.EnableBlurBehind = fresh.EnableBlurBehind;
         this.BlurType = fresh.BlurType;
+        this.DisableEffectsWhenMaximized = fresh.DisableEffectsWhenMaximized;
         this.MaterialTone = fresh.MaterialTone;
         this.BackgroundTintOpacity = fresh.BackgroundTintOpacity;
         this.BackgroundMaterialOpacity = fresh.BackgroundMaterialOpacity;

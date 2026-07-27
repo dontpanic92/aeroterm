@@ -28,6 +28,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
 
     private bool enableLigature;
     private bool enableBlurBehind;
+    private bool disableEffectsWhenMaximized;
     private BlurType blurType;
     private MaterialTone materialTone;
     private double backgroundTintOpacity;
@@ -46,6 +47,7 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
 
         this.enableLigature = settings.EnableLigature;
         this.enableBlurBehind = settings.EnableBlurBehind;
+        this.disableEffectsWhenMaximized = settings.DisableEffectsWhenMaximized;
         this.blurType = settings.BlurType;
         this.materialTone = settings.MaterialTone;
         this.backgroundTintOpacity = settings.BackgroundTintOpacity;
@@ -220,6 +222,22 @@ internal sealed class AppearancePageViewModel : SettingsPageViewModel, INotifyPr
                 this.OnPropertyChanged(nameof(this.SelectedBlurOption));
                 this.OnPropertyChanged(nameof(this.IsOpacityEnabled));
                 this.OnPropertyChanged(nameof(this.IsMaterialToneEnabled));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether transparency effects are
+    /// collapsed while the window is maximized.
+    /// </summary>
+    public bool DisableEffectsWhenMaximized
+    {
+        get => this.disableEffectsWhenMaximized;
+        set
+        {
+            if (this.SetField(ref this.disableEffectsWhenMaximized, value))
+            {
+                this.settings.DisableEffectsWhenMaximized = value;
             }
         }
     }
