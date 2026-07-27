@@ -23,21 +23,6 @@ public interface IWindowEffectsSettings : INotifyPropertyChanged
     BlurType BlurType { get; }
 
     /// <summary>
-    /// Gets a value indicating whether transparency effects should collapse
-    /// while the window is maximized.
-    /// </summary>
-    /// <remarks>
-    /// A translucent window prevents the compositor from occlusion-culling
-    /// everything behind it, so every window underneath keeps rendering and
-    /// must be blended across the full window area on each screen refresh.
-    /// That cost is proportional to the window area, which makes it worst
-    /// exactly when the window is maximized — and a maximized window reveals
-    /// little more than the desktop wallpaper anyway. Full screen already
-    /// collapses effects unconditionally for the same reason.
-    /// </remarks>
-    bool DisableEffectsWhenMaximized { get; }
-
-    /// <summary>
     /// Gets the opacity of the tint color layered over the platform blur
     /// backdrop (0.0–1.0). Combined multiplicatively with
     /// <see cref="BackgroundMaterialOpacity"/> to produce the effective

@@ -22,12 +22,6 @@ public static class SettingsSearchLabels
     /// <summary>Search label for the material tone selector.</summary>
     public const string MaterialTone = "Material Tone";
 
-    /// <summary>
-    /// Search keywords for the maximized-window effects toggle.
-    /// </summary>
-    public const string DisableEffectsWhenMaximized =
-        "Disable Window Transparency Effects When Maximized Performance GPU Power";
-
     /// <summary>Search label for the font ligature toggle.</summary>
     public const string FontLigature = "Font Ligature";
 

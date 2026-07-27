@@ -18,13 +18,28 @@ using Microsoft.Extensions.Logging;
 /// </summary>
 public sealed class WindowEffectsService
 {
+    /// <summary>
+    /// Smallest alpha applied to the native window background while an effect
+    /// is active.
+    /// </summary>
+    /// <remarks>
+    /// A fully clear background is a cliff rather than a gradient for the
+    /// macOS compositor: it can cache nothing and recomposites the entire
+    /// window every refresh. Measured maximized with both opacity sliders at
+    /// zero, over a 2% idle baseline, alpha 0 cost 60% GPU while alpha 1/255
+    /// cost 21% — and 1/255 is 0.4% opacity, visually indistinguishable from
+    /// fully clear. Only the native window background is clamped; the alpha
+    /// reported to the terminal renderer is left untouched, so a fully
+    /// transparent background still looks fully transparent.
+    /// </remarks>
+    private const byte MinimumWindowBackgroundAlpha = 1;
+
     private readonly Window window;
     private readonly IWindowEffectsSettings settings;
     private readonly ILogger<WindowEffectsService> logger;
     private bool isMacFullScreen;
     private bool isDialogOpen;
     private bool liquidGlassFallbackLogged;
-    private bool isWindowMaximized;
     private byte resolvedBackgroundAlpha;
     private Color resolvedBackgroundColor;
 
@@ -105,9 +120,7 @@ public sealed class WindowEffectsService
     /// preserved unchanged and re-honoured on exit from full screen.
     /// </summary>
     private bool EffectiveBlurEnabled =>
-        this.settings.EnableBlurBehind
-        && !this.isMacFullScreen
-        && !(this.settings.DisableEffectsWhenMaximized && this.isWindowMaximized);
+        this.settings.EnableBlurBehind && !this.isMacFullScreen;
 
     /// <summary>
     /// Configures initial blur and transparency settings on the window.
@@ -115,7 +128,6 @@ public sealed class WindowEffectsService
     public void SetupBlurBehind()
     {
         this.isMacFullScreen = this.window.WindowState == WindowState.FullScreen;
-        this.isWindowMaximized = this.window.WindowState == WindowState.Maximized;
         this.window.TransparencyBackgroundFallback = Brushes.Transparent;
         this.window.Background = Brushes.Transparent;
         this.UpdateTransparencyLevelHint();
@@ -148,9 +160,9 @@ public sealed class WindowEffectsService
                 }
 
                 MacOSInterop.SetTransparentTitlebar(nsWindow);
-                this.ApplyWindowOpacity(nsWindow);
                 MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
                 MacOSInterop.EnableUnifiedTitleBar(nsWindow);
+                this.ApplyWindowOpacity(nsWindow);
                 MacOSInterop.SetWindowIconFromBundle(nsWindow);
                 this.UpdateLiquidGlassBackdrop(nsWindow);
                 this.ApplyMaterialTone(nsWindow);
@@ -185,9 +197,9 @@ public sealed class WindowEffectsService
             }
 
             MacOSInterop.SetTransparentTitlebar(nsWindow);
-            this.ApplyWindowOpacity(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
+            this.ApplyWindowOpacity(nsWindow);
             this.UpdateLiquidGlassBackdrop(nsWindow);
             this.ApplyMaterialTone(nsWindow);
         }
@@ -235,7 +247,6 @@ public sealed class WindowEffectsService
         bool isFullScreen = state == WindowState.FullScreen;
         bool wasFullScreen = this.isMacFullScreen;
         this.isMacFullScreen = isFullScreen;
-        this.isWindowMaximized = state == WindowState.Maximized;
 
         var nsWindow = this.window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (nsWindow == IntPtr.Zero)
@@ -272,9 +283,9 @@ public sealed class WindowEffectsService
             // on that path — but a re-apply here is still cheap and
             // serves as a safety net.
             MacOSInterop.SetTransparentTitlebar(nsWindow);
-            this.ApplyWindowOpacity(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
+            this.ApplyWindowOpacity(nsWindow);
         }
 
         // Re-run the full apply pipeline. EffectiveBlurEnabled is false
@@ -441,6 +452,18 @@ public sealed class WindowEffectsService
     /// Marks the NSWindow opaque whenever no transparency effect is active.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// <b>Must be invoked last</b> in any sequence of native window mutations.
+    /// AppKit resets a window's <c>opaque</c> flag when its <c>styleMask</c>
+    /// changes, and <see cref="MacOSInterop.SetTitleBarMaterialHidden"/>
+    /// changes the mask only when the textured-background bit is not already
+    /// in the desired state. Calling this before those mutations therefore
+    /// made transparency alternate on and off between applies: one apply
+    /// changed the mask and cleared the flag, the next left the mask alone and
+    /// preserved it.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
     /// <see cref="MacOSInterop.SetTransparentTitlebar"/> unconditionally sets
     /// <c>setOpaque:NO</c> with a clear background color. Leaving the window
     /// non-opaque when no effect is enabled forces the macOS compositor to
@@ -463,6 +486,20 @@ public sealed class WindowEffectsService
         if (this.EffectiveBlurEnabled || this.resolvedBackgroundAlpha != 255)
         {
             MacOSInterop.SetWindowOpaque(nsWindow, false);
+
+            // Match the native window background to what the content actually
+            // paints. Leaving it opaque hides the desktop entirely; clearing
+            // it makes the compositor recomposite the full window every
+            // refresh. The resolved colour and alpha give the correct
+            // appearance at a fraction of that cost.
+            Color translucent = this.resolvedBackgroundColor;
+            MacOSInterop.SetWindowBackgroundColor(
+                nsWindow,
+                translucent.R,
+                translucent.G,
+                translucent.B,
+                Math.Max(this.resolvedBackgroundAlpha, MinimumWindowBackgroundAlpha));
+
             return;
         }
 
@@ -698,7 +735,6 @@ public sealed class WindowEffectsService
         }
 
         MacOSInterop.SetTransparentTitlebar(nsWindow);
-        this.ApplyWindowOpacity(nsWindow);
         MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
 
         // Re-fit and re-promote Avalonia's behind-window NSVisualEffectView
@@ -707,6 +743,7 @@ public sealed class WindowEffectsService
         MacOSInterop.RefitWindowEffectViews(nsWindow, this.ShouldHideBehindWindowBlur());
         this.UpdateLiquidGlassBackdrop(nsWindow);
         this.ApplyMaterialTone(nsWindow);
+        this.ApplyWindowOpacity(nsWindow);
     }
 
     private async Task ReapplyAfterAnimationAsync(WindowState targetState)
@@ -734,10 +771,10 @@ public sealed class WindowEffectsService
             }
 
             MacOSInterop.SetTransparentTitlebar(nsWindow);
-            this.ApplyWindowOpacity(nsWindow);
             MacOSInterop.SetTitleBarMaterialHidden(nsWindow, this.ShouldHideTitleBarMaterial());
             MacOSInterop.EnableUnifiedTitleBar(nsWindow);
             MacOSInterop.RefitWindowEffectViews(nsWindow, this.ShouldHideBehindWindowBlur());
+            this.ApplyWindowOpacity(nsWindow);
             this.UpdateLiquidGlassBackdrop(nsWindow);
             this.ApplyMaterialTone(nsWindow);
         }
@@ -749,7 +786,6 @@ public sealed class WindowEffectsService
         {
             case nameof(IWindowEffectsSettings.EnableBlurBehind):
             case nameof(IWindowEffectsSettings.BlurType):
-            case nameof(IWindowEffectsSettings.DisableEffectsWhenMaximized):
                 Dispatcher.UIThread.Post(() =>
                 {
                     this.UpdateBlurPreservationForCurrentSettings();

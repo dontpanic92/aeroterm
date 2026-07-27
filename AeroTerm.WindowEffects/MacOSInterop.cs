@@ -257,9 +257,43 @@ public static class MacOSInterop
     }
 
     /// <summary>
-    /// Replaces the NSWindow's clear background color with an opaque color.
-    /// Required alongside <see cref="SetWindowOpaque"/> so AppKit has a valid
-    /// color for any region the content view does not paint.
+    /// Sets the NSWindow's background color, including its alpha.
+    /// </summary>
+    /// <remarks>
+    /// For a translucent window this should match what the content actually
+    /// paints. A fully clear background (alpha 0) is the most expensive
+    /// option because the compositor can cache nothing for the window;
+    /// matching the content's real alpha keeps the window correctly
+    /// see-through at a fraction of the cost.
+    /// </remarks>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <param name="red">Red channel, 0-255.</param>
+    /// <param name="green">Green channel, 0-255.</param>
+    /// <param name="blue">Blue channel, 0-255.</param>
+    /// <param name="alpha">Alpha channel, 0-255.</param>
+    public static void SetWindowBackgroundColor(IntPtr nsWindow, byte red, byte green, byte blue, byte alpha)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr nsColorClass = NativeMethods.ObjCGetClass("NSColor");
+        IntPtr color = NativeMethods.ObjCMsgSendColor(
+            nsColorClass,
+            NativeMethods.SelRegisterName("colorWithSRGBRed:green:blue:alpha:"),
+            red / 255.0,
+            green / 255.0,
+            blue / 255.0,
+            alpha / 255.0);
+        if (color != IntPtr.Zero)
+        {
+            NativeMethods.ObjCMsgSendIntPtr(nsWindow, NativeMethods.SelRegisterName("setBackgroundColor:"), color);
+        }
+    }
+
+    /// <summary>
+    /// Replaces the NSWindow's background color with an opaque color.
     /// </summary>
     /// <param name="nsWindow">The NSWindow handle.</param>
     /// <param name="red">Red channel, 0-255.</param>
