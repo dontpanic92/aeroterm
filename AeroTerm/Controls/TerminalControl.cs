@@ -5,10 +5,12 @@
 
 namespace AeroTerm.Controls;
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using AeroTerm.Controls.Terminal;
+using AeroTerm.Diagnostics;
 using AeroTerm.Pty;
 using AeroTerm.Services;
 using AeroTerm.Utilities;
@@ -1217,6 +1219,8 @@ public class TerminalControl : Control, IDisposable
             return;
         }
 
+        long renderStartTimestamp = RenderDiagnostics.Enabled ? Stopwatch.GetTimestamp() : 0;
+
         var screen = this.buffer.GetScreen();
         if (screen is null)
         {
@@ -1282,6 +1286,7 @@ public class TerminalControl : Control, IDisposable
         float scaleY = Math.Max(Math.Abs(matrix.ScaleY), 0.01f);
         int rows = renderScreen.Cells.GetLength(0);
         int columns = renderScreen.Cells.GetLength(1);
+        this.renderer.SetRenderScale(this.textParam, scaleX, scaleY);
         var frameKey = new TerminalRowCacheKey(
             Math.Max(1, (int)Math.Ceiling(this.Bounds.Width * scaleX)),
             Math.Max(1, (int)Math.Ceiling(this.Bounds.Height * scaleY)),
@@ -1392,6 +1397,14 @@ public class TerminalControl : Control, IDisposable
         {
             this.RenderBlurredInset(canvas, screen);
         }
+
+        if (RenderDiagnostics.Enabled)
+        {
+            RenderDiagnostics.RecordRender(
+                useRowCache,
+                useRowCache ? dirtyRowCount : rows,
+                Stopwatch.GetTimestamp() - renderStartTimestamp);
+        }
     }
 
     private void RebuildFontChain(List<string> fontNames)
@@ -1436,14 +1449,12 @@ public class TerminalControl : Control, IDisposable
             Math.Max(1, (int)Math.Ceiling(insetHeight * scaleY)),
             scaleX,
             scaleY,
-            scrollbackCount,
-            this.buffer.ScrollbackEvictedTotal,
-            this.viewportOffset,
+            actualGhostRows,
+            this.ComputeGhostContentHash(screen, ghostStart, actualGhostRows, scrollbackCount, cols),
             this.textParam.SkiaFontSize,
-            this.fontChain.PrimaryTypeface?.Handle ?? 0,
-            screen.Palette.DefaultForeground,
-            screen.Palette.DefaultBackground,
-            RuntimeHelpers.GetHashCode(screen.Palette.Palette));
+            this.textParam.CharWidth,
+            this.textParam.LineHeight,
+            this.fontChain.PrimaryTypeface?.Handle ?? 0);
 
         this.titleBarInsetCache.Draw(
             canvas,
@@ -1463,6 +1474,7 @@ public class TerminalControl : Control, IDisposable
 
                 // Align the bottom ghost row with the top of the main grid.
                 float baseY = insetHeight - (actualGhostRows * this.textParam.LineHeight);
+                var runBuilder = new StringBuilder();
 
                 for (int gi = 0; gi < actualGhostRows; gi++)
                 {
@@ -1474,23 +1486,94 @@ public class TerminalControl : Control, IDisposable
 
                     var sbRow = this.buffer.GetScrollbackLine(sbIndex);
                     float rowY = baseY + (gi * this.textParam.LineHeight);
+                    float baselineY = rowY + (this.textParam.LineHeight * 0.8f);
                     int copyCols = Math.Min(cols, sbRow.Length);
 
-                    for (int j = 0; j < copyCols; j++)
-                    {
-                        ref readonly var cell = ref sbRow[j];
+                    // Batch adjacent same-color glyphs into one DrawText call.
+                    // The inset is a blurred decoration, so per-cell advance
+                    // differences below the blur radius are not observable.
+                    int runStart = -1;
+                    int runColor = 0;
+                    runBuilder.Clear();
 
-                        float x = j * this.textParam.CharWidth;
-                        string? ch = cell.Character;
-                        if (!string.IsNullOrEmpty(ch) && ch != " ")
+                    for (int j = 0; j <= copyCols; j++)
+                    {
+                        string? ch = j < copyCols ? sbRow[j].Character : null;
+                        bool printable = !string.IsNullOrEmpty(ch) && ch != " ";
+                        int color = printable ? sbRow[j].ResolveForeground(screen.Palette) : 0;
+
+                        if (runStart >= 0 && (!printable || color != runColor))
                         {
-                            fgPaint.Color = TerminalRenderer.GetSkColor(cell.ResolveForeground(screen.Palette));
-                            float baselineY = rowY + (this.textParam.LineHeight * 0.8f);
-                            insetCanvas.DrawText(ch, x, baselineY, ghostFont, fgPaint);
+                            fgPaint.Color = TerminalRenderer.GetSkColor(runColor);
+                            insetCanvas.DrawText(
+                                runBuilder.ToString(),
+                                runStart * this.textParam.CharWidth,
+                                baselineY,
+                                ghostFont,
+                                fgPaint);
+                            runBuilder.Clear();
+                            runStart = -1;
                         }
+
+                        if (!printable)
+                        {
+                            continue;
+                        }
+
+                        if (runStart < 0)
+                        {
+                            runStart = j;
+                            runColor = color;
+                        }
+
+                        runBuilder.Append(ch);
                     }
                 }
             });
+    }
+
+    /// <summary>
+    /// Hashes the glyphs and resolved foreground colors of the scrollback rows
+    /// drawn into the title-bar inset. Used as the inset cache identity so the
+    /// blur is only rebuilt when the ghost rows actually change, rather than on
+    /// every scrolled output line.
+    /// </summary>
+    private int ComputeGhostContentHash(
+        Pty.Screen screen,
+        int ghostStart,
+        int ghostRowCount,
+        int scrollbackCount,
+        int cols)
+    {
+        var hash = default(HashCode);
+        for (int gi = 0; gi < ghostRowCount; gi++)
+        {
+            int sbIndex = ghostStart + gi;
+            if (sbIndex < 0 || sbIndex >= scrollbackCount)
+            {
+                hash.Add(-1);
+                continue;
+            }
+
+            var sbRow = this.buffer.GetScrollbackLine(sbIndex);
+            int copyCols = Math.Min(cols, sbRow.Length);
+            for (int j = 0; j < copyCols; j++)
+            {
+                string? ch = sbRow[j].Character;
+                if (string.IsNullOrEmpty(ch) || ch == " ")
+                {
+                    continue;
+                }
+
+                hash.Add(j);
+                hash.Add(ch, StringComparer.Ordinal);
+                hash.Add(sbRow[j].ResolveForeground(screen.Palette));
+            }
+
+            hash.Add(int.MinValue);
+        }
+
+        return hash.ToHashCode();
     }
 
     private void OnTitleChanged(string title)

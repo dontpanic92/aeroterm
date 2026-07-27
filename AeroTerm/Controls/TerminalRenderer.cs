@@ -57,6 +57,24 @@ internal sealed class TerminalRenderer : IDisposable
     }
 
     /// <summary>
+    /// Updates the device scale used to size the symbol glyph atlas. Must be
+    /// called once per frame before any rendering entry point, because row
+    /// pictures are recorded with an identity matrix and therefore cannot
+    /// discover the device scale themselves.
+    /// </summary>
+    /// <param name="textParam">The current text layout parameters.</param>
+    /// <param name="scaleX">Horizontal device scale.</param>
+    /// <param name="scaleY">Vertical device scale.</param>
+    public void SetRenderScale(TextLayoutParameters textParam, float scaleX, float scaleY)
+    {
+        this.symbolGlyphRenderer.SetCellGeometry(
+            textParam.CharWidth,
+            textParam.LineHeight,
+            scaleX,
+            scaleY);
+    }
+
+    /// <summary>
     /// Renders the terminal grid onto the given canvas.
     /// </summary>
     /// <param name="canvas">The Skia canvas to paint on.</param>
@@ -112,20 +130,15 @@ internal sealed class TerminalRenderer : IDisposable
         // Paint backgrounds
         for (int i = 0; i < rows; i++)
         {
-            for (int j = 0; j < cols; j++)
-            {
-                int cellBg = cells[i, j].ResolveBackground(palette);
-                if (cellBg != screen.BackgroundColor || cells[i, j].Reverse)
-                {
-                    float x = j * textParam.CharWidth;
-                    float y = i * textParam.LineHeight;
-                    int color = cells[i, j].Reverse
-                        ? cells[i, j].ResolveForeground(palette)
-                        : cellBg;
-                    this.backgroundPaint.Color = GetSkColor(color);
-                    canvas.DrawRect(x, y, textParam.CharWidth, textParam.LineHeight, this.backgroundPaint);
-                }
-            }
+            this.DrawBackgroundRunsForRow(
+                canvas,
+                cells,
+                palette,
+                screen.BackgroundColor,
+                i,
+                cols,
+                textParam,
+                i * textParam.LineHeight);
         }
 
         // Paint selection overlay between backgrounds and text so glyphs stay
@@ -319,19 +332,15 @@ internal sealed class TerminalRenderer : IDisposable
         }
 
         var palette = screen.Palette;
-        for (int j = 0; j < cols; j++)
-        {
-            int cellBg = cells[row, j].ResolveBackground(palette);
-            if (cellBg != screen.BackgroundColor || cells[row, j].Reverse)
-            {
-                float x = j * textParam.CharWidth;
-                int color = cells[row, j].Reverse
-                    ? cells[row, j].ResolveForeground(palette)
-                    : cellBg;
-                this.backgroundPaint.Color = GetSkColor(color);
-                canvas.DrawRect(x, 0, textParam.CharWidth, textParam.LineHeight, this.backgroundPaint);
-            }
-        }
+        this.DrawBackgroundRunsForRow(
+            canvas,
+            cells,
+            palette,
+            screen.BackgroundColor,
+            row,
+            cols,
+            textParam,
+            0);
     }
 
     /// <summary>
@@ -615,6 +624,30 @@ internal sealed class TerminalRenderer : IDisposable
         return 1;
     }
 
+    /// <summary>
+    /// Resolves the fill color a cell's background needs, or reports that the
+    /// cell uses the default screen background and needs no rectangle.
+    /// </summary>
+    private static bool TryResolveCellBackground(
+        Cell[,] cells,
+        in PaletteSnapshot palette,
+        int screenBackground,
+        int row,
+        int col,
+        out int color)
+    {
+        int cellBg = cells[row, col].ResolveBackground(palette);
+        bool reverse = cells[row, col].Reverse;
+        if (cellBg == screenBackground && !reverse)
+        {
+            color = 0;
+            return false;
+        }
+
+        color = reverse ? cells[row, col].ResolveForeground(palette) : cellBg;
+        return true;
+    }
+
     private static bool IsSymbolCell(Cell[,] cells, int row, int col)
     {
         var cell = cells[row, col];
@@ -639,6 +672,44 @@ internal sealed class TerminalRenderer : IDisposable
 
         int cp = char.ConvertToUtf32(first, cell.Character[1]);
         return SymbolGlyphRanges.Handles(cp);
+    }
+
+    private void DrawBackgroundRunsForRow(
+        SKCanvas canvas,
+        Cell[,] cells,
+        in PaletteSnapshot palette,
+        int screenBackground,
+        int row,
+        int cols,
+        TextLayoutParameters textParam,
+        float y)
+    {
+        int col = 0;
+        while (col < cols)
+        {
+            if (!TryResolveCellBackground(cells, palette, screenBackground, row, col, out int color))
+            {
+                col++;
+                continue;
+            }
+
+            int runEnd = col + 1;
+            while (runEnd < cols
+                && TryResolveCellBackground(cells, palette, screenBackground, row, runEnd, out int nextColor)
+                && nextColor == color)
+            {
+                runEnd++;
+            }
+
+            this.backgroundPaint.Color = GetSkColor(color);
+            canvas.DrawRect(
+                col * textParam.CharWidth,
+                y,
+                (runEnd - col) * textParam.CharWidth,
+                textParam.LineHeight,
+                this.backgroundPaint);
+            col = runEnd;
+        }
     }
 
     private void DrawCellRange(
@@ -789,7 +860,8 @@ internal sealed class TerminalRenderer : IDisposable
                     row * textParam.LineHeight,
                     (j + 1) * textParam.CharWidth,
                     (row + 1) * textParam.LineHeight);
-                if (!this.symbolGlyphRenderer.TryDraw(canvas, codePoint, rect, symbolColor))
+                if (!this.symbolGlyphRenderer.TryDrawFromAtlas(canvas, codePoint, rect, symbolColor)
+                    && !this.symbolGlyphRenderer.TryDraw(canvas, codePoint, rect, symbolColor))
                 {
                     // No programmatic implementation: fall back to the
                     // font for this single cell so we never lose a glyph.

@@ -8,28 +8,32 @@ namespace AeroTerm.Controls.Terminal;
 /// <summary>
 /// Identifies all inputs that affect a cached title-bar inset image.
 /// </summary>
+/// <remarks>
+/// The key deliberately does <em>not</em> include the scrollback count or the
+/// viewport offset. Those change on every scrolled output line, which would
+/// force a full CPU rasterization, Gaussian blur, and texture upload on every
+/// terminal frame. Instead <paramref name="GhostContentHash"/> summarizes the
+/// glyphs and resolved colors actually drawn into the inset, so the cache only
+/// rebuilds when the visible ghost rows change.
+/// </remarks>
 /// <param name="PixelWidth">Cached image width in physical pixels.</param>
 /// <param name="PixelHeight">Cached image height in physical pixels.</param>
 /// <param name="ScaleX">Horizontal device scale.</param>
 /// <param name="ScaleY">Vertical device scale.</param>
-/// <param name="ScrollbackCount">Current number of retained scrollback rows.</param>
-/// <param name="ScrollbackEvictedTotal">Total scrollback rows evicted from the ring.</param>
-/// <param name="ViewportOffset">Current viewport offset.</param>
+/// <param name="GhostRowCount">Number of scrollback ghost rows drawn.</param>
+/// <param name="GhostContentHash">Hash of the ghost rows' glyphs and resolved foreground colors.</param>
 /// <param name="FontSize">Current Skia font size.</param>
+/// <param name="CharWidth">Current cell width in device-independent pixels.</param>
+/// <param name="LineHeight">Current row height in device-independent pixels.</param>
 /// <param name="TypefaceHandle">Current primary typeface handle.</param>
-/// <param name="DefaultForeground">Current default foreground color.</param>
-/// <param name="DefaultBackground">Current default background color.</param>
-/// <param name="PaletteIdentity">Identity of the immutable palette array.</param>
 internal readonly record struct TitleBarInsetCacheKey(
     int PixelWidth,
     int PixelHeight,
     float ScaleX,
     float ScaleY,
-    int ScrollbackCount,
-    long ScrollbackEvictedTotal,
-    int ViewportOffset,
+    int GhostRowCount,
+    int GhostContentHash,
     float FontSize,
-    nint TypefaceHandle,
-    int DefaultForeground,
-    int DefaultBackground,
-    int PaletteIdentity);
+    float CharWidth,
+    float LineHeight,
+    nint TypefaceHandle);

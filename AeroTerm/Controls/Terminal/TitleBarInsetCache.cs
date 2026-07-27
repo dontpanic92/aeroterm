@@ -5,6 +5,7 @@
 
 namespace AeroTerm.Controls.Terminal;
 
+using AeroTerm.Diagnostics;
 using SkiaSharp;
 
 /// <summary>
@@ -116,5 +117,6 @@ internal sealed class TitleBarInsetCache : IDisposable
         this.key = newKey;
         this.hasKey = true;
         this.BuildCount++;
+        RenderDiagnostics.RecordInsetRebuild();
     }
 }

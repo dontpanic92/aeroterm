@@ -6,6 +6,7 @@
 namespace AeroTerm.Controls.Terminal;
 
 using System.Diagnostics;
+using AeroTerm.Diagnostics;
 
 /// <summary>
 /// Coalesces redraw requests and dispatches them no faster than a configured
@@ -76,6 +77,7 @@ internal sealed class TerminalRedrawScheduler : IDisposable
             return;
         }
 
+        RenderDiagnostics.RecordRedrawRequest();
         Interlocked.Exchange(ref this.pending, 1);
         if (Interlocked.CompareExchange(ref this.scheduled, 1, 0) == 0)
         {
@@ -119,6 +121,7 @@ internal sealed class TerminalRedrawScheduler : IDisposable
         Interlocked.Exchange(ref this.pending, 0);
         try
         {
+            RenderDiagnostics.RecordRedrawDispatch();
             this.redraw();
         }
         finally

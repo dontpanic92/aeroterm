@@ -240,6 +240,53 @@ public static class MacOSInterop
     }
 
     /// <summary>
+    /// Sets the NSWindow's opacity flag. An opaque window lets the macOS
+    /// compositor skip blending it against everything behind it, which
+    /// removes continuous WindowServer work proportional to the window area.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <param name="opaque">Whether the window content is fully opaque.</param>
+    public static void SetWindowOpaque(IntPtr nsWindow, bool opaque)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        NativeMethods.ObjCMsgSendBool(nsWindow, NativeMethods.SelRegisterName("setOpaque:"), opaque);
+    }
+
+    /// <summary>
+    /// Replaces the NSWindow's clear background color with an opaque color.
+    /// Required alongside <see cref="SetWindowOpaque"/> so AppKit has a valid
+    /// color for any region the content view does not paint.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <param name="red">Red channel, 0-255.</param>
+    /// <param name="green">Green channel, 0-255.</param>
+    /// <param name="blue">Blue channel, 0-255.</param>
+    public static void SetOpaqueWindowBackgroundColor(IntPtr nsWindow, byte red, byte green, byte blue)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr nsColorClass = NativeMethods.ObjCGetClass("NSColor");
+        IntPtr color = NativeMethods.ObjCMsgSendColor(
+            nsColorClass,
+            NativeMethods.SelRegisterName("colorWithSRGBRed:green:blue:alpha:"),
+            red / 255.0,
+            green / 255.0,
+            blue / 255.0,
+            1.0);
+        if (color != IntPtr.Zero)
+        {
+            NativeMethods.ObjCMsgSendIntPtr(nsWindow, NativeMethods.SelRegisterName("setBackgroundColor:"), color);
+        }
+    }
+
+    /// <summary>
     /// Configures the NSWindow for a fully transparent background while
     /// preserving native traffic light buttons. Sets the window as non-opaque
     /// with a clear background color, makes the titlebar transparent with a
@@ -1086,6 +1133,26 @@ public static class MacOSInterop
         /// <param name="arg">The pointer argument.</param>
         [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
         public static extern void ObjCMsgSendIntPtr(IntPtr receiver, IntPtr selector, IntPtr arg);
+
+        /// <summary>
+        /// Sends a message with four double arguments and a pointer return,
+        /// used for <c>+[NSColor colorWithSRGBRed:green:blue:alpha:]</c>.
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <param name="red">Red component, 0-1.</param>
+        /// <param name="green">Green component, 0-1.</param>
+        /// <param name="blue">Blue component, 0-1.</param>
+        /// <param name="alpha">Alpha component, 0-1.</param>
+        /// <returns>The resulting object pointer.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern IntPtr ObjCMsgSendColor(
+            IntPtr receiver,
+            IntPtr selector,
+            double red,
+            double green,
+            double blue,
+            double alpha);
 
         /// <summary>
         /// Sends a message with a boolean argument to an Objective-C object.

@@ -23,7 +23,7 @@ public sealed class TitleBarInsetCacheTests
     {
         using var target = SKSurface.Create(new SKImageInfo(200, 40));
         using var cache = new TitleBarInsetCache(14);
-        var key = CreateKey(scrollbackCount: 1);
+        var key = CreateKey(ghostContentHash: 1);
         int renders = 0;
 
         cache.Draw(target.Canvas, new SKRect(0, 0, 200, 40), key, DrawContent);
@@ -41,7 +41,7 @@ public sealed class TitleBarInsetCacheTests
     }
 
     /// <summary>
-    /// A changed scrollback generation rebuilds the cached image.
+    /// A changed ghost-row content hash rebuilds the cached image.
     /// </summary>
     [Test]
     public void Draw_ChangedKey_RebuildsCachedImage()
@@ -50,27 +50,25 @@ public sealed class TitleBarInsetCacheTests
         using var cache = new TitleBarInsetCache(14);
         int renders = 0;
 
-        cache.Draw(target.Canvas, new SKRect(0, 0, 200, 40), CreateKey(scrollbackCount: 1), _ => renders++);
-        cache.Draw(target.Canvas, new SKRect(0, 0, 200, 40), CreateKey(scrollbackCount: 2), _ => renders++);
+        cache.Draw(target.Canvas, new SKRect(0, 0, 200, 40), CreateKey(ghostContentHash: 1), _ => renders++);
+        cache.Draw(target.Canvas, new SKRect(0, 0, 200, 40), CreateKey(ghostContentHash: 2), _ => renders++);
 
         Assert.That(renders, Is.EqualTo(2));
         Assert.That(cache.BuildCount, Is.EqualTo(2));
     }
 
-    private static TitleBarInsetCacheKey CreateKey(int scrollbackCount)
+    private static TitleBarInsetCacheKey CreateKey(int ghostContentHash)
     {
         return new TitleBarInsetCacheKey(
             PixelWidth: 200,
             PixelHeight: 40,
             ScaleX: 1,
             ScaleY: 1,
-            ScrollbackCount: scrollbackCount,
-            ScrollbackEvictedTotal: 0,
-            ViewportOffset: 0,
+            GhostRowCount: 2,
+            GhostContentHash: ghostContentHash,
             FontSize: 14,
-            TypefaceHandle: 1,
-            DefaultForeground: 0xFFFFFF,
-            DefaultBackground: 0,
-            PaletteIdentity: 1);
+            CharWidth: 8,
+            LineHeight: 16,
+            TypefaceHandle: 1);
     }
 }
