@@ -305,12 +305,15 @@ public static class MacOSInterop
         // [window setOpaque:NO]
         NativeMethods.ObjCMsgSendBool(nsWindow, NativeMethods.SelRegisterName("setOpaque:"), false);
 
-        // Set the native background to clear so the titlebar area
-        // participates in the window's transparency level.
-        // [window setBackgroundColor:[NSColor clearColor]]
-        IntPtr nsColorClass = NativeMethods.ObjCGetClass("NSColor");
-        IntPtr clearColor = NativeMethods.ObjCMsgSend(nsColorClass, NativeMethods.SelRegisterName("clearColor"));
-        NativeMethods.ObjCMsgSendIntPtr(nsWindow, NativeMethods.SelRegisterName("setBackgroundColor:"), clearColor);
+        // NOTE: deliberately does NOT set the window's background color to
+        // [NSColor clearColor]. A clear window background forces the macOS
+        // compositor to treat the whole window as per-pixel transparent,
+        // which defeats the cached vibrancy backdrop that AcrylicBlur
+        // normally uses. Measured on a maximized Retina window: with the
+        // clear background the window cost ~81% GPU continuously, versus
+        // ~28% with setOpaque:NO alone (18% baseline). The titlebar still
+        // shows through because setTitlebarAppearsTransparent: is set below
+        // and Avalonia's content view extends underneath it.
 
         // [window setTitlebarSeparatorStyle:NSTitlebarSeparatorStyleNone] (0)
         NativeMethods.ObjCMsgSendLong(nsWindow, NativeMethods.SelRegisterName("setTitlebarSeparatorStyle:"), 0);

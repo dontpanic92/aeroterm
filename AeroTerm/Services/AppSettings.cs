@@ -41,7 +41,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
 
     private bool enableBlurBehind = true;
     private BlurType blurType = BlurType.Acrylic;
-    private bool disableEffectsWhenMaximized = true;
+    private bool disableEffectsWhenMaximized;
     private MaterialTone materialTone = MaterialTone.Light;
     private double backgroundTintOpacity = 0.85;
     private double backgroundMaterialOpacity = 0.75;
@@ -119,10 +119,12 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
 
     /// <summary>
     /// Gets or sets a value indicating whether transparency effects collapse
-    /// while the window is maximized. Defaults to <see langword="true"/>
-    /// because a translucent maximized window keeps the compositor blending
-    /// every window behind it across the whole screen on each refresh, which
-    /// is the single largest GPU cost the application can incur.
+    /// while the window is maximized. Defaults to <see langword="false"/>:
+    /// once the window stopped forcing a clear background color the
+    /// compositor keeps its cached vibrancy backdrop, so a translucent
+    /// maximized window is no longer expensive and there is no reason to
+    /// override the user's chosen appearance. The option remains available
+    /// for anyone who wants the extra headroom.
     /// </summary>
     public bool DisableEffectsWhenMaximized
     {
