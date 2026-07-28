@@ -68,6 +68,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private bool enableShellIntegration = true;
     private bool enableWorkbench;
     private TabBarOrientation tabBarOrientation = TabBarOrientation.Horizontal;
+    private bool useFullScreenNotchArea;
 
     private bool loadedWithTransientError;
     private bool settingsFileExistedAtLoad;
@@ -413,6 +414,20 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets a value indicating whether macOS native full screen
+    /// should extend into the camera-housing ("notch") band at the top of
+    /// the display, placing the tab strip beside the housing instead of
+    /// below it. Defaults to <c>false</c>, which reproduces the standard
+    /// macOS behaviour of a black band across the housing. Has no effect on
+    /// other platforms or on displays without a camera housing.
+    /// </summary>
+    public bool UseFullScreenNotchArea
+    {
+        get => this.useFullScreenNotchArea;
+        set => this.SetField(ref this.useFullScreenNotchArea, value);
+    }
+
+    /// <summary>
     /// Save settings to disk.
     /// </summary>
     /// <param name="reason">The application action that requested persistence.</param>
@@ -557,6 +572,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.EnableShellIntegration = fresh.EnableShellIntegration;
         this.EnableWorkbench = fresh.EnableWorkbench;
         this.TabBarOrientation = fresh.TabBarOrientation;
+        this.UseFullScreenNotchArea = fresh.UseFullScreenNotchArea;
         this.LastPersistenceError = fresh.LastPersistenceError;
         this.loadedWithTransientError = fresh.loadedWithTransientError;
         this.settingsFileExistedAtLoad = fresh.settingsFileExistedAtLoad;

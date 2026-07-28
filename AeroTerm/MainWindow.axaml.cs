@@ -66,6 +66,8 @@ public partial class MainWindow : Window
     private readonly Grid titleBar;
     private readonly Grid verticalTitleBar;
     private readonly Grid sideRail;
+    private readonly DockPanel contentDock;
+    private readonly Border notchBand;
     private readonly Border terminalBorder;
     private readonly Border titleBarTabHost;
     private readonly Border sideTabHost;
@@ -96,6 +98,21 @@ public partial class MainWindow : Window
     private string closeTrigger = "external-close-request";
 
     /// <summary>
+    /// Effective title bar height. Equals <see cref="TitleBarHeight"/>
+    /// except in macOS native full screen on a notched display, where it
+    /// grows to cover the camera-housing band (see
+    /// <see cref="UpdateMacFullScreenTitleBarLayout"/>).
+    /// </summary>
+    private double currentTitleBarHeight = TitleBarHeight;
+
+    /// <summary>
+    /// Height of the macOS camera-housing band currently overlapping the
+    /// window's top edge, or <c>0</c> when not applicable (not macOS, not
+    /// full screen, or a display without a notch).
+    /// </summary>
+    private double macNotchTopInset;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
     /// Used by the XAML designer; runtime code should use
     /// <see cref="MainWindow(AppSettings)"/>.
@@ -119,6 +136,8 @@ public partial class MainWindow : Window
         this.titleBar = this.FindControl<Grid>("TitleBar")!;
         this.verticalTitleBar = this.FindControl<Grid>("VerticalTitleBar")!;
         this.sideRail = this.FindControl<Grid>("SideRail")!;
+        this.contentDock = this.FindControl<DockPanel>("ContentDock")!;
+        this.notchBand = this.FindControl<Border>("NotchBand")!;
         this.terminalBorder = this.FindControl<Border>("TerminalBorder")!;
         this.titleBarTabHost = this.FindControl<Border>("TitleBarTabHost")!;
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
@@ -1201,8 +1220,97 @@ public partial class MainWindow : Window
             // re-apply lands on a stable NSWindow.
             var state = this.WindowState;
             Dispatcher.UIThread.Post(
-                () => this.effectsService.HandleMacOSWindowStateChanged(state),
+                () =>
+                {
+                    this.effectsService.HandleMacOSWindowStateChanged(state);
+                    this.UpdateMacFullScreenTitleBarLayout();
+                },
                 DispatcherPriority.Background);
+        }
+    }
+
+    /// <summary>
+    /// Adapts the window chrome to the macOS camera-housing band.
+    /// <para>
+    /// The bundle opts out of display safe-area compatibility mode
+    /// (<c>NSPrefersDisplaySafeAreaCompatibilityMode</c> in
+    /// <c>Info.plist</c>), so a full-screen window always covers the entire
+    /// display rather than being letterboxed below the notch. What happens
+    /// with the reclaimed band is then a user choice:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>
+    /// <see cref="AppSettings.UseFullScreenNotchArea"/> on — the chrome uses
+    /// the band, and the horizontal tab strip is capped to the usable area
+    /// left of the housing so no tab hides underneath it. The band under and
+    /// right of the housing stays a plain drag surface.
+    /// </description></item>
+    /// <item><description>
+    /// Off (default) — the band is filled with the black filler
+    /// <c>NotchBand</c> and the rest of the chrome is pushed below it,
+    /// reproducing the stock macOS appearance.
+    /// </description></item>
+    /// </list>
+    /// </summary>
+    private void UpdateMacFullScreenTitleBarLayout()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return;
+        }
+
+        double topInset = 0;
+        double bandHeight = 0;
+        double tabStripMaxWidth = double.PositiveInfinity;
+
+        if (this.WindowState == WindowState.FullScreen &&
+            MacOSInterop.TryGetScreenTopSafeArea(
+                this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero,
+                out var safeArea))
+        {
+            if (this.settings.UseFullScreenNotchArea)
+            {
+                topInset = safeArea.TopInset;
+
+                if (this.settings.TabBarOrientation != TabBarOrientation.Vertical)
+                {
+                    tabStripMaxWidth = Math.Max(0, safeArea.NotchLeft);
+                }
+            }
+            else
+            {
+                bandHeight = safeArea.TopInset;
+            }
+        }
+
+        this.tabStrip.MaxWidth = tabStripMaxWidth;
+
+        var bandOffset = new Thickness(0, bandHeight, 0, 0);
+        this.notchBand.Height = bandHeight;
+        this.notchBand.IsVisible = bandHeight > 0;
+        this.titleBar.Margin = bandOffset;
+        this.contentDock.Margin = bandOffset;
+
+        double height = Math.Max(TitleBarHeight, topInset);
+        if (Math.Abs(height - this.currentTitleBarHeight) < 0.01 &&
+            Math.Abs(topInset - this.macNotchTopInset) < 0.01)
+        {
+            return;
+        }
+
+        this.currentTitleBarHeight = height;
+        this.macNotchTopInset = topInset;
+
+        this.titleBar.Height = height;
+        this.verticalTitleBar.Height = height;
+        if (this.sideRail.RowDefinitions.Count > 0)
+        {
+            this.sideRail.RowDefinitions[0].Height = new GridLength(height);
+        }
+
+        foreach (var tab in this.tabView.Tabs)
+        {
+            this.ApplyTopInsetToSession(tab);
         }
     }
 
@@ -1228,6 +1336,10 @@ public partial class MainWindow : Window
         {
             Dispatcher.UIThread.Post(this.ApplyTabBarOrientation);
         }
+        else if (e.PropertyName == nameof(AppSettings.UseFullScreenNotchArea))
+        {
+            Dispatcher.UIThread.Post(this.UpdateMacFullScreenTitleBarLayout);
+        }
     }
 
     private void ToggleTabBarOrientation()
@@ -1247,8 +1359,8 @@ public partial class MainWindow : Window
         bool vertical = this.settings.TabBarOrientation == TabBarOrientation.Vertical;
         this.tabStrip.Orientation = vertical ? Avalonia.Layout.Orientation.Vertical : Avalonia.Layout.Orientation.Horizontal;
 
-        this.titleBar.Height = TitleBarHeight;
-        this.verticalTitleBar.Height = TitleBarHeight;
+        this.titleBar.Height = this.currentTitleBarHeight;
+        this.verticalTitleBar.Height = this.currentTitleBarHeight;
 
         // Re-parent the single TabStrip into the orientation-appropriate
         // host, together with the shared native-chrome reservation and
@@ -1292,11 +1404,14 @@ public partial class MainWindow : Window
         // Update TopInset on all existing terminal controls to match
         // the current orientation. Horizontal mode: terminals render a
         // blurred preview in the top inset area behind the floating
-        // title bar. Vertical mode: no inset, terminals start at the top.
+        // title bar. Vertical mode: no inset, terminals start at the top
+        // (except under the macOS camera housing in full screen).
         foreach (var tab in this.tabView.Tabs)
         {
             this.ApplyTopInsetToSession(tab);
         }
+
+        this.UpdateMacFullScreenTitleBarLayout();
 
         this.UpdateTabStripVisibility();
     }
@@ -1326,7 +1441,13 @@ public partial class MainWindow : Window
     private void ApplyTopInsetToSession(TabSession session)
     {
         bool horizontal = this.settings.TabBarOrientation != TabBarOrientation.Vertical;
-        float inset = horizontal ? (float)TitleBarHeight : 0f;
+
+        // Horizontal: clear the floating title bar. Vertical: the title bar
+        // lives in the side rail, so the only thing to clear is the macOS
+        // camera housing when the window spans the whole display.
+        float inset = horizontal
+            ? (float)this.currentTitleBarHeight
+            : (float)this.macNotchTopInset;
         foreach (var content in session.AllContents)
         {
             if (content.Terminal is not null)

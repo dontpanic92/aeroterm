@@ -54,6 +54,38 @@ public class AppSettingsTests
     }
 
     /// <summary>
+    /// Brand-new <see cref="AppSettings"/> instances default
+    /// <see cref="AppSettings.UseFullScreenNotchArea"/> to <c>false</c>,
+    /// preserving the stock macOS full-screen appearance (a black band
+    /// across the camera housing) until the user opts in.
+    /// </summary>
+    [Test]
+    public void UseFullScreenNotchArea_DefaultsToFalse()
+    {
+        var settings = new AppSettings();
+        Assert.That(settings.UseFullScreenNotchArea, Is.False);
+    }
+
+    /// <summary>
+    /// <see cref="AppSettings.UseFullScreenNotchArea"/> survives a
+    /// serialization round-trip, and is absent-safe for legacy files.
+    /// </summary>
+    [Test]
+    public void UseFullScreenNotchArea_RoundTripsThroughJson()
+    {
+        var ctx = AppSettingsJsonContext.Default.AppSettings;
+
+        var enabled = new AppSettings { UseFullScreenNotchArea = true };
+        var loaded = JsonSerializer.Deserialize(JsonSerializer.Serialize(enabled, ctx), ctx);
+        Assert.That(loaded, Is.Not.Null);
+        Assert.That(loaded!.UseFullScreenNotchArea, Is.True);
+
+        var legacy = JsonSerializer.Deserialize("{\"ScrollbackLines\": 1000}", ctx);
+        Assert.That(legacy, Is.Not.Null);
+        Assert.That(legacy!.UseFullScreenNotchArea, Is.False);
+    }
+
+    /// <summary>
     /// Legacy settings files written before <see cref="AppSettings.ConfirmOnClose"/>
     /// existed deserialize cleanly and default the flag to <c>true</c>
     /// (the safer behavior) rather than <c>false</c>.

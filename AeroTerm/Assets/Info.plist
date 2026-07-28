@@ -24,6 +24,12 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <!-- Opt out of the display safe-area compatibility mode so native
+         full screen spans the entire display on notched Macs instead of
+         being letterboxed below the camera housing. The window layout
+         keeps the tab strip clear of the notch itself. -->
+    <key>NSPrefersDisplaySafeAreaCompatibilityMode</key>
+    <false/>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
     <key>LSApplicationCategoryType</key>

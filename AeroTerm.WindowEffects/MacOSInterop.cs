@@ -121,6 +121,93 @@ public static class MacOSInterop
     }
 
     /// <summary>
+    /// Queries the top safe-area geometry of the screen currently hosting
+    /// the NSWindow, for laying out chrome in macOS native full screen when
+    /// the app has opted out of display safe-area compatibility mode (see
+    /// <c>NSPrefersDisplaySafeAreaCompatibilityMode</c> in <c>Info.plist</c>).
+    /// <para>
+    /// With that opt-out the full-screen window spans the entire display,
+    /// including the band occupied by the camera housing, so the app becomes
+    /// responsible for keeping interactive chrome out from under the notch.
+    /// The returned rectangle boundaries are converted into window-local
+    /// points, measured from the window's left edge.
+    /// </para>
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <param name="area">The resolved safe-area geometry when successful.</param>
+    /// <returns>
+    /// <c>true</c> when the hosting screen has a camera housing and its
+    /// geometry could be resolved; <c>false</c> on non-macOS platforms, on
+    /// macOS releases without the required APIs (pre-12), and on displays
+    /// without a notch (external monitors, older built-in displays).
+    /// </returns>
+    public static bool TryGetScreenTopSafeArea(IntPtr nsWindow, out MacTopSafeArea area)
+    {
+        area = default;
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        IntPtr screen = NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("screen"));
+        if (screen == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        // safeAreaInsets / auxiliaryTop*Area are macOS 12+. The bundle
+        // declares LSMinimumSystemVersion 11.0, so probe before sending.
+        var safeAreaInsetsSel = NativeMethods.SelRegisterName("safeAreaInsets");
+        var auxLeftSel = NativeMethods.SelRegisterName("auxiliaryTopLeftArea");
+        var auxRightSel = NativeMethods.SelRegisterName("auxiliaryTopRightArea");
+        var respondsSel = NativeMethods.SelRegisterName("respondsToSelector:");
+
+        if (!NativeMethods.ObjCMsgSendPtrRetBool(screen, respondsSel, safeAreaInsetsSel) ||
+            !NativeMethods.ObjCMsgSendPtrRetBool(screen, respondsSel, auxLeftSel) ||
+            !NativeMethods.ObjCMsgSendPtrRetBool(screen, respondsSel, auxRightSel))
+        {
+            return false;
+        }
+
+        NSEdgeInsets insets = NativeMethods.ObjCMsgSendEdgeInsetsRet(screen, safeAreaInsetsSel);
+        if (insets.Top <= 0)
+        {
+            // No camera housing on this display.
+            return false;
+        }
+
+        // Both auxiliary rects are in screen coordinates. The notch spans
+        // the horizontal gap between them; either rect being empty means
+        // AppKit could not describe the housing, so bail rather than guess.
+        NSRect auxLeft = NativeMethods.ObjCMsgSendRectRet(screen, auxLeftSel);
+        NSRect auxRight = NativeMethods.ObjCMsgSendRectRet(screen, auxRightSel);
+        if (auxLeft.Width <= 0 || auxRight.Width <= 0)
+        {
+            return false;
+        }
+
+        double notchLeft = auxLeft.X + auxLeft.Width;
+        double notchRight = auxRight.X;
+        if (notchRight <= notchLeft)
+        {
+            return false;
+        }
+
+        NSRect windowFrame = NativeMethods.ObjCMsgSendRectRet(
+            nsWindow,
+            NativeMethods.SelRegisterName("frame"));
+
+        area = new MacTopSafeArea(
+            insets.Top,
+            notchLeft - windowFrame.X,
+            notchRight - windowFrame.X);
+        return true;
+    }
+
+    /// <summary>
     /// Sets the NSWindow frame directly with
     /// <c>setFrame:display:YES animate:NO</c>, bypassing AppKit's
     /// animated zoom. This eliminates the resize-snapshot flash that
@@ -1312,6 +1399,18 @@ public static class MacOSInterop
         /// <returns>The returned rectangle.</returns>
         [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
         public static extern NSRect ObjCMsgSendRectRet(IntPtr receiver, IntPtr selector);
+
+        /// <summary>
+        /// Sends a no-argument message to an Objective-C object and returns
+        /// an <see cref="NSEdgeInsets"/> (e.g. <c>safeAreaInsets</c>). Same
+        /// large-struct-return ABI caveat as
+        /// <see cref="ObjCMsgSendRectRet"/>.
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <returns>The returned edge insets.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern NSEdgeInsets ObjCMsgSendEdgeInsetsRet(IntPtr receiver, IntPtr selector);
 
         /// <summary>
         /// Sends a message with one pointer, one long, and one pointer

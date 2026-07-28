@@ -32,6 +32,16 @@
             </StackPanel>
         </GroupBox>
 
+        <GroupBox Header="Full Screen" Padding="8,8" IsVisible="{Binding IsMacOS}">
+            <StackPanel Spacing="5">
+                <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FullScreenNotchArea}"
+                          IsChecked="{Binding UseFullScreenNotchArea, Mode=TwoWay}"
+                          Content="Use the area beside the camera housing in full screen" />
+                <TextBlock Text="On Macs with a notch, full screen normally leaves a black bar across the camera housing. Enable this to extend the window into that band and place tabs to the left of the housing."
+                           FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
+            </StackPanel>
+        </GroupBox>
+
         <GroupBox Header="Quake Mode" Padding="8,8">
             <StackPanel Spacing="5">
                 <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.QuakeMode}"

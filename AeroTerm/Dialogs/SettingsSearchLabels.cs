@@ -52,6 +52,9 @@ public static class SettingsSearchLabels
     /// <summary>Search label for the close confirmation toggle.</summary>
     public const string ConfirmOnClose = "Confirm on close";
 
+    /// <summary>Search label for the macOS full-screen notch-area toggle.</summary>
+    public const string FullScreenNotchArea = "Full screen notch area";
+
     /// <summary>Search label for the Quake-mode toggle.</summary>
     public const string QuakeMode = "Quake mode";
 

@@ -21,6 +21,7 @@ internal sealed class WindowTabsPageViewModel : SettingsPageViewModel, INotifyPr
     private readonly AppSettings settings;
     private bool confirmOnClose;
     private TabBarOrientation tabBarOrientation;
+    private bool useFullScreenNotchArea;
     private bool quakeModeEnabled;
     private string quakeHotkey = string.Empty;
 
@@ -33,6 +34,7 @@ internal sealed class WindowTabsPageViewModel : SettingsPageViewModel, INotifyPr
         this.settings = settings;
         this.confirmOnClose = settings.ConfirmOnClose;
         this.tabBarOrientation = settings.TabBarOrientation;
+        this.useFullScreenNotchArea = settings.UseFullScreenNotchArea;
         this.quakeModeEnabled = settings.QuakeModeEnabled;
         this.quakeHotkey = settings.QuakeHotkey;
     }
@@ -48,6 +50,7 @@ internal sealed class WindowTabsPageViewModel : SettingsPageViewModel, INotifyPr
     {
         SettingsSearchLabels.TabBarOrientation,
         SettingsSearchLabels.ConfirmOnClose,
+        SettingsSearchLabels.FullScreenNotchArea,
         SettingsSearchLabels.QuakeMode,
         SettingsSearchLabels.QuakeHotkey,
     };
@@ -91,6 +94,31 @@ internal sealed class WindowTabsPageViewModel : SettingsPageViewModel, INotifyPr
             }
         }
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether macOS native full screen
+    /// extends into the camera-housing band instead of leaving the standard
+    /// black bar across it.
+    /// </summary>
+    public bool UseFullScreenNotchArea
+    {
+        get => this.useFullScreenNotchArea;
+        set
+        {
+            if (this.SetField(ref this.useFullScreenNotchArea, value))
+            {
+                this.settings.UseFullScreenNotchArea = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the host platform is macOS, used to
+    /// hide the notch-area option everywhere else.
+    /// </summary>
+    public bool IsMacOS =>
+        System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+            System.Runtime.InteropServices.OSPlatform.OSX);
 
     /// <summary>
     /// Gets or sets a value indicating whether the Quake-mode global hotkey is active.
