@@ -215,14 +215,5 @@
             </Border>
         </Grid>
 
-        <!-- macOS camera-housing filler. Only visible in native full screen
-             on a notched display while the "use notch area" setting is off:
-             the window always spans the whole screen (the bundle opts out of
-             safe-area compatibility mode), so the black band that macOS would
-             otherwise draw is reproduced here and the rest of the chrome is
-             pushed below it. -->
-        <Border Name="NotchBand" VerticalAlignment="Top"
-                Height="0" IsVisible="False" IsHitTestVisible="False"
-                Background="Black" />
     </Panel>
 </Window>

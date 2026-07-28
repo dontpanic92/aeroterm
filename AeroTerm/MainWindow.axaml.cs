@@ -66,8 +66,6 @@ public partial class MainWindow : Window
     private readonly Grid titleBar;
     private readonly Grid verticalTitleBar;
     private readonly Grid sideRail;
-    private readonly DockPanel contentDock;
-    private readonly Border notchBand;
     private readonly Border terminalBorder;
     private readonly Border titleBarTabHost;
     private readonly Border sideTabHost;
@@ -136,8 +134,6 @@ public partial class MainWindow : Window
         this.titleBar = this.FindControl<Grid>("TitleBar")!;
         this.verticalTitleBar = this.FindControl<Grid>("VerticalTitleBar")!;
         this.sideRail = this.FindControl<Grid>("SideRail")!;
-        this.contentDock = this.FindControl<DockPanel>("ContentDock")!;
-        this.notchBand = this.FindControl<Border>("NotchBand")!;
         this.terminalBorder = this.FindControl<Border>("TerminalBorder")!;
         this.titleBarTabHost = this.FindControl<Border>("TitleBarTabHost")!;
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
@@ -1246,9 +1242,8 @@ public partial class MainWindow : Window
     /// right of the housing stays a plain drag surface.
     /// </description></item>
     /// <item><description>
-    /// Off (default) — the band is filled with the black filler
-    /// <c>NotchBand</c> and the rest of the chrome is pushed below it,
-    /// reproducing the stock macOS appearance.
+    /// Off (default) — no custom safe-area layout is applied, leaving AppKit
+    /// to retain its standard camera-housing band.
     /// </description></item>
     /// </list>
     /// </summary>
@@ -1260,36 +1255,23 @@ public partial class MainWindow : Window
         }
 
         double topInset = 0;
-        double bandHeight = 0;
         double tabStripMaxWidth = double.PositiveInfinity;
 
         if (this.WindowState == WindowState.FullScreen &&
+            this.settings.UseFullScreenNotchArea &&
             MacOSInterop.TryGetScreenTopSafeArea(
                 this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero,
                 out var safeArea))
         {
-            if (this.settings.UseFullScreenNotchArea)
-            {
-                topInset = safeArea.TopInset;
+            topInset = safeArea.TopInset;
 
-                if (this.settings.TabBarOrientation != TabBarOrientation.Vertical)
-                {
-                    tabStripMaxWidth = Math.Max(0, safeArea.NotchLeft);
-                }
-            }
-            else
+            if (this.settings.TabBarOrientation != TabBarOrientation.Vertical)
             {
-                bandHeight = safeArea.TopInset;
+                tabStripMaxWidth = Math.Max(0, safeArea.NotchLeft);
             }
         }
 
         this.tabStrip.MaxWidth = tabStripMaxWidth;
-
-        var bandOffset = new Thickness(0, bandHeight, 0, 0);
-        this.notchBand.Height = bandHeight;
-        this.notchBand.IsVisible = bandHeight > 0;
-        this.titleBar.Margin = bandOffset;
-        this.contentDock.Margin = bandOffset;
 
         double height = Math.Max(TitleBarHeight, topInset);
         if (Math.Abs(height - this.currentTitleBarHeight) < 0.01 &&
