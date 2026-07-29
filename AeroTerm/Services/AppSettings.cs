@@ -414,12 +414,13 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
-    /// Gets or sets a value indicating whether macOS native full screen
-    /// should extend into the camera-housing ("notch") band at the top of
-    /// the display, placing the tab strip beside the housing instead of
-    /// below it. Defaults to <c>false</c>, which reproduces the standard
-    /// macOS behaviour of a black band across the housing. Has no effect on
-    /// other platforms or on displays without a camera housing.
+    /// Gets or sets a value indicating whether the tab strip is displayed in
+    /// the camera-housing ("notch") band during macOS native full screen.
+    /// AppKit clamps full-screen windows below the housing and paints the
+    /// remainder black; when enabled, a floating overlay reclaims that band
+    /// for the tab strip, flowing tabs around the housing. Defaults to
+    /// <c>false</c>. Has no effect on other platforms or on displays without
+    /// a camera housing.
     /// </summary>
     public bool UseFullScreenNotchArea
     {

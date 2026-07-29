@@ -55,6 +55,20 @@ public partial class MainWindow : Window
     /// </summary>
     private const double TitleBarHeight = 38.0;
 
+    /// <summary>
+    /// Height in DIPs of the strip at the very top of the screen that hides
+    /// the notch overlay so the macOS menu bar can reveal itself. Kept to
+    /// the extreme edge because the tab strip itself sits against that edge.
+    /// </summary>
+    private const double NotchBarRevealStrip = 2.0;
+
+    /// <summary>
+    /// Extra distance in DIPs below the notch band that the pointer must
+    /// clear before the overlay is restored, covering the full-screen title
+    /// bar that macOS slides in beneath the band.
+    /// </summary>
+    private const double NotchBarRestoreMargin = 48.0;
+
     private const double HorizontalTitleBarButtonWidth = 46.0;
 
     private const double VerticalTitleBarButtonWidth = 28.0;
@@ -96,19 +110,50 @@ public partial class MainWindow : Window
     private string closeTrigger = "external-close-request";
 
     /// <summary>
-    /// Effective title bar height. Equals <see cref="TitleBarHeight"/>
-    /// except in macOS native full screen on a notched display, where it
-    /// grows to cover the camera-housing band (see
-    /// <see cref="UpdateMacFullScreenTitleBarLayout"/>).
+    /// Overlay hosting the tab strip inside the macOS full-screen notch
+    /// band, or <c>null</c> when that mode is not active.
     /// </summary>
-    private double currentTitleBarHeight = TitleBarHeight;
+    private NotchBarWindow? notchBar;
 
     /// <summary>
-    /// Height of the macOS camera-housing band currently overlapping the
-    /// window's top edge, or <c>0</c> when not applicable (not macOS, not
-    /// full screen, or a display without a notch).
+    /// Geometry of the band currently occupied by <see cref="notchBar"/>.
     /// </summary>
-    private double macNotchTopInset;
+    private MacNotchBand? notchBand;
+
+    /// <summary>
+    /// Pointer poll driving <see cref="PollNotchBarPointer"/>.
+    /// </summary>
+    private DispatcherTimer? notchBarPollTimer;
+
+    /// <summary>
+    /// Whether the overlay is temporarily hidden so the menu bar and the
+    /// full-screen title bar can be reached.
+    /// </summary>
+    private bool isNotchBarSteppedAside;
+
+    /// <summary>
+    /// Number of times the overlay's native window level had to be
+    /// reapplied, for diagnosing contention with Avalonia's own level
+    /// management.
+    /// </summary>
+    private int notchBarLevelCorrections;
+
+    /// <summary>
+    /// Whether the one-shot notch overlay diagnostics have been emitted.
+    /// </summary>
+    private bool hasLoggedNotchBarLevel;
+
+    /// <summary>
+    /// Screen position the overlay is meant to occupy, used to snap it back
+    /// if anything moves it.
+    /// </summary>
+    private PixelPoint? notchBarPosition;
+
+    /// <summary>
+    /// Whether the full-screen menu bar / title bar are currently prevented
+    /// from auto-revealing, so the option is only pushed on change.
+    /// </summary>
+    private bool isFullScreenChromeHidden;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainWindow"/> class.
@@ -1203,6 +1248,50 @@ public partial class MainWindow : Window
         this.macChromeReservation.IsHitTestVisible = true;
         this.macChromeReservation.PointerPressed += this.TitleBar_PointerPressed;
         this.macChromeReservation.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
+
+        // The notch overlay joins every space and outranks the menu bar, so
+        // it must not stay on screen once the app is no longer frontmost.
+        this.Activated += this.OnActivatedForNotchBar;
+        this.Deactivated += this.OnDeactivatedForNotchBar;
+        this.Closed += this.OnClosedForNotchBar;
+    }
+
+    private void OnActivatedForNotchBar(object? sender, EventArgs e)
+    {
+        if (this.notchBar is { } bar && !this.isNotchBarSteppedAside && !bar.IsVisible)
+        {
+            this.ShowNotchBarWindow(bar);
+        }
+    }
+
+    private void OnDeactivatedForNotchBar(object? sender, EventArgs e)
+    {
+        // Clicking a tab moves focus to the overlay, which deactivates the
+        // main window without the app ever losing frontmost status. Hiding
+        // on that would blank the band on the very first click.
+        if (MacOSInterop.IsApplicationActive())
+        {
+            return;
+        }
+
+        this.notchBar?.Hide();
+    }
+
+    private void OnClosedForNotchBar(object? sender, EventArgs e)
+    {
+        this.StopNotchBarPolling();
+
+        var bar = this.notchBar;
+        this.notchBar = null;
+        this.notchBand = null;
+
+        if (bar is not null)
+        {
+            // Detach before closing so the shared strip is not disposed
+            // along with the overlay.
+            bar.Host.Child = null;
+            bar.Close();
+        }
     }
 
     private void OnWindowPropertyChangedForMacChrome(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -1219,80 +1308,343 @@ public partial class MainWindow : Window
                 () =>
                 {
                     this.effectsService.HandleMacOSWindowStateChanged(state);
-                    this.UpdateMacFullScreenTitleBarLayout();
+                    this.UpdateNotchBar();
                 },
                 DispatcherPriority.Background);
         }
     }
 
     /// <summary>
-    /// Adapts the window chrome to the macOS camera-housing band.
+    /// Shows or hides the <see cref="NotchBarWindow"/> that hosts the tab
+    /// strip inside the band macOS leaves unused above a native full-screen
+    /// window on a notched display.
     /// <para>
-    /// The bundle opts out of display safe-area compatibility mode
-    /// (<c>NSPrefersDisplaySafeAreaCompatibilityMode</c> in
-    /// <c>Info.plist</c>), so a full-screen window always covers the entire
-    /// display rather than being letterboxed below the notch. What happens
-    /// with the reclaimed band is then a user choice:
+    /// AppKit clamps the full-screen window to the safe area and paints the
+    /// remaining strip black; the clamp cannot be lifted from within the
+    /// window. A floating auxiliary overlay can however draw there, so when
+    /// <see cref="AppSettings.UseFullScreenNotchArea"/> is enabled the tab
+    /// strip is re-parented into that overlay and the in-window title bar
+    /// collapses, handing its height back to the terminal.
     /// </para>
-    /// <list type="bullet">
-    /// <item><description>
-    /// <see cref="AppSettings.UseFullScreenNotchArea"/> on — the chrome uses
-    /// the band, and the horizontal tab strip is capped to the usable area
-    /// left of the housing so no tab hides underneath it. The band under and
-    /// right of the housing stays a plain drag surface.
-    /// </description></item>
-    /// <item><description>
-    /// Off (default) — no custom safe-area layout is applied, leaving AppKit
-    /// to retain its standard camera-housing band.
-    /// </description></item>
-    /// </list>
     /// </summary>
-    private void UpdateMacFullScreenTitleBarLayout()
+    private void UpdateNotchBar()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
             return;
         }
 
-        double topInset = 0;
-        double tabStripMaxWidth = double.PositiveInfinity;
+        bool eligible = this.settings.UseFullScreenNotchArea
+            && this.WindowState == WindowState.FullScreen
+            && this.IsVisible
+            && this.settings.TabBarOrientation != TabBarOrientation.Vertical;
 
-        if (this.WindowState == WindowState.FullScreen &&
-            this.settings.UseFullScreenNotchArea &&
-            MacOSInterop.TryGetScreenTopSafeArea(
+        if (!eligible ||
+            !MacOSInterop.TryGetFullScreenNotchBand(
                 this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero,
-                out var safeArea))
+                out var band))
         {
-            topInset = safeArea.TopInset;
-
-            if (this.settings.TabBarOrientation != TabBarOrientation.Vertical)
-            {
-                tabStripMaxWidth = Math.Max(0, safeArea.NotchLeft);
-            }
+            this.TeardownNotchBar();
+            return;
         }
 
-        this.tabStrip.MaxWidth = tabStripMaxWidth;
+        this.notchBand = band;
 
-        double height = Math.Max(TitleBarHeight, topInset);
-        if (Math.Abs(height - this.currentTitleBarHeight) < 0.01 &&
-            Math.Abs(topInset - this.macNotchTopInset) < 0.01)
+        var bar = this.notchBar;
+        if (bar is null)
+        {
+            bar = new NotchBarWindow();
+            bar.Opened += (_, _) => bar.ApplyNativeConfiguration();
+
+            // Clicking in the overlay focuses it; hand keyboard focus back so
+            // typing keeps reaching the terminal. This must happen on RELEASE,
+            // not on activation: activating another window between press and
+            // release breaks the pointer capture, so buttons (which need a
+            // complete click) would never fire, while tabs — acting on press —
+            // still worked.
+            bar.AddHandler(
+                InputElement.PointerReleasedEvent,
+                this.OnNotchBarPointerReleased,
+                RoutingStrategies.Bubble,
+                handledEventsToo: true);
+
+            // Fallback: the native profile menu runs its own modal loop and
+            // swallows the mouse-up, so the release above never arrives when
+            // the dropdown is used. Leaving the band hands focus back too.
+            bar.AddHandler(
+                InputElement.PointerExitedEvent,
+                this.OnNotchBarPointerReleased,
+                RoutingStrategies.Bubble,
+                handledEventsToo: true);
+            this.notchBar = bar;
+        }
+
+        // The strip spans the whole band and flows its tabs around the
+        // camera housing, so both the left and right auxiliary areas are
+        // usable rather than only the wider one.
+        bar.Width = band.ScreenWidth;
+        bar.Height = band.Height;
+        bar.ApplyBackgroundColor(this.ResolveSchemeBackgroundColor());
+        this.tabStrip.NotchGap = (band.NotchLeft, band.NotchRight);
+
+        if (!ReferenceEquals(bar.Host.Child, this.tabStrip))
+        {
+            this.titleBarTabDock.Children.Remove(this.tabStrip);
+            this.titleBarTabHost.Child = null;
+            this.sideTabHost.Child = null;
+            bar.Host.Child = this.tabStrip;
+        }
+
+        // The in-window title bar is now empty; give its height back to the
+        // terminal so the full-screen window is used edge to edge.
+        this.titleBar.IsVisible = false;
+        foreach (var tab in this.tabView.Tabs)
+        {
+            this.ApplyTopInsetToSession(tab);
+        }
+
+        if (!bar.IsVisible)
+        {
+            bar.Show();
+        }
+
+        this.PositionNotchBar(band);
+        bar.ApplyNativeConfiguration();
+        this.SetFullScreenChromeHidden(true);
+
+        if (!this.hasLoggedNotchBarLevel)
+        {
+            this.hasLoggedNotchBarLevel = true;
+            this.log.LogInformation(
+                "Notch overlay active — level={Level} (must exceed the menu bar's 24), band={BandHeight}, notch={NotchLeft}-{NotchRight}, screenWidth={ScreenWidth}.",
+                bar.NativeWindowLevel,
+                band.Height,
+                band.NotchLeft,
+                band.NotchRight,
+                band.ScreenWidth);
+        }
+
+        this.StartNotchBarPolling();
+    }
+
+    private void OnNotchBarPointerReleased(object? sender, RoutedEventArgs e)
+        => Dispatcher.UIThread.Post(this.ReturnFocusFromNotchBar, DispatcherPriority.Background);
+
+    /// <summary>
+    /// Returns keyboard focus to the main window after the notch overlay has
+    /// taken it, so the terminal keeps receiving input when a tab is clicked.
+    /// </summary>
+    private void ReturnFocusFromNotchBar()
+    {
+        if (this.notchBar is null || !this.IsVisible)
         {
             return;
         }
 
-        this.currentTitleBarHeight = height;
-        this.macNotchTopInset = topInset;
+        this.Activate();
+        this.tabView.ActiveTab?.FocusInput();
+    }
 
-        this.titleBar.Height = height;
-        this.verticalTitleBar.Height = height;
-        if (this.sideRail.RowDefinitions.Count > 0)
+    /// <summary>
+    /// Prevents (or restores) the auto-revealing macOS full-screen menu bar
+    /// and title bar. Applied only on change, since the poll runs at 30ms.
+    /// </summary>
+    /// <param name="hidden">Whether the chrome should stay hidden.</param>
+    private void SetFullScreenChromeHidden(bool hidden)
+    {
+        if (this.isFullScreenChromeHidden == hidden)
         {
-            this.sideRail.RowDefinitions[0].Height = new GridLength(height);
+            return;
         }
 
-        foreach (var tab in this.tabView.Tabs)
+        if (MacOSInterop.SetFullScreenChromeHidden(
+            this.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero,
+            hidden))
         {
-            this.ApplyTopInsetToSession(tab);
+            this.isFullScreenChromeHidden = hidden;
+        }
+    }
+
+    /// <summary>
+    /// Shows the overlay and re-establishes its geometry and native
+    /// configuration.
+    /// <para>
+    /// Repositioning on every show is required: Avalonia restores its own
+    /// notion of the window position when a hidden window is shown again, so
+    /// after switching spaces and returning the band would otherwise reappear
+    /// floating in the middle of the screen.
+    /// </para>
+    /// </summary>
+    /// <param name="bar">The overlay to show.</param>
+    private void ShowNotchBarWindow(NotchBarWindow bar)
+    {
+        bar.Show();
+
+        if (this.notchBand is { } band)
+        {
+            this.PositionNotchBar(band);
+        }
+
+        bar.ApplyNativeConfiguration();
+    }
+
+    /// <summary>
+    /// Places the overlay across the top edge of the screen currently
+    /// hosting the main window.
+    /// </summary>
+    /// <param name="band">The resolved band geometry.</param>
+    private void PositionNotchBar(MacNotchBand band)
+    {
+        var bar = this.notchBar;
+        if (bar is null)
+        {
+            return;
+        }
+
+        var screen = this.Screens.ScreenFromWindow(this) ?? this.Screens.Primary;
+        if (screen is not null)
+        {
+            this.notchBarPosition = screen.Bounds.TopLeft;
+            bar.Position = screen.Bounds.TopLeft;
+        }
+
+        bar.Width = band.ScreenWidth;
+        bar.Height = band.Height;
+    }
+
+    /// <summary>
+    /// Returns the tab strip to the in-window title bar and disposes of the
+    /// overlay, restoring the standard full-screen / windowed chrome.
+    /// </summary>
+    private void TeardownNotchBar()
+    {
+        this.StopNotchBarPolling();
+        this.notchBarLevelCorrections = 0;
+
+        // Restore the auto-hide chrome before the window leaves full screen;
+        // the presentation options are rejected outside a full-screen space.
+        this.SetFullScreenChromeHidden(false);
+
+        var bar = this.notchBar;
+        if (bar is null)
+        {
+            if (!this.titleBar.IsVisible)
+            {
+                this.titleBar.IsVisible = true;
+            }
+
+            return;
+        }
+
+        this.notchBar = null;
+        this.notchBand = null;
+        this.notchBarPosition = null;
+
+        if (ReferenceEquals(bar.Host.Child, this.tabStrip))
+        {
+            bar.Host.Child = null;
+        }
+
+        this.tabStrip.NotchGap = (0, 0);
+        this.titleBar.IsVisible = true;
+
+        // Rebuilds the correct host for the current orientation and
+        // reapplies the terminal top inset.
+        this.ApplyTabBarOrientation();
+
+        bar.Close();
+    }
+
+    /// <summary>
+    /// Starts the pointer poll that lets the overlay step aside for the
+    /// menu bar. The overlay renders above the menu bar and swallows the
+    /// hover that would reveal it, so without this the menu bar and the
+    /// full-screen title bar would be unreachable while the overlay is up.
+    /// </summary>
+    private void StartNotchBarPolling()
+    {
+        if (this.notchBarPollTimer is not null)
+        {
+            return;
+        }
+
+        this.notchBarPollTimer = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(30),
+            DispatcherPriority.Background,
+            (_, _) => this.PollNotchBarPointer());
+        this.notchBarPollTimer.Start();
+    }
+
+    private void StopNotchBarPolling()
+    {
+        this.notchBarPollTimer?.Stop();
+        this.notchBarPollTimer = null;
+        this.isNotchBarSteppedAside = false;
+    }
+
+    /// <summary>
+    /// Hides the overlay while the pointer rests against the very top edge
+    /// of the screen, which lets macOS reveal the menu bar and the
+    /// full-screen title bar underneath, and restores it once the pointer
+    /// has moved clear of that region again.
+    /// </summary>
+    private void PollNotchBarPointer()
+    {
+        var bar = this.notchBar;
+        if (bar is null || this.notchBand is not { } band)
+        {
+            return;
+        }
+
+        var mouse = MacOSInterop.GetMouseLocation();
+
+        // AppKit reports a bottom-left origin, so distance from the top of
+        // the hosting screen is measured downwards from its top edge.
+        double fromTop = band.ScreenTopY - mouse.Y;
+        bool onThisScreen = mouse.X >= band.ScreenLeftX
+            && mouse.X <= band.ScreenLeftX + band.ScreenWidth;
+
+        if (!this.isNotchBarSteppedAside)
+        {
+            this.SetFullScreenChromeHidden(true);
+
+            // Snap back if anything moved the band — switching spaces can
+            // leave Avalonia restoring a stale position.
+            if (this.notchBarPosition is { } expected && bar.Position != expected)
+            {
+                bar.Position = expected;
+            }
+
+            // Keep the overlay above the menu bar: Avalonia resets the
+            // NSWindow level behind our back, after which the menu bar would
+            // reveal on top of the tab strip.
+            if (bar.EnsureNativeConfiguration())
+            {
+                this.notchBarLevelCorrections++;
+                if (this.notchBarLevelCorrections == 1)
+                {
+                    this.log.LogInformation(
+                        "Notch overlay window level was reset externally; reapplied.");
+                }
+            }
+
+            if (onThisScreen && fromTop >= 0 && fromTop <= NotchBarRevealStrip)
+            {
+                this.isNotchBarSteppedAside = true;
+                this.SetFullScreenChromeHidden(false);
+                bar.Hide();
+            }
+
+            return;
+        }
+
+        // Restore only once the pointer has left the whole reveal region —
+        // the band plus the title bar macOS slides in beneath it — so the
+        // overlay does not flicker back over the menu bar in use.
+        if (!onThisScreen || fromTop > band.Height + NotchBarRestoreMargin)
+        {
+            this.isNotchBarSteppedAside = false;
+            this.ShowNotchBarWindow(bar);
         }
     }
 
@@ -1312,7 +1664,11 @@ public partial class MainWindow : Window
         }
         else if (e.PropertyName == nameof(AppSettings.ColorSchemeName))
         {
-            Dispatcher.UIThread.Post(this.ApplyTabForegroundFromColorScheme);
+            Dispatcher.UIThread.Post(() =>
+            {
+                this.ApplyTabForegroundFromColorScheme();
+                this.notchBar?.ApplyBackgroundColor(this.ResolveSchemeBackgroundColor());
+            });
         }
         else if (e.PropertyName == nameof(AppSettings.TabBarOrientation))
         {
@@ -1320,7 +1676,7 @@ public partial class MainWindow : Window
         }
         else if (e.PropertyName == nameof(AppSettings.UseFullScreenNotchArea))
         {
-            Dispatcher.UIThread.Post(this.UpdateMacFullScreenTitleBarLayout);
+            Dispatcher.UIThread.Post(this.UpdateNotchBar);
         }
     }
 
@@ -1341,8 +1697,8 @@ public partial class MainWindow : Window
         bool vertical = this.settings.TabBarOrientation == TabBarOrientation.Vertical;
         this.tabStrip.Orientation = vertical ? Avalonia.Layout.Orientation.Vertical : Avalonia.Layout.Orientation.Horizontal;
 
-        this.titleBar.Height = this.currentTitleBarHeight;
-        this.verticalTitleBar.Height = this.currentTitleBarHeight;
+        this.titleBar.Height = TitleBarHeight;
+        this.verticalTitleBar.Height = TitleBarHeight;
 
         // Re-parent the single TabStrip into the orientation-appropriate
         // host, together with the shared native-chrome reservation and
@@ -1393,7 +1749,10 @@ public partial class MainWindow : Window
             this.ApplyTopInsetToSession(tab);
         }
 
-        this.UpdateMacFullScreenTitleBarLayout();
+        if (this.notchBar is not null)
+        {
+            this.UpdateNotchBar();
+        }
 
         this.UpdateTabStripVisibility();
     }
@@ -1425,11 +1784,12 @@ public partial class MainWindow : Window
         bool horizontal = this.settings.TabBarOrientation != TabBarOrientation.Vertical;
 
         // Horizontal: clear the floating title bar. Vertical: the title bar
-        // lives in the side rail, so the only thing to clear is the macOS
-        // camera housing when the window spans the whole display.
-        float inset = horizontal
-            ? (float)this.currentTitleBarHeight
-            : (float)this.macNotchTopInset;
+        // lives in the side rail, so the terminal starts at the top. When
+        // the strip has moved into the macOS notch overlay the in-window
+        // title bar is hidden, so there is nothing to clear either.
+        float inset = horizontal && this.notchBar is null
+            ? (float)TitleBarHeight
+            : 0f;
         foreach (var content in session.AllContents)
         {
             if (content.Terminal is not null)
@@ -1462,6 +1822,21 @@ public partial class MainWindow : Window
             new SolidColorBrush(Color.FromArgb(hoverAlpha, r, g, b));
         this.Resources["TitleBarButtonPressedBrush"] =
             new SolidColorBrush(Color.FromArgb(pressedAlpha, r, g, b));
+    }
+
+    /// <summary>
+    /// Returns the active colour scheme's background colour, used to paint
+    /// the notch overlay opaquely so the menu bar cannot show through it.
+    /// </summary>
+    private Color ResolveSchemeBackgroundColor()
+    {
+        var scheme = Models.ColorSchemePresets.FindByName(this.settings.ColorSchemeName)
+            ?? Models.ColorSchemePresets.Default;
+        int rgb = scheme.Background;
+        return Color.FromRgb(
+            (byte)((rgb >> 16) & 0xFF),
+            (byte)((rgb >> 8) & 0xFF),
+            (byte)(rgb & 0xFF));
     }
 
     private void ApplyTabForegroundFromColorScheme()

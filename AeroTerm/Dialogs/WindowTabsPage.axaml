@@ -37,7 +37,7 @@
                 <CheckBox dialogs:SettingsSearch.Label="{x:Static dialogs:SettingsSearchLabels.FullScreenNotchArea}"
                           IsChecked="{Binding UseFullScreenNotchArea, Mode=TwoWay}"
                           Content="Use the area beside the camera housing in full screen" />
-                <TextBlock Text="On Macs with a notch, full screen normally leaves a black bar across the camera housing. Enable this to extend the window into that band and place tabs to the left of the housing."
+                <TextBlock Text="On Macs with a notch, full screen normally leaves a black bar across the camera housing. Enable this to show the tab strip there instead, flowing tabs around the camera. Move the pointer to the very top edge to reveal the menu bar."
                            FontSize="11" Foreground="Gray" TextWrapping="Wrap" />
             </StackPanel>
         </GroupBox>

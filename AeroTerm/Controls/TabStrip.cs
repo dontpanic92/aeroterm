@@ -466,6 +466,23 @@ public sealed class TabStrip : UserControl
     }
 
     /// <summary>
+    /// Gets or sets a horizontal span, in DIPs from the strip's left edge,
+    /// that tabs must flow around instead of overlapping. Used in macOS
+    /// full screen to keep tabs clear of the display's camera housing while
+    /// the strip spans the notch band. An empty span (the default) disables
+    /// the behavior.
+    /// </summary>
+    public (double Start, double End) NotchGap
+    {
+        get => this.tabsPanel.HorizontalGap;
+        set
+        {
+            this.tabsPanel.HorizontalGap = value;
+            this.InvalidateMeasure();
+        }
+    }
+
+    /// <summary>
     /// Updates every tab text + background tint so the strip blends with
     /// the active terminal color scheme. The supplied colour is treated
     /// as the scheme's foreground (contrast partner of its background)
@@ -645,6 +662,12 @@ public sealed class TabStrip : UserControl
                 if (this.scrollRightButton.IsVisible)
                 {
                     reserved += ScrollButtonWidth;
+                }
+
+                var gap = this.tabsPanel.HorizontalGap;
+                if (gap.End > gap.Start)
+                {
+                    reserved += gap.End - gap.Start;
                 }
 
                 this.tabsPanel.AvailableTabExtent = Math.Max(0, avail - reserved);
@@ -1749,6 +1772,31 @@ public sealed class TabStrip : UserControl
     private sealed class TabHeaderPanel : StackPanel
     {
         private double availableTabExtent = double.PositiveInfinity;
+        private double gapStart;
+        private double gapEnd;
+
+        /// <summary>
+        /// Gets or sets the horizontal span, in DIPs from the panel's left
+        /// edge, that headers must not overlap. Used in macOS full screen to
+        /// flow tabs around the display's camera housing so that a tab is
+        /// never rendered underneath it. An empty span disables the skip.
+        /// </summary>
+        public (double Start, double End) HorizontalGap
+        {
+            get => (this.gapStart, this.gapEnd);
+            set
+            {
+                if (this.gapStart.Equals(value.Start) && this.gapEnd.Equals(value.End))
+                {
+                    return;
+                }
+
+                this.gapStart = value.Start;
+                this.gapEnd = value.End;
+                this.InvalidateMeasure();
+                this.InvalidateArrange();
+            }
+        }
 
         /// <summary>
         /// Gets or sets the soft maximum tab-area extent published by
@@ -1846,6 +1894,13 @@ public sealed class TabStrip : UserControl
                 }
             }
 
+            if (horizontal && this.gapEnd > this.gapStart && totalMain > this.gapStart)
+            {
+                // Headers past the gap are pushed beyond it, so the panel
+                // needs the gap's width on top of its natural extent.
+                totalMain += this.gapEnd - this.gapStart;
+            }
+
             return horizontal
                 ? new Size(totalMain, maxCross)
                 : new Size(maxCross, totalMain);
@@ -1887,6 +1942,7 @@ public sealed class TabStrip : UserControl
                 {
                     if (horizontal)
                     {
+                        pos = this.SkipGap(pos, perHeader);
                         child.Arrange(new Rect(pos, 0, perHeader, finalSize.Height));
                         pos += perHeader;
                     }
@@ -1902,6 +1958,7 @@ public sealed class TabStrip : UserControl
                     var ds = child.DesiredSize;
                     if (horizontal)
                     {
+                        pos = this.SkipGap(pos, ds.Width);
                         child.Arrange(new Rect(pos, 0, ds.Width, finalSize.Height));
                         pos += ds.Width;
                     }
@@ -1914,6 +1971,24 @@ public sealed class TabStrip : UserControl
             }
 
             return finalSize;
+        }
+
+        /// <summary>
+        /// Advances <paramref name="pos"/> past <see cref="HorizontalGap"/>
+        /// when a child of the given width placed there would straddle it.
+        /// </summary>
+        private double SkipGap(double pos, double width)
+        {
+            if (this.gapEnd <= this.gapStart)
+            {
+                return pos;
+            }
+
+            // Straddles the gap when it starts before the gap ends and ends
+            // after the gap starts.
+            return pos < this.gapEnd && (pos + width) > this.gapStart
+                ? this.gapEnd
+                : pos;
         }
     }
 

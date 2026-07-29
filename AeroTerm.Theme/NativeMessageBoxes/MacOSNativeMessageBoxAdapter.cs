@@ -44,6 +44,15 @@ internal sealed class MacOSNativeMessageBoxAdapter : INativeMessageBoxPlatformAd
             return this.fallback.ShowAsync(owner, options);
         }
 
+        // AppKit's NSAlert resolves the application icon while loading its
+        // nib, which crashes (SIGBUS inside IconServices/ImageIO) when the
+        // process is not running from a real .app bundle — the usual case
+        // during `dotnet run`. Fall back to the managed dialog there.
+        if (!IsRunningFromAppBundle())
+        {
+            return this.fallback.ShowAsync(owner, options);
+        }
+
         try
         {
             return Task.FromResult(this.ShowAppKitAlert(options));
@@ -56,6 +65,34 @@ internal sealed class MacOSNativeMessageBoxAdapter : INativeMessageBoxPlatformAd
         {
             return this.fallback.ShowAsync(owner, options);
         }
+    }
+
+    /// <summary>
+    /// Returns whether the process is running from a genuine application
+    /// bundle, determined by <c>[[NSBundle mainBundle] bundleIdentifier]</c>
+    /// being non-nil. Unbundled executables have no identifier and cannot
+    /// safely instantiate <c>NSAlert</c>.
+    /// </summary>
+    /// <returns><c>true</c> when running from an .app bundle.</returns>
+    private static bool IsRunningFromAppBundle()
+    {
+        IntPtr nsBundleClass = NativeMethods.ObjCGetClass("NSBundle");
+        if (nsBundleClass == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        IntPtr mainBundle = NativeMethods.ObjCMsgSend(
+            nsBundleClass,
+            NativeMethods.SelRegisterName("mainBundle"));
+        if (mainBundle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        return NativeMethods.ObjCMsgSend(
+            mainBundle,
+            NativeMethods.SelRegisterName("bundleIdentifier")) != IntPtr.Zero;
     }
 
     private NativeMessageBoxResult ShowAppKitAlert(NativeMessageBoxOptions options)

@@ -20,6 +20,48 @@ public static class MacOSInterop
     private const long NSWindowToolbarStyleUnifiedCompact = 4;
 
     /// <summary>
+    /// Window level for the full-screen notch overlay:
+    /// <c>NSStatusWindowLevel</c> (25) + 1, which also places it above
+    /// <c>NSMainMenuWindowLevel</c> (24) so the auto-revealing menu bar
+    /// does not paint over it.
+    /// </summary>
+    private const long NotchOverlayWindowLevel = 26;
+
+    /// <summary><c>NSWindowStyleMaskFullScreen</c> (1 &lt;&lt; 14).</summary>
+    private const long NSWindowStyleMaskFullScreen = 1 << 14;
+
+    /// <summary><c>NSApplicationPresentationAutoHideDock</c> (1 &lt;&lt; 0).</summary>
+    private const long NSApplicationPresentationAutoHideDock = 1 << 0;
+
+    /// <summary><c>NSApplicationPresentationHideDock</c> (1 &lt;&lt; 1).</summary>
+    private const long NSApplicationPresentationHideDock = 1 << 1;
+
+    /// <summary><c>NSApplicationPresentationAutoHideMenuBar</c> (1 &lt;&lt; 2).</summary>
+    private const long NSApplicationPresentationAutoHideMenuBar = 1 << 2;
+
+    /// <summary><c>NSApplicationPresentationHideMenuBar</c> (1 &lt;&lt; 3).</summary>
+    private const long NSApplicationPresentationHideMenuBar = 1 << 3;
+
+    /// <summary><c>NSApplicationPresentationFullScreen</c> (1 &lt;&lt; 10).</summary>
+    private const long NSApplicationPresentationFullScreen = 1 << 10;
+
+    /// <summary>
+    /// Collection behavior for the full-screen notch overlay:
+    /// <c>IgnoresCycle</c> (1 &lt;&lt; 6) | <c>FullScreenAuxiliary</c>
+    /// (1 &lt;&lt; 8).
+    /// <para>
+    /// <c>FullScreenAuxiliary</c> is what lets the overlay share the main
+    /// window's full-screen space. <c>CanJoinAllSpaces</c> and
+    /// <c>Stationary</c> are deliberately NOT set: together they pin the
+    /// overlay to every space and hold it still during a space switch, so it
+    /// hangs stale over the incoming desktop for the whole swipe animation.
+    /// Without them the band belongs to the full-screen space and slides away
+    /// with it, as any ordinary window of that space would.
+    /// </para>
+    /// </summary>
+    private const long NotchOverlayCollectionBehavior = 64 | 256;
+
+    /// <summary>
     /// Tag value previously used to mark our backdrop. Retained as a
     /// constant for documentation purposes only — we now identify the
     /// installed instance by class lookup (<c>isKindOfClass:</c>) because
@@ -205,6 +247,309 @@ public static class MacOSInterop
             notchLeft - windowFrame.X,
             notchRight - windowFrame.X);
         return true;
+    }
+
+    /// <summary>
+    /// Queries the unused band left above a macOS native full-screen window
+    /// on a display with a camera housing.
+    /// <para>
+    /// AppKit clamps native full-screen windows to the safe area and paints
+    /// the remainder black; the clamp cannot be lifted (neither
+    /// <c>setFrame:</c> nor <c>window:willUseFullScreenContentSize:</c> can
+    /// grow the window into it). A floating auxiliary window can however be
+    /// placed over that band, which is how this band geometry is used.
+    /// </para>
+    /// </summary>
+    /// <param name="nsWindow">The full-screen NSWindow handle.</param>
+    /// <param name="band">The resolved band geometry when successful.</param>
+    /// <returns>
+    /// <c>true</c> when the window currently leaves an unused band above
+    /// itself and the hosting screen reports a camera housing; otherwise
+    /// <c>false</c> (non-macOS, pre-macOS 12, no notch, or not full screen).
+    /// </returns>
+    public static bool TryGetFullScreenNotchBand(IntPtr nsWindow, out MacNotchBand band)
+    {
+        band = default;
+
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        IntPtr screen = NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("screen"));
+        if (screen == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var auxLeftSel = NativeMethods.SelRegisterName("auxiliaryTopLeftArea");
+        var auxRightSel = NativeMethods.SelRegisterName("auxiliaryTopRightArea");
+        var respondsSel = NativeMethods.SelRegisterName("respondsToSelector:");
+
+        // auxiliaryTop*Area are macOS 12+; the bundle targets 11.0.
+        if (!NativeMethods.ObjCMsgSendPtrRetBool(screen, respondsSel, auxLeftSel) ||
+            !NativeMethods.ObjCMsgSendPtrRetBool(screen, respondsSel, auxRightSel))
+        {
+            return false;
+        }
+
+        NSRect screenFrame = NativeMethods.ObjCMsgSendRectRet(
+            screen,
+            NativeMethods.SelRegisterName("frame"));
+        NSRect windowFrame = NativeMethods.ObjCMsgSendRectRet(
+            nsWindow,
+            NativeMethods.SelRegisterName("frame"));
+
+        // The band is whatever vertical space the (clamped) full-screen
+        // window leaves above itself. Derived from the actual frames rather
+        // than safeAreaInsets.top, which is one point smaller in practice.
+        double height = screenFrame.Height - windowFrame.Height;
+        if (height <= 0)
+        {
+            return false;
+        }
+
+        NSRect auxLeft = NativeMethods.ObjCMsgSendRectRet(screen, auxLeftSel);
+        NSRect auxRight = NativeMethods.ObjCMsgSendRectRet(screen, auxRightSel);
+        if (auxLeft.Width <= 0 || auxRight.Width <= 0)
+        {
+            return false;
+        }
+
+        double notchLeft = (auxLeft.X + auxLeft.Width) - screenFrame.X;
+        double notchRight = auxRight.X - screenFrame.X;
+        if (notchRight <= notchLeft)
+        {
+            return false;
+        }
+
+        band = new MacNotchBand(
+            height,
+            screenFrame.Width,
+            notchLeft,
+            notchRight,
+            screenFrame.Y + screenFrame.Height,
+            screenFrame.X);
+        return true;
+    }
+
+    /// <summary>
+    /// Configures a borderless NSWindow so it floats inside the band above a
+    /// native full-screen window, in the manner used by "dynamic island"
+    /// style utilities.
+    /// <para>
+    /// The level is raised above <c>NSStatusWindowLevel</c> — and therefore
+    /// above <c>NSMainMenuWindowLevel</c> — so the overlay is not hidden by
+    /// the menu bar when it auto-reveals, and
+    /// <c>NSWindowCollectionBehaviorFullScreenAuxiliary</c> lets it share the
+    /// full-screen space instead of being pushed to another one.
+    /// </para>
+    /// </summary>
+    /// <param name="nsWindow">The overlay NSWindow handle.</param>
+    public static void ConfigureNotchOverlayWindow(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // NSStatusWindowLevel (25) + 1 — above the menu bar's level (24).
+        NativeMethods.ObjCMsgSendLong(
+            nsWindow,
+            NativeMethods.SelRegisterName("setLevel:"),
+            NotchOverlayWindowLevel);
+
+        NativeMethods.ObjCMsgSendLong(
+            nsWindow,
+            NativeMethods.SelRegisterName("setCollectionBehavior:"),
+            NotchOverlayCollectionBehavior);
+
+        // Keep the overlay alive across app deactivation; visibility is
+        // driven explicitly by the owner instead.
+        NativeMethods.ObjCMsgSendBool(
+            nsWindow,
+            NativeMethods.SelRegisterName("setHidesOnDeactivate:"),
+            false);
+
+        NativeMethods.ObjCMsgSendBool(
+            nsWindow,
+            NativeMethods.SelRegisterName("setOpaque:"),
+            false);
+
+        // orderFrontRegardless — order in without activating the app, which
+        // would steal key focus from the terminal in the full-screen window.
+        NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("orderFrontRegardless"));
+    }
+
+    /// <summary>
+    /// Hides or restores the auto-revealing macOS full-screen chrome (menu
+    /// bar and window title bar) for the duration of the notch overlay.
+    /// <para>
+    /// AppKit reveals both whenever the pointer reaches the top of the
+    /// screen — precisely where the tab strip lives once it moves into the
+    /// notch band. The reveal cannot be blocked by suppressing AppKit's
+    /// detection window (it is recreated) nor by resetting the title bar's
+    /// alpha (that merely races the fade-in and flickers). Switching the
+    /// presentation options from the auto-hide variants to the outright
+    /// hidden ones stops the reveal from happening at all.
+    /// </para>
+    /// </summary>
+    /// <param name="nsWindow">The full-screen NSWindow handle.</param>
+    /// <param name="hidden">
+    /// <c>true</c> to prevent the chrome from revealing; <c>false</c> to
+    /// restore the standard auto-hide behavior.
+    /// </param>
+    /// <returns><c>true</c> when the options were applied.</returns>
+    public static bool SetFullScreenChromeHidden(IntPtr nsWindow, bool hidden)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        // Only valid while the window is genuinely in a full-screen space —
+        // AppKit raises an exception for combinations that do not match the
+        // current state, and an Objective-C exception cannot be caught here.
+        long styleMask = (long)(nint)NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("styleMask"));
+        if ((styleMask & NSWindowStyleMaskFullScreen) == 0)
+        {
+            return false;
+        }
+
+        IntPtr appClass = NativeMethods.ObjCGetClass("NSApplication");
+        if (appClass == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        IntPtr app = NativeMethods.ObjCMsgSend(
+            appClass,
+            NativeMethods.SelRegisterName("sharedApplication"));
+        if (app == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        long options = hidden
+            ? NSApplicationPresentationFullScreen | NSApplicationPresentationHideDock | NSApplicationPresentationHideMenuBar
+            : NSApplicationPresentationFullScreen | NSApplicationPresentationAutoHideDock | NSApplicationPresentationAutoHideMenuBar;
+
+        NativeMethods.ObjCMsgSendLong(
+            app,
+            NativeMethods.SelRegisterName("setPresentationOptions:"),
+            options);
+        return true;
+    }
+
+    /// <summary>
+    /// Returns whether this application is the active (frontmost) one,
+    /// mirroring <c>[NSApp isActive]</c>. Used to tell a genuine app switch
+    /// apart from focus merely moving to the app's own notch overlay.
+    /// </summary>
+    /// <returns><c>true</c> when the application is active.</returns>
+    public static bool IsApplicationActive()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return true;
+        }
+
+        IntPtr appClass = NativeMethods.ObjCGetClass("NSApplication");
+        if (appClass == IntPtr.Zero)
+        {
+            return true;
+        }
+
+        IntPtr app = NativeMethods.ObjCMsgSend(
+            appClass,
+            NativeMethods.SelRegisterName("sharedApplication"));
+        if (app == IntPtr.Zero)
+        {
+            return true;
+        }
+
+        return NativeMethods.ObjCMsgSendBoolRet(
+            app,
+            NativeMethods.SelRegisterName("isActive"));
+    }
+
+    /// <summary>
+    /// Returns the NSWindow's current window level, mirroring
+    /// <c>[NSWindow level]</c>. Exposed for diagnostics: the notch overlay
+    /// must outrank <c>NSMainMenuWindowLevel</c> (24) to keep the
+    /// auto-revealing menu bar from painting over it.
+    /// </summary>
+    /// <param name="nsWindow">The NSWindow handle.</param>
+    /// <returns>The window level, or 0 on non-macOS platforms.</returns>
+    public static long GetNSWindowLevel(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return 0;
+        }
+
+        return (long)(nint)NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("level"));
+    }
+
+    /// <summary>
+    /// Returns whether the NSWindow still carries the window level applied
+    /// by <see cref="ConfigureNotchOverlayWindow"/>.
+    /// <para>
+    /// Avalonia re-asserts its own level whenever it (re)applies window
+    /// properties such as topmost, or when the window is shown again after
+    /// being hidden. If that lands after our configuration the overlay drops
+    /// below <c>NSMainMenuWindowLevel</c> and the auto-revealing menu bar
+    /// starts painting over the tab strip, so callers poll this and
+    /// reconfigure when it returns <c>false</c>.
+    /// </para>
+    /// </summary>
+    /// <param name="nsWindow">The overlay NSWindow handle.</param>
+    /// <returns><c>true</c> when the overlay level is still in effect.</returns>
+    public static bool IsNotchOverlayLevelIntact(IntPtr nsWindow)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX) || nsWindow == IntPtr.Zero)
+        {
+            return true;
+        }
+
+        long level = (long)(nint)NativeMethods.ObjCMsgSend(
+            nsWindow,
+            NativeMethods.SelRegisterName("level"));
+
+        return level == NotchOverlayWindowLevel;
+    }
+
+    /// <summary>
+    /// Returns the current pointer location in AppKit's global (bottom-left
+    /// origin) screen coordinates, mirroring <c>[NSEvent mouseLocation]</c>.
+    /// Polling this is how the notch overlay decides to step aside for the
+    /// menu bar, since it cannot rely on tracking areas while hidden.
+    /// </summary>
+    /// <returns>The pointer location, or the origin on non-macOS platforms.</returns>
+    public static NSPoint GetMouseLocation()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return default;
+        }
+
+        IntPtr nsEvent = NativeMethods.ObjCGetClass("NSEvent");
+        if (nsEvent == IntPtr.Zero)
+        {
+            return default;
+        }
+
+        return NativeMethods.ObjCMsgSendPointRet(
+            nsEvent,
+            NativeMethods.SelRegisterName("mouseLocation"));
     }
 
     /// <summary>
@@ -1411,6 +1756,38 @@ public static class MacOSInterop
         /// <returns>The returned edge insets.</returns>
         [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
         public static extern NSEdgeInsets ObjCMsgSendEdgeInsetsRet(IntPtr receiver, IntPtr selector);
+
+        /// <summary>
+        /// Sends a no-argument message to an Objective-C object and returns
+        /// an <see cref="NSPoint"/> (e.g. <c>mouseLocation</c>). Same
+        /// large-struct-return ABI caveat as
+        /// <see cref="ObjCMsgSendRectRet"/>.
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <returns>The returned point.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern NSPoint ObjCMsgSendPointRet(IntPtr receiver, IntPtr selector);
+
+        /// <summary>
+        /// Sends a no-argument message returning a <c>CGFloat</c> (e.g.
+        /// <c>alphaValue</c>).
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <returns>The returned value.</returns>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern double ObjCMsgSendDoubleRet(IntPtr receiver, IntPtr selector);
+
+        /// <summary>
+        /// Sends a message with a single <c>CGFloat</c> argument (e.g.
+        /// <c>setAlphaValue:</c>).
+        /// </summary>
+        /// <param name="receiver">The target object.</param>
+        /// <param name="selector">The selector to invoke.</param>
+        /// <param name="arg">The value argument.</param>
+        [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        public static extern void ObjCMsgSendDouble(IntPtr receiver, IntPtr selector, double arg);
 
         /// <summary>
         /// Sends a message with one pointer, one long, and one pointer
