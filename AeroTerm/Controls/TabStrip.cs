@@ -62,12 +62,6 @@ public sealed class TabStrip : UserControl
     private const double DetachDistanceThreshold = 80.0;
 
     /// <summary>
-    /// Horizontal rail width in vertical-orientation mode. Narrow enough
-    /// to feel like a rail, wide enough to show a sensible title slice.
-    /// </summary>
-    private const double VerticalRailWidth = 180;
-
-    /// <summary>
     /// Maximum width of a single tab header in horizontal mode, used
     /// when the strip has plenty of room. Matches the historical
     /// fixed-width tab look.
@@ -87,6 +81,12 @@ public sealed class TabStrip : UserControl
     /// button's visual margin so tabs never crowd the SplitButton.
     /// </summary>
     private const double NewTabButtonReservedMargin = 8;
+
+    /// <summary>
+    /// Height of the trailing "+" button in vertical rail mode. Used as the
+    /// fallback extent before the button has been arranged for the first time.
+    /// </summary>
+    private const double NewTabButtonVerticalHeight = 28;
 
     /// <summary>
     /// Width of each scroll-indicator button (◀ / ▶) docked at the
@@ -167,6 +167,8 @@ public sealed class TabStrip : UserControl
     private int externalDropLastIndex = -1;
     private DispatcherTimer? dragSettleTimer;
     private Orientation orientation = Orientation.Horizontal;
+    private bool newTabButtonInPanel;
+    private bool newTabButtonMovePending;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TabStrip"/> class.
@@ -224,7 +226,11 @@ public sealed class TabStrip : UserControl
             Content = this.tabsPanel,
         };
         this.tabsScroller.AddHandler(PointerWheelChangedEvent, this.OnTabsScrollerWheel, RoutingStrategies.Tunnel);
-        this.tabsScroller.ScrollChanged += (_, _) => this.UpdateScrollButtonVisibility();
+        this.tabsScroller.ScrollChanged += (_, _) =>
+        {
+            this.UpdateScrollButtonVisibility();
+            this.UpdateNewTabButtonPlacement();
+        };
 
         // Scroll-indicator buttons flanking the tab scroller. They use
         // RepeatButton so holding down keeps scrolling, and are only
@@ -265,6 +271,7 @@ public sealed class TabStrip : UserControl
         this.AddHandler(PointerMovedEvent, this.OnStripPointerMoved, RoutingStrategies.Bubble);
         this.AddHandler(PointerReleasedEvent, this.OnStripPointerReleased, RoutingStrategies.Bubble, handledEventsToo: true);
         this.AddHandler(PointerCaptureLostEvent, this.OnStripPointerCaptureLost, RoutingStrategies.Bubble, handledEventsToo: true);
+        this.AddHandler(DoubleTappedEvent, this.OnStripDoubleTapped, RoutingStrategies.Bubble);
     }
 
     /// <summary>
@@ -320,6 +327,21 @@ public sealed class TabStrip : UserControl
     /// group and assignment of the tab to it.
     /// </summary>
     public event Action<TabSession, string?>? TabGroupAssignmentRequested;
+
+    /// <summary>
+    /// Raised when the user presses the primary pointer button on blank
+    /// strip area — anywhere that is not a tab header, the new-tab button,
+    /// or a scroll affordance. Subscribers typically begin a window-move
+    /// drag so the empty part of a vertical rail behaves like a title bar.
+    /// </summary>
+    public event Action<PointerPressedEventArgs>? EmptyAreaPointerPressed;
+
+    /// <summary>
+    /// Raised when the user double-taps blank strip area. Subscribers
+    /// typically toggle the window between maximized and restored, matching
+    /// the title bar's double-click gesture.
+    /// </summary>
+    public event Action? EmptyAreaDoubleTapped;
 
     /// <summary>
     /// Gets or sets the profile list populated into the "+" button's
@@ -682,6 +704,7 @@ public sealed class TabStrip : UserControl
 
         var result = base.MeasureOverride(availableSize);
         this.UpdateScrollButtonVisibility();
+        this.UpdateNewTabButtonPlacement();
         return result;
     }
 
@@ -699,6 +722,40 @@ public sealed class TabStrip : UserControl
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Determines whether a pointer event that did not land on a tab header
+    /// originated on genuinely blank strip area rather than on an interactive
+    /// affordance such as the new-tab split button or a scroll button. Used
+    /// to decide whether the press should be surfaced as a window-drag
+    /// gesture; without this, clicking "+" would also start moving the window.
+    /// </summary>
+    /// <param name="source">The event's original source.</param>
+    /// <returns>
+    /// <see langword="true"/> when the press may be treated as blank area.
+    /// </returns>
+    private static bool IsBlankStripArea(object? source)
+    {
+        var visual = source as Visual;
+        while (visual is not null)
+        {
+            // RepeatButton (the scroll affordances) derives from Button, so
+            // the two cases below cover every interactive affordance here.
+            if (visual is Button or SplitButton)
+            {
+                return false;
+            }
+
+            if (visual is TabStrip)
+            {
+                break;
+            }
+
+            visual = visual.GetVisualParent();
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -951,22 +1008,135 @@ public sealed class TabStrip : UserControl
         this.scrollRightButton.IsVisible = offset < maxX - 0.5;
     }
 
+    /// <summary>
+    /// Chooses where the trailing "+" button lives in vertical rail mode.
+    /// While the tab list fits, the button rides inside the scrolled panel so
+    /// it sits flush beneath the last tab. Once the list overflows it moves
+    /// back out to the root dock and pins to the bottom edge, staying visible
+    /// while the tabs scroll behind it.
+    /// </summary>
+    /// <remarks>
+    /// The fit test is deliberately placement-invariant. Docking the button
+    /// shrinks the scroller viewport by the button's own height, so comparing
+    /// raw extent against raw viewport would flip verdicts every time the
+    /// button moved and oscillate forever. Both sides are therefore
+    /// normalised to the combined tabs-plus-button region.
+    /// </remarks>
+    private void UpdateNewTabButtonPlacement()
+    {
+        if (this.orientation != Orientation.Vertical)
+        {
+            return;
+        }
+
+        double viewport = this.tabsScroller.Viewport.Height;
+        if (viewport <= 0)
+        {
+            return;
+        }
+
+        double buttonExtent = this.newTabButton.Bounds.Height > 0
+            ? this.newTabButton.Bounds.Height
+            : this.newTabButton.Height;
+        if (double.IsNaN(buttonExtent) || buttonExtent <= 0)
+        {
+            buttonExtent = NewTabButtonVerticalHeight;
+        }
+
+        buttonExtent += this.newTabButton.Margin.Top + this.newTabButton.Margin.Bottom;
+
+        bool inPanel = this.newTabButtonInPanel;
+        double tabsExtent = this.tabsScroller.Extent.Height - (inPanel ? buttonExtent : 0);
+        double combinedSpace = viewport + (inPanel ? 0 : buttonExtent);
+
+        bool fits = tabsExtent + buttonExtent <= combinedSpace + 0.5;
+        if (fits == inPanel)
+        {
+            return;
+        }
+
+        this.MoveNewTabButton(toPanel: fits);
+    }
+
+    /// <summary>
+    /// Reparents the "+" button between the scrolled tab panel and the root
+    /// dock. Deferred to the dispatcher because callers run inside a layout
+    /// pass, where mutating the visual tree directly is not permitted.
+    /// </summary>
+    /// <param name="toPanel">
+    /// <see langword="true"/> to place the button inside the tab panel.
+    /// </param>
+    private void MoveNewTabButton(bool toPanel)
+    {
+        if (this.newTabButtonMovePending)
+        {
+            return;
+        }
+
+        this.newTabButtonMovePending = true;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                this.newTabButtonMovePending = false;
+
+                // Orientation may have changed while the move was queued.
+                if (this.orientation != Orientation.Vertical || toPanel == this.newTabButtonInPanel)
+                {
+                    return;
+                }
+
+                this.AttachNewTabButton(toPanel);
+            },
+            DispatcherPriority.Render);
+    }
+
+    /// <summary>
+    /// Performs the actual reparent of the "+" button and records the new
+    /// placement.
+    /// </summary>
+    /// <param name="toPanel">
+    /// <see langword="true"/> to place the button inside the tab panel;
+    /// <see langword="false"/> to dock it in the root dock.
+    /// </param>
+    private void AttachNewTabButton(bool toPanel)
+    {
+        this.tabsPanel.Children.Remove(this.newTabButton);
+        this.rootDock.Children.Remove(this.newTabButton);
+
+        if (toPanel)
+        {
+            this.tabsPanel.Children.Add(this.newTabButton);
+        }
+        else
+        {
+            // Must precede the scroller: DockPanel fills with its last child,
+            // so a docked sibling added afterwards would be given no space.
+            this.rootDock.Children.Insert(0, this.newTabButton);
+        }
+
+        this.newTabButtonInPanel = toPanel;
+    }
+
     private void ApplyOrientation()
     {
         bool vertical = this.orientation == Orientation.Vertical;
 
         if (vertical)
         {
-            this.Width = VerticalRailWidth;
+            // The rail's width is owned by the resizable grid column in
+            // MainWindow, so the strip stretches to whatever it is given.
+            this.Width = double.NaN;
             this.Height = double.NaN;
-            this.HorizontalAlignment = HorizontalAlignment.Left;
+            this.HorizontalAlignment = HorizontalAlignment.Stretch;
             this.tabsPanel.Orientation = Orientation.Vertical;
-            this.newTabButton.Width = VerticalRailWidth - 8;
+            this.newTabButton.Width = double.NaN;
             this.newTabButton.Height = 28;
             this.newTabButton.HorizontalAlignment = HorizontalAlignment.Stretch;
 
-            // The new-tab button sits below the tab list in vertical mode;
-            // the scroller fills the remainder so a tall list scrolls.
+            // The new-tab button starts pinned below the tab list; once the
+            // strip has been measured, UpdateNewTabButtonPlacement may move
+            // it inside the scrolled panel so it hugs the last tab.
+            this.AttachNewTabButton(toPanel: false);
             DockPanel.SetDock(this.newTabButton, Dock.Bottom);
             this.tabsScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             this.tabsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
@@ -986,7 +1156,10 @@ public sealed class TabStrip : UserControl
             this.newTabButton.HorizontalAlignment = HorizontalAlignment.Center;
 
             // Trailing "+" stays pinned at the right edge so it can never
-            // overflow past the tab strip's allocated column.
+            // overflow past the tab strip's allocated column. Vertical mode
+            // may have parked it inside the scrolled panel, so pull it back
+            // into the root dock before docking it.
+            this.AttachNewTabButton(toPanel: false);
             DockPanel.SetDock(this.newTabButton, Dock.Right);
             this.tabsScroller.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
             this.tabsScroller.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
@@ -1210,6 +1383,11 @@ public sealed class TabStrip : UserControl
         var header = FindHeaderFromSource(e.Source);
         if (header is null || this.tabView is null)
         {
+            if (header is null && IsBlankStripArea(e.Source))
+            {
+                this.EmptyAreaPointerPressed?.Invoke(e);
+            }
+
             return;
         }
 
@@ -1220,6 +1398,17 @@ public sealed class TabStrip : UserControl
         }
 
         this.drag = new DragState(header.Session, from, e.GetPosition(this), e.Pointer, header);
+    }
+
+    private void OnStripDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (FindHeaderFromSource(e.Source) is not null || !IsBlankStripArea(e.Source))
+        {
+            return;
+        }
+
+        this.EmptyAreaDoubleTapped?.Invoke();
+        e.Handled = true;
     }
 
     private void OnStripPointerMoved(object? sender, PointerEventArgs e)
@@ -2283,8 +2472,12 @@ public sealed class TabStrip : UserControl
                 this.MaxWidth = double.PositiveInfinity;
                 this.Height = 54;
                 this.HorizontalAlignment = HorizontalAlignment.Stretch;
-                this.CornerRadius = new CornerRadius(0, 6, 6, 0);
-                this.Margin = new Thickness(0, 1, 0, 1);
+
+                // Vertical tabs fill their slot edge to edge: square corners
+                // and no outer margin, so the rail reads as a solid list
+                // rather than a column of floating pills.
+                this.CornerRadius = new CornerRadius(0);
+                this.Margin = new Thickness(0);
 
                 // Group pill — keep it as a short coloured strip at the
                 // top of the header content so the same visual idea
@@ -2295,12 +2488,13 @@ public sealed class TabStrip : UserControl
                 this.groupPill.Width = double.NaN;
                 this.groupPill.Margin = new Thickness(10, 2, 10, 0);
 
-                // Active accent: 3px left-edge bar, full height.
+                // Active accent: 3px left-edge bar, running the full height
+                // of the now edge-to-edge header.
                 this.activeIndicator.HorizontalAlignment = HorizontalAlignment.Left;
                 this.activeIndicator.VerticalAlignment = VerticalAlignment.Stretch;
                 this.activeIndicator.Width = 3;
                 this.activeIndicator.Height = double.NaN;
-                this.activeIndicator.Margin = new Thickness(0, 4, 0, 4);
+                this.activeIndicator.Margin = new Thickness(0);
                 this.UpdateWorkingDirectoryVisibility();
             }
             else

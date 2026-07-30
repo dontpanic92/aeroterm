@@ -22,6 +22,23 @@ using Microsoft.Extensions.Logging;
 public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings, IWindowGeometrySettings
 {
     /// <summary>
+    /// Default width, in device-independent pixels, of the vertical tab rail.
+    /// </summary>
+    public const double DefaultVerticalRailWidth = 180;
+
+    /// <summary>
+    /// Smallest width, in device-independent pixels, the vertical tab rail
+    /// may be dragged to. Below this the tab titles become unreadable.
+    /// </summary>
+    public const double MinVerticalRailWidth = 120;
+
+    /// <summary>
+    /// Largest width, in device-independent pixels, the vertical tab rail may
+    /// be dragged to, so the rail can never crowd out the terminal.
+    /// </summary>
+    public const double MaxVerticalRailWidth = 400;
+
+    /// <summary>
     /// Base backoff (milliseconds) between settings file I/O retries. Each
     /// attempt waits this value multiplied by the attempt number.
     /// </summary>
@@ -68,6 +85,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     private bool enableShellIntegration = true;
     private bool enableWorkbench;
     private TabBarOrientation tabBarOrientation = TabBarOrientation.Horizontal;
+    private double verticalRailWidth = DefaultVerticalRailWidth;
     private bool useFullScreenNotchArea;
 
     private bool loadedWithTransientError;
@@ -414,6 +432,27 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
     }
 
     /// <summary>
+    /// Gets or sets the width, in device-independent pixels, of the vertical
+    /// tab rail. Only meaningful when <see cref="TabBarOrientation"/> is
+    /// <see cref="TabBarOrientation.Vertical"/>. Updated when the user drags
+    /// the splitter between the rail and the terminal area. Values are
+    /// clamped to <see cref="MinVerticalRailWidth"/> ..
+    /// <see cref="MaxVerticalRailWidth"/>.
+    /// </summary>
+    public double VerticalRailWidth
+    {
+        get => this.verticalRailWidth;
+
+        set
+        {
+            double clamped = double.IsFinite(value)
+                ? Math.Clamp(value, MinVerticalRailWidth, MaxVerticalRailWidth)
+                : DefaultVerticalRailWidth;
+            this.SetField(ref this.verticalRailWidth, clamped);
+        }
+    }
+
+    /// <summary>
     /// Gets or sets a value indicating whether the tab strip is displayed in
     /// the camera-housing ("notch") band during macOS native full screen.
     /// AppKit clamps full-screen windows below the housing and paints the
@@ -573,6 +612,7 @@ public sealed class AppSettings : INotifyPropertyChanged, IWindowEffectsSettings
         this.EnableShellIntegration = fresh.EnableShellIntegration;
         this.EnableWorkbench = fresh.EnableWorkbench;
         this.TabBarOrientation = fresh.TabBarOrientation;
+        this.VerticalRailWidth = fresh.VerticalRailWidth;
         this.UseFullScreenNotchArea = fresh.UseFullScreenNotchArea;
         this.LastPersistenceError = fresh.LastPersistenceError;
         this.loadedWithTransientError = fresh.loadedWithTransientError;

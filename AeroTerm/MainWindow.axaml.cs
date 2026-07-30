@@ -80,6 +80,9 @@ public partial class MainWindow : Window
     private readonly Grid titleBar;
     private readonly Grid verticalTitleBar;
     private readonly Grid sideRail;
+    private readonly ColumnDefinition railColumn;
+    private readonly GridSplitter railSplitter;
+    private readonly Border terminalTopDragStrip;
     private readonly Border terminalBorder;
     private readonly Border titleBarTabHost;
     private readonly Border sideTabHost;
@@ -108,6 +111,13 @@ public partial class MainWindow : Window
     private bool isCloseConfirmed;
     private bool suppressInitialTab;
     private string closeTrigger = "external-close-request";
+
+    /// <summary>
+    /// Last background brush resolved by the effects service, cached so the
+    /// chrome can be repainted when the tab-bar orientation changes without
+    /// waiting for the next background-change notification.
+    /// </summary>
+    private IBrush? currentBackgroundBrush;
 
     /// <summary>
     /// Overlay hosting the tab strip inside the macOS full-screen notch
@@ -179,6 +189,9 @@ public partial class MainWindow : Window
         this.titleBar = this.FindControl<Grid>("TitleBar")!;
         this.verticalTitleBar = this.FindControl<Grid>("VerticalTitleBar")!;
         this.sideRail = this.FindControl<Grid>("SideRail")!;
+        this.railSplitter = this.FindControl<GridSplitter>("RailSplitter")!;
+        this.railColumn = this.FindControl<Grid>("ContentDock")!.ColumnDefinitions[0];
+        this.terminalTopDragStrip = this.FindControl<Border>("TerminalTopDragStrip")!;
         this.terminalBorder = this.FindControl<Border>("TerminalBorder")!;
         this.titleBarTabHost = this.FindControl<Border>("TitleBarTabHost")!;
         this.sideTabHost = this.FindControl<Border>("SideTabHost")!;
@@ -223,6 +236,15 @@ public partial class MainWindow : Window
         this.verticalTitleBarDragHandle.PointerPressed += this.TitleBar_PointerPressed;
         this.verticalTitleBarDragHandle.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
 
+        // Vertical mode has no floating title bar over the terminal, so a
+        // fixed-height band above the terminal grid carries the same
+        // window-move / zoom gesture.
+        this.terminalTopDragStrip.PointerPressed += this.TitleBar_PointerPressed;
+        this.terminalTopDragStrip.DoubleTapped += this.TitleBarDragHandle_DoubleTapped;
+
+        this.railSplitter.Cursor = new Cursor(StandardCursorType.SizeWestEast);
+        this.railSplitter.DragCompleted += this.RailSplitter_DragCompleted;
+
         // Fixed-width trailing reservation that guarantees a draggable
         // area on the right edge of the horizontal tab strip even when
         // many tabs would otherwise consume the entire titlebar width.
@@ -254,6 +276,8 @@ public partial class MainWindow : Window
         this.tabStrip.TabDetachRequested += this.OnTabDetachRequested;
         this.tabStrip.TabTransferRequested += this.OnTabTransferRequested;
         this.tabStrip.TabGroupAssignmentRequested += this.OnTabGroupAssignmentRequested;
+        this.tabStrip.EmptyAreaPointerPressed += this.OnTabStripEmptyAreaPressed;
+        this.tabStrip.EmptyAreaDoubleTapped += this.OnTabStripEmptyAreaDoubleTapped;
         this.tabStrip.Profiles = App.Profiles.Profiles;
         this.tabStrip.DefaultProfileId = App.Profiles.DefaultProfileId;
         this.tabStrip.GroupStore = App.TabGroupStore;
@@ -694,6 +718,28 @@ public partial class MainWindow : Window
     private void OnBackgroundBrushChanged(IBrush brush)
     {
         this.terminalBorder.Background = brush;
+        this.currentBackgroundBrush = brush;
+        this.ApplyChromeBackground();
+    }
+
+    /// <summary>
+    /// Paints the vertical-mode chrome — the rail (which also hosts the
+    /// caption buttons) and the terminal's top drag strip — with the same
+    /// resolved brush the terminal uses, so the window reads as one surface.
+    /// Horizontal mode is left transparent: there the floating title bar
+    /// renders a blurred slice of terminal content via
+    /// <see cref="Controls.TerminalControl.TopInset"/>, which painting over
+    /// would hide.
+    /// </summary>
+    private void ApplyChromeBackground()
+    {
+        bool vertical = this.settings.TabBarOrientation == TabBarOrientation.Vertical;
+        var brush = vertical && this.currentBackgroundBrush is not null
+            ? this.currentBackgroundBrush
+            : Brushes.Transparent;
+
+        this.sideRail.Background = brush;
+        this.terminalTopDragStrip.Background = brush;
     }
 
     private void OnBackgroundAlphaChanged(byte alpha)
@@ -1124,6 +1170,40 @@ public partial class MainWindow : Window
         bool horizontal = this.settings.TabBarOrientation != TabBarOrientation.Vertical;
         this.titleBar.IsVisible = horizontal;
         this.sideRail.IsVisible = !horizontal;
+        this.railSplitter.IsVisible = !horizontal;
+        this.terminalTopDragStrip.IsVisible = !horizontal;
+
+        // A collapsed child does not shrink its grid column, so the rail
+        // column has to be zeroed explicitly in horizontal mode. Min/Max are
+        // assigned in an order that never leaves MinWidth above MaxWidth.
+        if (horizontal)
+        {
+            this.railColumn.MinWidth = 0;
+            this.railColumn.MaxWidth = 0;
+            this.railColumn.Width = new GridLength(0, GridUnitType.Pixel);
+        }
+        else
+        {
+            this.railColumn.MaxWidth = AppSettings.MaxVerticalRailWidth;
+            this.railColumn.MinWidth = AppSettings.MinVerticalRailWidth;
+            this.railColumn.Width = new GridLength(this.settings.VerticalRailWidth, GridUnitType.Pixel);
+        }
+
+        this.ApplyChromeBackground();
+    }
+
+    /// <summary>
+    /// Persists the rail width the user just dragged to. The setter on
+    /// <see cref="AppSettings.VerticalRailWidth"/> re-clamps the value, so a
+    /// transient out-of-range measurement can never be stored.
+    /// </summary>
+    private void RailSplitter_DragCompleted(object? sender, VectorEventArgs e)
+    {
+        double width = this.railColumn.ActualWidth;
+        if (width > 0)
+        {
+            this.settings.VerticalRailWidth = width;
+        }
     }
 
     private void OnTabsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -1200,6 +1280,38 @@ public partial class MainWindow : Window
             ? WindowState.Normal
             : WindowState.Maximized;
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Treats blank space in the vertical rail's tab list as title-bar drag
+    /// area. Horizontal mode is skipped: there the strip's spare room is
+    /// already covered by the dedicated title-bar drag handles.
+    /// </summary>
+    /// <param name="e">The originating pointer-press arguments.</param>
+    private void OnTabStripEmptyAreaPressed(PointerPressedEventArgs e)
+    {
+        if (this.settings.TabBarOrientation != TabBarOrientation.Vertical)
+        {
+            return;
+        }
+
+        this.BeginMoveDrag(e);
+    }
+
+    /// <summary>
+    /// Toggles maximize when the user double-taps blank space in the
+    /// vertical rail, matching the title bar's double-click gesture.
+    /// </summary>
+    private void OnTabStripEmptyAreaDoubleTapped()
+    {
+        if (this.settings.TabBarOrientation != TabBarOrientation.Vertical)
+        {
+            return;
+        }
+
+        this.WindowState = this.WindowState == WindowState.Maximized
+            ? WindowState.Normal
+            : WindowState.Maximized;
     }
 
     private void SettingsButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1771,6 +1883,46 @@ public partial class MainWindow : Window
         this.minimizeButton.Width = buttonWidth;
         this.maximizeButton.Width = buttonWidth;
         this.closeButton.Width = buttonWidth;
+
+        this.ApplyWindowControlPlacement(ReferenceEquals(controlsHost, this.verticalWindowControlsHost));
+    }
+
+    /// <summary>
+    /// Positions and orders the custom caption buttons for the given tab-bar
+    /// orientation. In vertical mode the buttons hug the left edge of the
+    /// rail and run close, maximize, minimize, settings — mirroring the
+    /// horizontal layout so the close button stays on the window's outer
+    /// corner. macOS is skipped: the native traffic lights own column 0 and
+    /// the custom buttons are hidden there anyway.
+    /// </summary>
+    /// <param name="vertical">
+    /// <see langword="true"/> when the caption buttons live in the vertical
+    /// rail's title bar.
+    /// </param>
+    private void ApplyWindowControlPlacement(bool vertical)
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            return;
+        }
+
+        Grid.SetColumn(this.verticalWindowControlsHost, vertical ? 0 : 2);
+        Grid.SetColumn(this.verticalMacChromeHost, vertical ? 2 : 0);
+
+        // Children are reordered in place; the panel itself is shared and
+        // re-parented between hosts, so this must run on every switch.
+        Button[] order = vertical
+            ? [this.closeButton, this.maximizeButton, this.minimizeButton, this.settingsButton]
+            : [this.settingsButton, this.minimizeButton, this.maximizeButton, this.closeButton];
+
+        for (int i = 0; i < order.Length; i++)
+        {
+            int current = this.windowControlsPanel.Children.IndexOf(order[i]);
+            if (current >= 0 && current != i)
+            {
+                this.windowControlsPanel.Children.Move(current, i);
+            }
+        }
     }
 
     /// <summary>

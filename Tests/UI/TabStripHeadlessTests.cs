@@ -526,6 +526,222 @@ public class TabStripHeadlessTests
         }
     }
 
+    /// <summary>
+    /// In vertical rail mode a short tab list keeps the trailing "+" button
+    /// inside the scrolled tab panel, so it sits flush under the last tab
+    /// instead of floating at the bottom of a tall rail.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_Vertical_NewTabButton_FollowsLastTab_WhenListFits()
+    {
+        var (window, strip, view) = BuildHostedVerticalRail();
+        try
+        {
+            view.AddTab(new TabSession(new FakeTabContent("a")));
+            view.AddTab(new TabSession(new FakeTabContent("b")));
+            PumpLayout();
+
+            var addBtn = RequireNewTabButton(strip);
+            Assert.That(FindPlacementHost(addBtn), Is.InstanceOf<StackPanel>());
+
+            // Directly beneath the second 54px-tall header.
+            Assert.That(addBtn.Bounds.Y, Is.EqualTo(108).Within(1.0));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Once the tab list overflows the rail, the "+" button moves back out to
+    /// the root dock so it stays pinned and visible while the tabs scroll.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_Vertical_NewTabButton_PinsToBottom_WhenListOverflows()
+    {
+        var (window, strip, view) = BuildHostedVerticalRail();
+        try
+        {
+            for (int i = 0; i < 20; i++)
+            {
+                view.AddTab(new TabSession(new FakeTabContent($"tab{i}")));
+            }
+
+            PumpLayout();
+
+            var addBtn = RequireNewTabButton(strip);
+            Assert.That(FindPlacementHost(addBtn), Is.InstanceOf<DockPanel>());
+            Assert.That(addBtn.Bounds.Bottom, Is.LessThanOrEqualTo(strip.Bounds.Height + 0.5));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Placement settles rather than oscillating: repeated layout passes at a
+    /// size near the fit/overflow boundary must converge on one host.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_Vertical_NewTabButtonPlacement_IsStable()
+    {
+        var (window, strip, view) = BuildHostedVerticalRail(height: 200);
+        try
+        {
+            view.AddTab(new TabSession(new FakeTabContent("a")));
+            view.AddTab(new TabSession(new FakeTabContent("b")));
+            view.AddTab(new TabSession(new FakeTabContent("c")));
+            PumpLayout();
+
+            var addBtn = RequireNewTabButton(strip);
+            var first = FindPlacementHost(addBtn)?.GetType();
+
+            for (int i = 0; i < 5; i++)
+            {
+                strip.InvalidateMeasure();
+                PumpLayout();
+                Assert.That(FindPlacementHost(addBtn)?.GetType(), Is.EqualTo(first));
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Pressing blank rail area raises <see cref="TabStrip.EmptyAreaPointerPressed"/>,
+    /// while pressing a tab header does not — the header press must stay
+    /// reserved for activation and drag-reorder.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_EmptyAreaPress_RaisesOnlyForBlankArea()
+    {
+        var (window, strip, view) = BuildHostedVerticalRail();
+        try
+        {
+            view.AddTab(new TabSession(new FakeTabContent("a")));
+            PumpLayout();
+
+            int raised = 0;
+            strip.EmptyAreaPointerPressed += _ => raised++;
+
+            // Blank area well below the single 54px tab and the "+" button.
+            var blank = strip.TranslatePoint(new Point(40, 260), window) ?? default;
+            window.MouseDown(blank, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(blank, MouseButton.Left, RawInputModifiers.None);
+            PumpLayout();
+            Assert.That(raised, Is.EqualTo(1), "blank rail area should request a window drag");
+
+            var header = FindVerticalHeaders(strip).First();
+            var onHeader = header.TranslatePoint(new Point(20, 20), window) ?? default;
+            window.MouseDown(onHeader, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(onHeader, MouseButton.Left, RawInputModifiers.None);
+            PumpLayout();
+            Assert.That(raised, Is.EqualTo(1), "pressing a tab header must not start a window drag");
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Pressing the "+" button must not be mistaken for blank area, otherwise
+    /// opening a tab would also drag the window.
+    /// </summary>
+    [AvaloniaTest]
+    public void TabStrip_EmptyAreaPress_IgnoresNewTabButton()
+    {
+        var (window, strip, view) = BuildHostedVerticalRail();
+        try
+        {
+            view.AddTab(new TabSession(new FakeTabContent("a")));
+            PumpLayout();
+
+            int raised = 0;
+            strip.EmptyAreaPointerPressed += _ => raised++;
+
+            var addBtn = RequireNewTabButton(strip);
+            var onButton = addBtn.TranslatePoint(new Point(8, 8), window) ?? default;
+            window.MouseDown(onButton, MouseButton.Left, RawInputModifiers.None);
+            window.MouseUp(onButton, MouseButton.Left, RawInputModifiers.None);
+            PumpLayout();
+
+            Assert.That(raised, Is.EqualTo(0));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    private static void PumpLayout()
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>
+    /// Finds tab headers in a vertical rail. The shared
+    /// <c>FindHeaders</c> helper only matches horizontally oriented panels.
+    /// </summary>
+    private static System.Collections.Generic.IEnumerable<Border> FindVerticalHeaders(TabStrip strip)
+    {
+        return strip.GetVisualDescendants()
+            .OfType<Border>()
+            .Where(b => b.GetLogicalParent() is StackPanel sp
+                && sp.Orientation == Avalonia.Layout.Orientation.Vertical);
+    }
+
+    private static SplitButton RequireNewTabButton(TabStrip strip)
+    {
+        var button = FindNewTabButton(strip);
+        Assert.That(button, Is.Not.Null, "the strip should always host a new-tab button");
+        return button!;
+    }
+
+    /// <summary>
+    /// Walks up from the "+" button to the panel that currently hosts it:
+    /// a <see cref="StackPanel"/> (the scrolled tab panel) when it follows the
+    /// last tab, or a <see cref="DockPanel"/> (the strip root) when pinned.
+    /// </summary>
+    private static Visual? FindPlacementHost(Visual button)
+    {
+        var parent = button.GetVisualParent();
+        while (parent is not null and not DockPanel and not StackPanel)
+        {
+            parent = parent.GetVisualParent();
+        }
+
+        return parent;
+    }
+
+    private static (Window Window, TabStrip Strip, TabView View) BuildHostedVerticalRail(int height = 600)
+    {
+        var view = new TabView();
+        var strip = new TabStrip { View = view, Orientation = Avalonia.Layout.Orientation.Vertical };
+
+        var root = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(strip, Dock.Left);
+        root.Children.Add(strip);
+        root.Children.Add(view);
+
+        var window = new Window
+        {
+            Width = 800,
+            Height = height,
+            Content = root,
+        };
+        window.Show();
+        PumpLayout();
+        return (window, strip, view);
+    }
+
     private static (Window Window, TabStrip Strip, TabView View) BuildHostedStrip(int width = 800)
     {
         var view = new TabView();

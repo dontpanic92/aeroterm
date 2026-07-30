@@ -46,6 +46,7 @@ public class ControlTemplateSmokeTests
         ("SplitButton", () => new SplitButton { Content = "Split" }, true),
         ("TabControl", CreateTabControl, true),
         ("GroupBox", () => new GroupBox { Header = "Group", Content = new TextBlock { Text = "Content" } }, true),
+        ("GridSplitter", () => new GridSplitter { Width = 4, Height = 120 }, true),
         ("Separator", () => new Separator { Width = 120 }, false),
         ("MenuItem", () => new MenuItem { Header = "Menu item" }, true),
         ("ContextMenu", CreateContextMenu, true),

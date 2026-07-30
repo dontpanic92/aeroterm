@@ -13,11 +13,13 @@ using AeroTerm.Controls;
 using AeroTerm.Services;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.NUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using NUnit.Framework;
@@ -105,11 +107,13 @@ public class MainWindowHeadlessTests
             var verticalTitleBar = window.FindControl<Grid>("VerticalTitleBar")!;
             var dragHandle = window.FindControl<Border>("VerticalTitleBarDragHandle")!;
             var controls = window.FindControl<StackPanel>("WindowControlsPanel")!;
+            var splitter = window.FindControl<GridSplitter>("RailSplitter")!;
+            var dragStrip = window.FindControl<Border>("TerminalTopDragStrip")!;
             var terminal = window.FindControl<Border>("TerminalBorder")!;
 
             Assert.That(horizontalTitleBar.IsVisible, Is.False);
             Assert.That(sideRail.IsVisible, Is.True);
-            Assert.That(sideRail.Bounds.Width, Is.EqualTo(180).Within(0.5));
+            Assert.That(sideRail.Bounds.Width, Is.EqualTo(AppSettings.DefaultVerticalRailWidth).Within(0.5));
             Assert.That(verticalTitleBar.Bounds.Width, Is.EqualTo(sideRail.Bounds.Width).Within(0.5));
             Assert.That(dragHandle.Bounds.Width, Is.GreaterThan(0));
 
@@ -118,9 +122,326 @@ public class MainWindowHeadlessTests
                 controlsOrigin.X + controls.Bounds.Width,
                 Is.LessThanOrEqualTo(sideRail.Bounds.Width + 0.5));
 
+            // The terminal now sits to the right of the rail plus the
+            // draggable splitter, and below the fixed drag strip.
+            Assert.That(splitter.IsVisible, Is.True);
+            Assert.That(dragStrip.IsVisible, Is.True);
+
             var terminalOrigin = terminal.TranslatePoint(default, window) ?? default;
-            Assert.That(terminalOrigin.X, Is.EqualTo(sideRail.Bounds.Width).Within(0.5));
+            Assert.That(
+                terminalOrigin.X,
+                Is.EqualTo(sideRail.Bounds.Width + splitter.Bounds.Width).Within(0.5));
+            Assert.That(terminalOrigin.Y, Is.EqualTo(dragStrip.Bounds.Height).Within(0.5));
+            Assert.That(dragStrip.Bounds.Height, Is.EqualTo(8).Within(0.5));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// The vertical rail honours a persisted, non-default
+    /// <see cref="AppSettings.VerticalRailWidth"/>.
+    /// </summary>
+    [AvaloniaTest]
+    public void VerticalTabs_HonourPersistedRailWidth()
+    {
+        var settings = new AppSettings
+        {
+            TabBarOrientation = TabBarOrientation.Vertical,
+            VerticalRailWidth = 260,
+        };
+        var window = new MainWindow(settings);
+        window.Show();
+        PumpJobs();
+
+        try
+        {
+            var sideRail = window.FindControl<Grid>("SideRail")!;
+            Assert.That(sideRail.Bounds.Width, Is.EqualTo(260).Within(0.5));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Rail width is clamped to the supported range, so a corrupted or
+    /// hand-edited settings file can never hide the rail or the terminal.
+    /// </summary>
+    [Test]
+    public void VerticalRailWidth_IsClampedToSupportedRange()
+    {
+        var settings = new AppSettings();
+        Assert.That(settings.VerticalRailWidth, Is.EqualTo(AppSettings.DefaultVerticalRailWidth));
+
+        settings.VerticalRailWidth = 10;
+        Assert.That(settings.VerticalRailWidth, Is.EqualTo(AppSettings.MinVerticalRailWidth));
+
+        settings.VerticalRailWidth = 5_000;
+        Assert.That(settings.VerticalRailWidth, Is.EqualTo(AppSettings.MaxVerticalRailWidth));
+
+        settings.VerticalRailWidth = double.NaN;
+        Assert.That(settings.VerticalRailWidth, Is.EqualTo(AppSettings.DefaultVerticalRailWidth));
+    }
+
+    /// <summary>
+    /// Horizontal mode collapses the rail column entirely and hides both the
+    /// splitter and the terminal drag strip, so the terminal keeps the full
+    /// window width and starts at the top edge.
+    /// </summary>
+    [AvaloniaTest]
+    public void HorizontalTabs_CollapseRailAndDragStrip()
+    {
+        var settings = new AppSettings { TabBarOrientation = TabBarOrientation.Horizontal };
+        var window = new MainWindow(settings);
+        window.Show();
+        PumpJobs();
+
+        try
+        {
+            var sideRail = window.FindControl<Grid>("SideRail")!;
+            var splitter = window.FindControl<GridSplitter>("RailSplitter")!;
+            var dragStrip = window.FindControl<Border>("TerminalTopDragStrip")!;
+            var terminal = window.FindControl<Border>("TerminalBorder")!;
+
+            Assert.That(sideRail.IsVisible, Is.False);
+            Assert.That(splitter.IsVisible, Is.False);
+            Assert.That(dragStrip.IsVisible, Is.False);
+
+            var terminalOrigin = terminal.TranslatePoint(default, window) ?? default;
+            Assert.That(terminalOrigin.X, Is.EqualTo(0).Within(0.5));
             Assert.That(terminalOrigin.Y, Is.EqualTo(0).Within(0.5));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Dragging the rail splitter resizes the rail and persists the new
+    /// width into <see cref="AppSettings.VerticalRailWidth"/>.
+    /// </summary>
+    [AvaloniaTest]
+    public void RailSplitter_Drag_ResizesAndPersistsRailWidth()
+    {
+        var settings = new AppSettings { TabBarOrientation = TabBarOrientation.Vertical };
+        var window = new MainWindow(settings);
+        window.Show();
+        PumpJobs();
+
+        try
+        {
+            var terminal = window.FindControl<Border>("TerminalBorder")!;
+            var splitter = window.FindControl<GridSplitter>("RailSplitter")!;
+
+            double TerminalX() => (terminal.TranslatePoint(default, window) ?? default).X;
+            double startX = TerminalX();
+
+            var origin = splitter.TranslatePoint(default, window) ?? default;
+            var grip = new Point(
+                origin.X + (splitter.Bounds.Width / 2),
+                origin.Y + (splitter.Bounds.Height / 2));
+
+            window.MouseMove(grip, RawInputModifiers.None);
+            PumpJobs();
+            window.MouseDown(grip, MouseButton.Left, RawInputModifiers.None);
+            PumpJobs();
+            var mid = grip.WithX(grip.X + 30);
+            window.MouseMove(mid, RawInputModifiers.LeftMouseButton);
+            PumpJobs();
+            var target = grip.WithX(grip.X + 60);
+            window.MouseMove(target, RawInputModifiers.LeftMouseButton);
+            PumpJobs();
+            window.MouseUp(target, MouseButton.Left, RawInputModifiers.None);
+            PumpJobs();
+
+            Assert.That(TerminalX(), Is.EqualTo(startX + 60).Within(1.5));
+            Assert.That(
+                settings.VerticalRailWidth,
+                Is.EqualTo(AppSettings.DefaultVerticalRailWidth + 60).Within(1.5));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Toggling orientation in both directions restores the rail geometry,
+    /// so the collapsed horizontal-mode column never sticks at zero width.
+    /// </summary>
+    [AvaloniaTest]
+    public void ToggleOrientation_RestoresRailGeometryBothWays()
+    {
+        var settings = new AppSettings { TabBarOrientation = TabBarOrientation.Horizontal };
+        var window = new MainWindow(settings);
+        window.Show();
+        PumpJobs();
+
+        try
+        {
+            var terminal = window.FindControl<Border>("TerminalBorder")!;
+            var sideRail = window.FindControl<Grid>("SideRail")!;
+            var splitter = window.FindControl<GridSplitter>("RailSplitter")!;
+
+            // A hidden SideRail keeps its last arranged Bounds, so the
+            // terminal's origin is the reliable witness of the column width.
+            double TerminalX() => (terminal.TranslatePoint(default, window) ?? default).X;
+
+            Assert.That(TerminalX(), Is.EqualTo(0).Within(0.5));
+
+            settings.TabBarOrientation = TabBarOrientation.Vertical;
+            PumpJobs();
+            Assert.That(sideRail.IsVisible, Is.True);
+            Assert.That(
+                TerminalX(),
+                Is.EqualTo(AppSettings.DefaultVerticalRailWidth + splitter.Bounds.Width).Within(0.5));
+
+            settings.TabBarOrientation = TabBarOrientation.Horizontal;
+            PumpJobs();
+            Assert.That(sideRail.IsVisible, Is.False);
+            Assert.That(TerminalX(), Is.EqualTo(0).Within(0.5));
+
+            settings.TabBarOrientation = TabBarOrientation.Vertical;
+            PumpJobs();
+            Assert.That(sideRail.IsVisible, Is.True);
+            Assert.That(
+                TerminalX(),
+                Is.EqualTo(AppSettings.DefaultVerticalRailWidth + splitter.Bounds.Width).Within(0.5));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// The caption buttons drop the shared ButtonTheme's default padding, so
+    /// their glyphs get the full compact width in the vertical rail instead
+    /// of being clipped to an 8px content box.
+    /// </summary>
+    [AvaloniaTest]
+    public void CaptionButtons_HaveNoPadding_SoGlyphsAreNotClipped()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            Assert.Ignore("macOS uses native traffic lights instead of custom caption buttons.");
+        }
+
+        var settings = new AppSettings { TabBarOrientation = TabBarOrientation.Vertical };
+        var window = new MainWindow(settings);
+        window.Show();
+        PumpJobs();
+
+        try
+        {
+            foreach (var name in new[] { "CloseButton", "MaximizeButton", "MinimizeButton", "SettingsButton" })
+            {
+                var button = window.FindControl<Button>(name)!;
+                Assert.That(button.Padding, Is.EqualTo(default(Thickness)), name);
+
+                var presenter = button.GetVisualDescendants()
+                    .OfType<ContentPresenter>()
+                    .FirstOrDefault(p => p.Name == "PART_ContentPresenter");
+                Assert.That(presenter, Is.Not.Null, name);
+
+                // The glyphs render at FontSize 14, so anything narrower than
+                // that would clip. The old 10px side padding left only 8px.
+                Assert.That(presenter!.Bounds.Width, Is.GreaterThanOrEqualTo(14), name);
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// In vertical mode the rail and the terminal's top drag strip adopt the
+    /// same resolved background brush as the terminal, so the window reads as
+    /// a single surface. Horizontal mode stays transparent so the floating
+    /// title bar's blurred terminal preview remains visible.
+    /// </summary>
+    [AvaloniaTest]
+    public void VerticalTabs_PaintChromeWithTerminalBackground()
+    {
+        var settings = new AppSettings { TabBarOrientation = TabBarOrientation.Vertical };
+        var window = new MainWindow(settings);
+        window.Show();
+        PumpJobs();
+
+        try
+        {
+            var sideRail = window.FindControl<Grid>("SideRail")!;
+            var dragStrip = window.FindControl<Border>("TerminalTopDragStrip")!;
+            var terminal = window.FindControl<Border>("TerminalBorder")!;
+
+            Assert.That(terminal.Background, Is.Not.Null);
+            Assert.That(sideRail.Background, Is.SameAs(terminal.Background));
+            Assert.That(dragStrip.Background, Is.SameAs(terminal.Background));
+
+            // Switching back must release the chrome so the blurred
+            // ghost-row title bar is not painted over.
+            settings.TabBarOrientation = TabBarOrientation.Horizontal;
+            PumpJobs();
+
+            Assert.That(sideRail.Background, Is.SameAs(Brushes.Transparent));
+            Assert.That(dragStrip.Background, Is.SameAs(Brushes.Transparent));
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// On platforms that draw their own caption buttons, vertical mode moves
+    /// the button cluster to the left edge of the rail and reverses its order
+    /// to close / maximize / minimize / settings. Horizontal mode restores
+    /// the trailing right-edge layout.
+    /// </summary>
+    [AvaloniaTest]
+    public void VerticalTabs_LeftAlignAndReverseWindowControls()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            Assert.Ignore("macOS uses native traffic lights instead of custom caption buttons.");
+        }
+
+        var settings = new AppSettings { TabBarOrientation = TabBarOrientation.Vertical };
+        var window = new MainWindow(settings);
+        window.Show();
+        PumpJobs();
+
+        try
+        {
+            var sideRail = window.FindControl<Grid>("SideRail")!;
+            var controls = window.FindControl<StackPanel>("WindowControlsPanel")!;
+
+            Assert.That(
+                controls.Children.Select(c => (c as Control)?.Name).ToArray(),
+                Is.EqualTo(new[] { "CloseButton", "MaximizeButton", "MinimizeButton", "SettingsButton" }));
+
+            var controlsOrigin = controls.TranslatePoint(default, sideRail) ?? default;
+            Assert.That(controlsOrigin.X, Is.EqualTo(0).Within(0.5));
+
+            // Switching back restores the classic trailing layout.
+            settings.TabBarOrientation = TabBarOrientation.Horizontal;
+            PumpJobs();
+
+            Assert.That(
+                controls.Children.Select(c => (c as Control)?.Name).ToArray(),
+                Is.EqualTo(new[] { "SettingsButton", "MinimizeButton", "MaximizeButton", "CloseButton" }));
+
+            var titleBar = window.FindControl<Grid>("TitleBar")!;
+            var horizontalOrigin = controls.TranslatePoint(default, titleBar) ?? default;
+            Assert.That(
+                horizontalOrigin.X + controls.Bounds.Width,
+                Is.EqualTo(titleBar.Bounds.Width).Within(0.5));
         }
         finally
         {

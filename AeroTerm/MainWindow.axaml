@@ -16,6 +16,16 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource TitleBarForegroundBrush}" />
             <Setter Property="BorderThickness" Value="0" />
+            <!--
+                The shared ButtonTheme applies ControlPaddingDefault ("10,4"),
+                which leaves only 8px of content box at the compact 28px width
+                used by the vertical rail and clips the caption glyphs. These
+                buttons center their content explicitly, so the padding is
+                pure loss.
+            -->
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
         </Style>
         <!--
             Hover / pressed Background is set on the templated ContentPresenter
@@ -77,10 +87,19 @@
             Z-order, enabling the acrylic blur on the title bar to "dig"
             through to the terminal background.
         -->
-        <DockPanel Name="ContentDock" LastChildFill="True">
+        <Grid Name="ContentDock">
+            <Grid.ColumnDefinitions>
+                <!-- Vertical rail column. Its width is restored from
+                     AppSettings.VerticalRailWidth and collapsed to zero in
+                     horizontal mode (see UpdateTabStripVisibility). -->
+                <ColumnDefinition Width="180" MinWidth="120" MaxWidth="400" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
             <!-- Vertical rail. Its title bar is confined to the rail so the
                  terminal can occupy the full height of the right-hand area. -->
-            <Grid Name="SideRail" DockPanel.Dock="Left"
+            <Grid Name="SideRail" Grid.Column="0"
                   Background="Transparent" IsVisible="False">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="38" />
@@ -95,6 +114,9 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
+                    <!-- Column assignments are swapped in code-behind on
+                         non-macOS platforms so the caption buttons hug the
+                         left edge of the rail. -->
                     <Border Grid.Column="0" Name="VerticalMacChromeHost"
                             Background="Transparent" />
                     <Border Grid.Column="1" Name="VerticalTitleBarDragHandle"
@@ -106,8 +128,31 @@
                 <Border Grid.Row="1" Name="SideTabHost"
                         Background="Transparent" />
             </Grid>
-            <Border Name="TerminalBorder" Background="Transparent" />
-        </DockPanel>
+
+            <!-- Draggable boundary between the rail and the terminal. Hidden
+                 in horizontal mode; the dragged width is persisted back to
+                 AppSettings.VerticalRailWidth on drag completion. -->
+            <GridSplitter Name="RailSplitter" Grid.Column="1"
+                          Width="4" Background="Transparent"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext"
+                          ShowsPreview="False"
+                          IsVisible="False" />
+
+            <DockPanel Grid.Column="2" LastChildFill="True">
+                <!-- Fixed-height band above the terminal grid that carries the
+                     window-move / double-click-to-zoom gesture in vertical
+                     mode, where no floating title bar overlays the terminal.
+                     Height is deliberately independent of the terminal row
+                     height so the reserved band never changes with font size. -->
+                <Border Name="TerminalTopDragStrip" DockPanel.Dock="Top"
+                        Height="8" Background="Transparent"
+                        Focusable="False" IsVisible="False" />
+                <Border Name="TerminalBorder" Background="Transparent" />
+            </DockPanel>
+        </Grid>
 
         <!-- Horizontal-mode title bar — floats on top of the content area. -->
         <Grid Name="TitleBar" VerticalAlignment="Top" IsHitTestVisible="True">

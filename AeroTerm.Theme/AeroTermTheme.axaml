@@ -34,6 +34,7 @@
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/ProgressBarTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/SliderTheme.axaml" />
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/GroupBoxTheme.axaml" />
+  <StyleInclude Source="avares://AeroTerm.Theme/Controls/GridSplitterTheme.axaml" />
 
   <!-- Tier B — containers / scrolling -->
   <StyleInclude Source="avares://AeroTerm.Theme/Controls/ScrollBarTheme.axaml" />
