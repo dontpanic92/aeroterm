@@ -7,6 +7,7 @@ namespace AeroTerm;
 
 using System.Runtime.InteropServices;
 using AeroTerm.Diagnostics;
+using AeroTerm.Utilities;
 using Avalonia;
 using Avalonia.Media;
 using Microsoft.Extensions.Logging;
@@ -43,6 +44,10 @@ public static class Program
             AppLogger.LogFilePath,
             RuntimeInformation.OSDescription,
             RuntimeInformation.FrameworkDescription);
+
+        // Must run before NSApplication exists, otherwise AppKit shows the
+        // accent popup instead of repeating held keys in the first window.
+        MacOsPressAndHold.EnsureKeyRepeatEnabled();
 
         try
         {

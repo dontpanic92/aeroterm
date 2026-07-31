@@ -39,3 +39,15 @@ dotnet pack aeroterm.slnx
 - **Windows** — ConPTY, DWM blur/acrylic/mica
 - **macOS** — forkpty via native C helper, NSWindow transparency/vibrancy
 - **Linux** — forkpty via native C helper, basic compositor transparency
+
+### macOS key repeat
+
+At startup `MacOsPressAndHold.EnsureKeyRepeatEnabled()` (`AeroTerm/Utilities/`)
+writes `ApplePressAndHoldEnabled = false` into AeroTerm's own `NSUserDefaults`
+domain, so holding a key auto-repeats instead of opening the system accent
+popup. It must run before Avalonia starts (before `NSApplication` exists) and
+only affects AeroTerm. To restore the system behavior:
+
+```bash
+defaults delete com.aeroterm.app ApplePressAndHoldEnabled
+```
