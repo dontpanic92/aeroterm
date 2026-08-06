@@ -77,6 +77,79 @@ public sealed class TerminalRowCacheTests
             Is.EqualTo(generations.Length));
     }
 
+    /// <summary>
+    /// Clearing the cache from another thread (a tab switch on the UI thread)
+    /// while the render thread updates and draws must not release pictures
+    /// that are still being replayed.
+    /// </summary>
+    [Test]
+    public void ClearFromOtherThread_WhileDrawing_DoesNotCorruptPictures()
+    {
+        using var target = SKSurface.Create(new SKImageInfo(200, 100));
+        using var cache = new TerminalRowCache();
+        var key = CreateKey(fontGeneration: 1);
+        long[] generations = [1, 1, 1];
+        using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
+        var clearLoop = Task.Run(() =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                cache.Clear();
+            }
+        });
+
+        long generation = 1;
+        while (!stop.IsCancellationRequested)
+        {
+            generations[0] = ++generation;
+            cache.Update(key, generations, 200, 20, RenderRow, RenderRow);
+            cache.DrawBackgrounds(target.Canvas, 0, 20);
+            cache.DrawForegrounds(target.Canvas, 0, 20);
+        }
+
+        clearLoop.GetAwaiter().GetResult();
+        target.Canvas.Flush();
+        Assert.That(cache.BuildCount, Is.GreaterThan(0));
+
+        static void RenderRow(SKCanvas canvas, int row)
+        {
+            using var paint = new SKPaint { Color = SKColors.White };
+            canvas.DrawRect(0, 0, 20, 10, paint);
+        }
+    }
+
+    /// <summary>
+    /// Disposing from another thread mid-render is safe and stops further caching.
+    /// </summary>
+    [Test]
+    public void Dispose_WhileUpdating_StopsCachingAndDoesNotThrow()
+    {
+        using var target = SKSurface.Create(new SKImageInfo(200, 100));
+        var cache = new TerminalRowCache();
+        var key = CreateKey(fontGeneration: 1);
+        long[] generations = [1, 1, 1];
+
+        cache.Update(key, generations, 200, 20, RenderRow, RenderRow);
+        cache.Dispose();
+
+        generations[0] = 2;
+        Assert.DoesNotThrow(() =>
+        {
+            cache.Update(key, generations, 200, 20, RenderRow, RenderRow);
+            cache.DrawBackgrounds(target.Canvas, 0, 20);
+            cache.DrawForegrounds(target.Canvas, 0, 20);
+        });
+
+        Assert.That(cache.HasCompleteFrame(key, generations.Length), Is.False);
+
+        static void RenderRow(SKCanvas canvas, int row)
+        {
+            using var paint = new SKPaint { Color = SKColors.White };
+            canvas.DrawRect(0, 0, 20, 10, paint);
+        }
+    }
+
     private static TerminalRowCacheKey CreateKey(int fontGeneration)
     {
         return new TerminalRowCacheKey(

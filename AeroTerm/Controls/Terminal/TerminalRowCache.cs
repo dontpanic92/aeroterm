@@ -11,19 +11,38 @@ using SkiaSharp;
 /// Retains vector background and foreground pictures per terminal row and
 /// re-records only rows whose visual generation changed.
 /// </summary>
+/// <remarks>
+/// Recording and drawing happen on the render thread, while <see cref="Clear"/>
+/// and <see cref="Dispose"/> are invoked from the UI thread (tab switches,
+/// control teardown). Every member therefore serializes on <c>sync</c> so a
+/// cached <see cref="SKPicture"/> can never be released while the render thread
+/// is still replaying it.
+/// </remarks>
 internal sealed class TerminalRowCache : IDisposable
 {
+    private readonly object sync = new();
     private SKPicture?[] backgrounds = Array.Empty<SKPicture?>();
     private SKPicture?[] foregrounds = Array.Empty<SKPicture?>();
     private long[] rowGenerations = Array.Empty<long>();
     private TerminalRowCacheKey key;
     private bool hasKey;
+    private bool disposed;
+    private int buildCount;
 
     /// <summary>
     /// Gets the total number of row picture pairs recorded.
     /// Exposed for tests and diagnostics.
     /// </summary>
-    internal int BuildCount { get; private set; }
+    internal int BuildCount
+    {
+        get
+        {
+            lock (this.sync)
+            {
+                return this.buildCount;
+            }
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether a complete frame exists for the supplied key.
@@ -33,20 +52,23 @@ internal sealed class TerminalRowCache : IDisposable
     /// <returns><see langword="true"/> when every row has cached pictures.</returns>
     public bool HasCompleteFrame(TerminalRowCacheKey key, int rowCount)
     {
-        if (!this.hasKey || this.key != key || this.backgrounds.Length != rowCount)
+        lock (this.sync)
         {
-            return false;
-        }
-
-        for (int row = 0; row < rowCount; row++)
-        {
-            if (this.backgrounds[row] is null || this.foregrounds[row] is null)
+            if (!this.hasKey || this.key != key || this.backgrounds.Length != rowCount)
             {
                 return false;
             }
-        }
 
-        return true;
+            for (int row = 0; row < rowCount; row++)
+            {
+                if (this.backgrounds[row] is null || this.foregrounds[row] is null)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 
     /// <summary>
@@ -57,23 +79,26 @@ internal sealed class TerminalRowCache : IDisposable
     /// <returns>The number of rows requiring new pictures.</returns>
     public int CountDirtyRows(TerminalRowCacheKey key, IReadOnlyList<long> generations)
     {
-        if (!this.hasKey || this.key != key || this.backgrounds.Length != generations.Count)
+        lock (this.sync)
         {
-            return generations.Count;
-        }
-
-        int dirtyCount = 0;
-        for (int row = 0; row < generations.Count; row++)
-        {
-            if (this.backgrounds[row] is null
-                || this.foregrounds[row] is null
-                || this.rowGenerations[row] != generations[row])
+            if (!this.hasKey || this.key != key || this.backgrounds.Length != generations.Count)
             {
-                dirtyCount++;
+                return generations.Count;
             }
-        }
 
-        return dirtyCount;
+            int dirtyCount = 0;
+            for (int row = 0; row < generations.Count; row++)
+            {
+                if (this.backgrounds[row] is null
+                    || this.foregrounds[row] is null
+                    || this.rowGenerations[row] != generations[row])
+                {
+                    dirtyCount++;
+                }
+            }
+
+            return dirtyCount;
+        }
     }
 
     /// <summary>
@@ -96,29 +121,37 @@ internal sealed class TerminalRowCache : IDisposable
         ArgumentNullException.ThrowIfNull(renderBackground);
         ArgumentNullException.ThrowIfNull(renderForeground);
 
-        if (generations.Count == 0 || width <= 0 || lineHeight <= 0)
+        lock (this.sync)
         {
-            this.Clear();
-            return;
-        }
-
-        this.EnsureStorage(key, generations.Count);
-        for (int row = 0; row < generations.Count; row++)
-        {
-            if (this.backgrounds[row] is not null
-                && this.foregrounds[row] is not null
-                && this.rowGenerations[row] == generations[row])
+            if (this.disposed)
             {
-                continue;
+                return;
             }
 
-            this.RebuildRow(
-                row,
-                width,
-                lineHeight,
-                generations[row],
-                renderBackground,
-                renderForeground);
+            if (generations.Count == 0 || width <= 0 || lineHeight <= 0)
+            {
+                this.ClearCore();
+                return;
+            }
+
+            this.EnsureStorage(key, generations.Count);
+            for (int row = 0; row < generations.Count; row++)
+            {
+                if (this.backgrounds[row] is not null
+                    && this.foregrounds[row] is not null
+                    && this.rowGenerations[row] == generations[row])
+                {
+                    continue;
+                }
+
+                this.RebuildRow(
+                    row,
+                    width,
+                    lineHeight,
+                    generations[row],
+                    renderBackground,
+                    renderForeground);
+            }
         }
     }
 
@@ -131,7 +164,10 @@ internal sealed class TerminalRowCache : IDisposable
     public void DrawBackgrounds(SKCanvas target, float topInset, float lineHeight)
     {
         ArgumentNullException.ThrowIfNull(target);
-        this.DrawPictures(target, this.backgrounds, topInset, lineHeight);
+        lock (this.sync)
+        {
+            this.DrawPictures(target, this.backgrounds, topInset, lineHeight);
+        }
     }
 
     /// <summary>
@@ -143,7 +179,10 @@ internal sealed class TerminalRowCache : IDisposable
     public void DrawForegrounds(SKCanvas target, float topInset, float lineHeight)
     {
         ArgumentNullException.ThrowIfNull(target);
-        this.DrawPictures(target, this.foregrounds, topInset, lineHeight);
+        lock (this.sync)
+        {
+            this.DrawPictures(target, this.foregrounds, topInset, lineHeight);
+        }
     }
 
     /// <summary>
@@ -151,18 +190,20 @@ internal sealed class TerminalRowCache : IDisposable
     /// </summary>
     public void Clear()
     {
-        DisposePictures(this.backgrounds);
-        DisposePictures(this.foregrounds);
-        this.backgrounds = Array.Empty<SKPicture?>();
-        this.foregrounds = Array.Empty<SKPicture?>();
-        this.rowGenerations = Array.Empty<long>();
-        this.hasKey = false;
+        lock (this.sync)
+        {
+            this.ClearCore();
+        }
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        this.Clear();
+        lock (this.sync)
+        {
+            this.ClearCore();
+            this.disposed = true;
+        }
     }
 
     private static void DisposePictures(IEnumerable<SKPicture?> pictures)
@@ -171,6 +212,16 @@ internal sealed class TerminalRowCache : IDisposable
         {
             picture?.Dispose();
         }
+    }
+
+    private void ClearCore()
+    {
+        DisposePictures(this.backgrounds);
+        DisposePictures(this.foregrounds);
+        this.backgrounds = Array.Empty<SKPicture?>();
+        this.foregrounds = Array.Empty<SKPicture?>();
+        this.rowGenerations = Array.Empty<long>();
+        this.hasKey = false;
     }
 
     private void DrawPictures(
@@ -201,7 +252,7 @@ internal sealed class TerminalRowCache : IDisposable
             return;
         }
 
-        this.Clear();
+        this.ClearCore();
         this.backgrounds = new SKPicture?[rowCount];
         this.foregrounds = new SKPicture?[rowCount];
         this.rowGenerations = new long[rowCount];
@@ -238,6 +289,6 @@ internal sealed class TerminalRowCache : IDisposable
         }
 
         this.rowGenerations[row] = generation;
-        this.BuildCount++;
+        this.buildCount++;
     }
 }

@@ -12,12 +12,20 @@ using SkiaSharp;
 /// Caches the blurred title-bar inset as a raster image so ordinary terminal
 /// frames only draw the completed image.
 /// </summary>
+/// <remarks>
+/// The cache is built and drawn on the render thread while <see cref="Clear"/>
+/// and <see cref="Dispose"/> arrive from the UI thread, so all access to the
+/// cached <see cref="SKImage"/> is serialized on <c>sync</c>.
+/// </remarks>
 internal sealed class TitleBarInsetCache : IDisposable
 {
+    private readonly object sync = new();
     private readonly float blurSigma;
     private SKImage? image;
     private TitleBarInsetCacheKey key;
     private bool hasKey;
+    private bool disposed;
+    private int buildCount;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TitleBarInsetCache"/> class.
@@ -36,7 +44,16 @@ internal sealed class TitleBarInsetCache : IDisposable
     /// <summary>
     /// Gets the number of cache image builds. Exposed for tests and diagnostics.
     /// </summary>
-    internal int BuildCount { get; private set; }
+    internal int BuildCount
+    {
+        get
+        {
+            lock (this.sync)
+            {
+                return this.buildCount;
+            }
+        }
+    }
 
     /// <summary>
     /// Draws the cached inset, rebuilding it when the supplied key changes.
@@ -54,18 +71,29 @@ internal sealed class TitleBarInsetCache : IDisposable
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(renderContent);
 
-        if (key.PixelWidth <= 0 || key.PixelHeight <= 0)
+        lock (this.sync)
         {
-            this.Clear();
-            return;
-        }
+            if (this.disposed)
+            {
+                return;
+            }
 
-        if (!this.hasKey || this.image is null || this.key != key)
-        {
-            this.Rebuild(key, renderContent);
-        }
+            if (key.PixelWidth <= 0 || key.PixelHeight <= 0)
+            {
+                this.ClearCore();
+                return;
+            }
 
-        target.DrawImage(this.image, destination);
+            if (!this.hasKey || this.image is null || this.key != key)
+            {
+                this.Rebuild(key, renderContent);
+            }
+
+            if (this.image is not null)
+            {
+                target.DrawImage(this.image, destination);
+            }
+        }
     }
 
     /// <summary>
@@ -73,15 +101,27 @@ internal sealed class TitleBarInsetCache : IDisposable
     /// </summary>
     public void Clear()
     {
-        this.image?.Dispose();
-        this.image = null;
-        this.hasKey = false;
+        lock (this.sync)
+        {
+            this.ClearCore();
+        }
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        this.Clear();
+        lock (this.sync)
+        {
+            this.ClearCore();
+            this.disposed = true;
+        }
+    }
+
+    private void ClearCore()
+    {
+        this.image?.Dispose();
+        this.image = null;
+        this.hasKey = false;
     }
 
     private void Rebuild(TitleBarInsetCacheKey newKey, Action<SKCanvas> renderContent)
@@ -116,7 +156,7 @@ internal sealed class TitleBarInsetCache : IDisposable
         this.image = newImage;
         this.key = newKey;
         this.hasKey = true;
-        this.BuildCount++;
+        this.buildCount++;
         RenderDiagnostics.RecordInsetRebuild();
     }
 }
